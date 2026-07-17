@@ -30,3 +30,7 @@ result
 .playwright-cli
 # Brand/logo scratch (creative explorations)
 brand
+
+# Local dev notebook: ideas, plans, requirements, run logs (sole-dev, not yet
+# adopted by ADR — see .nightshift/README.md)
+.nightshift
