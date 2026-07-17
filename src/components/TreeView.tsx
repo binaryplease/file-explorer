@@ -41,7 +41,7 @@ function EntryRowView({
         if (isDirectory) onFocusDirectory(row.path)
       }}
       className={`relative grid cursor-pointer grid-cols-[1fr_104px_66px] items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
-        isSelected ? 'bg-sel' : 'hover:bg-white/3'
+        isSelected ? 'bg-sel' : 'hover:bg-hover'
       }`}
     >
       {isSelected && <span className="absolute inset-y-0 left-0 w-[3px] bg-sel-bar" />}
@@ -64,7 +64,7 @@ function EntryRowView({
         )}
       </span>
       {showSizes && row.barFraction !== null ? (
-        <span className="mr-3 h-2 justify-self-stretch overflow-hidden rounded-[3px] bg-white/5">
+        <span className="mr-3 h-2 justify-self-stretch overflow-hidden rounded-[3px] bg-inset">
           <span
             className="block h-full rounded-[3px] bg-linear-to-r from-bar-b to-bar-a"
             style={{ width: `${row.barFraction * 100}%` }}

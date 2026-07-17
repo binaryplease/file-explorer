@@ -1,8 +1,13 @@
+import { ThemeToggle } from './ThemeToggle'
+import type { ThemeMode } from '../lib/theme'
+
 type TitleBarProps = {
   rootPath: string | null
+  themeMode: ThemeMode
+  onSelectThemeMode: (nextThemeMode: ThemeMode) => void
 }
 
-export function TitleBar({ rootPath }: TitleBarProps) {
+export function TitleBar({ rootPath, themeMode, onSelectThemeMode }: TitleBarProps) {
   return (
     <div className="flex flex-none items-center gap-3 border-b border-line bg-chrome px-4 py-2.5">
       <div className="flex gap-[7px]" aria-hidden="true">
@@ -14,9 +19,9 @@ export function TitleBar({ rootPath }: TitleBarProps) {
         <b className="font-semibold text-fg">binp-file-explorer</b>
         {rootPath === null ? '' : ` — ${rootPath}`}
       </div>
-      <div className="flex flex-none items-center gap-1.5 text-[11px] text-faint">
-        <span className="font-semibold text-prompt">grove</span>
-        <span>· local only</span>
+      <div className="flex flex-none items-center gap-2.5 text-[11px] text-faint">
+        <span className="hidden font-semibold text-prompt sm:inline">grove</span>
+        <ThemeToggle themeMode={themeMode} onSelectThemeMode={onSelectThemeMode} />
       </div>
     </div>
   )

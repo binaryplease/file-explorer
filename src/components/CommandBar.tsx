@@ -63,7 +63,7 @@ export function CommandBar({
         <div className="hidden flex-wrap gap-3.5 sm:flex">
           {KEY_HINTS.map((keyHint) => (
             <span key={keyHint.action}>
-              <b className="mr-1 rounded-sm border border-line bg-white/5 px-[5px] font-semibold text-dim">
+              <b className="mr-1 rounded-sm border border-line bg-inset px-[5px] font-semibold text-dim">
                 {keyHint.keyLabel}
               </b>
               {keyHint.action}

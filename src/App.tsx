@@ -6,6 +6,7 @@ import { TitleBar } from './components/TitleBar'
 import { RootLine } from './components/RootLine'
 import { TreeView } from './components/TreeView'
 import { CommandBar } from './components/CommandBar'
+import { useTheme } from './lib/theme'
 
 function readFocusPathFromUrl(): string {
   return new URLSearchParams(window.location.search).get('path') ?? ''
@@ -35,6 +36,7 @@ export function App() {
   const [showSizes, setShowSizes] = useState(true)
   const [showHidden, setShowHidden] = useState(false)
   const [listingError, setListingError] = useState<string | null>(null)
+  const { themeMode, setThemeMode } = useTheme()
 
   const loadListing = useCallback(async (relativePath: string) => {
     try {
@@ -179,7 +181,7 @@ export function App() {
   return (
     <div className="grid min-h-screen place-items-center bg-void bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(111,183,255,0.08),transparent_55%),radial-gradient(90%_70%_at_80%_120%,rgba(255,110,199,0.06),transparent_60%)] p-[clamp(14px,3vw,40px)] font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
       <div className="flex h-[min(720px,92vh)] w-full max-w-[1080px] flex-col overflow-hidden rounded-[14px] border border-line bg-term shadow-[0_40px_120px_-30px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.05)_inset]">
-        <TitleBar rootPath={rootPath} />
+        <TitleBar rootPath={rootPath} themeMode={themeMode} onSelectThemeMode={setThemeMode} />
         <RootLine
           rootName={rootName}
           focusPath={focusPath}
