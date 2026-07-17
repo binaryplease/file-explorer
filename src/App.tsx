@@ -266,18 +266,13 @@ export function App() {
   useEffect(() => {
     function handleKeyDown(keyboardEvent: KeyboardEvent) {
       const { key } = keyboardEvent
-      const hasModifier = keyboardEvent.ctrlKey || keyboardEvent.metaKey || keyboardEvent.altKey
       const inputTarget =
         keyboardEvent.target instanceof HTMLInputElement ? keyboardEvent.target : null
-      // broot binds the plain letters j/k/h too. On the web they collide with
-      // the always-focused filter input, so they navigate only while no
-      // pattern is typed; with a pattern active they belong to the input.
-      const letterKeysNavigate = pattern === '' && !hasModifier
 
-      if (key === 'ArrowDown' || (key === 'j' && letterKeysNavigate)) {
+      if (key === 'ArrowDown') {
         keyboardEvent.preventDefault()
         moveSelection(1, 'cycle')
-      } else if (key === 'ArrowUp' || (key === 'k' && letterKeysNavigate)) {
+      } else if (key === 'ArrowUp') {
         keyboardEvent.preventDefault()
         moveSelection(-1, 'cycle')
       } else if (key === 'PageDown' || (key === 'd' && keyboardEvent.ctrlKey)) {
@@ -306,9 +301,6 @@ export function App() {
         if (matchPaths.length === 0) return
         keyboardEvent.preventDefault()
         walkMatches(keyboardEvent.shiftKey ? -1 : 1)
-      } else if (key === 'h' && letterKeysNavigate) {
-        keyboardEvent.preventDefault()
-        focusParentDirectory()
       }
     }
     window.addEventListener('keydown', handleKeyDown)

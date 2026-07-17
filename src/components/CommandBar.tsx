@@ -1,10 +1,9 @@
 import { IconChevronRight } from '@tabler/icons-react'
 
 const KEY_HINTS: Array<{ keyLabel: string; action: string }> = [
-  { keyLabel: '↑↓ j k', action: 'move' },
+  { keyLabel: '↑↓', action: 'move' },
   { keyLabel: '↵ →', action: 'open' },
   { keyLabel: '← esc', action: 'back' },
-  { keyLabel: 'h ⌫', action: 'parent' },
   { keyLabel: 'tab', action: 'next match' },
   { keyLabel: '^d ^u', action: 'page' },
 ]
