@@ -7,10 +7,10 @@ import {
   buildTreeRows,
   joinTreePath,
   parentTreePath,
+  ROOT_LINE_PATH,
   type EntryRow,
 } from './lib/tree'
 import { TitleBar } from './components/TitleBar'
-import { RootLine } from './components/RootLine'
 import { TreeView } from './components/TreeView'
 import { CommandBar } from './components/CommandBar'
 import { useTheme } from './lib/theme'
@@ -163,14 +163,21 @@ export function App() {
   const focusListing = listings[focusPath]
   const focusEntryCount = focusListing === undefined ? null : focusListing.length
 
+  // The tree's first line (the current directory itself) is selectable too,
+  // sitting above the entry rows. Enter on it walks up one level, broot-style.
+  const selectablePaths = useMemo(
+    () => [ROOT_LINE_PATH, ...entryRows.map((entryRow) => entryRow.path)],
+    [entryRows],
+  )
+
   // Keep the selection on a visible row. While the listing is still loading
   // (no rows yet) leave the selection alone so a pre-seeded selection — e.g.
   // the directory we just came out of — survives until the rows arrive.
   useEffect(() => {
     if (entryRows.length === 0) return
-    if (selectedPath !== null && entryRows.some((entryRow) => entryRow.path === selectedPath)) return
+    if (selectedPath !== null && selectablePaths.includes(selectedPath)) return
     setSelectedPath(entryRows[0]!.path)
-  }, [entryRows, selectedPath])
+  }, [entryRows, selectablePaths, selectedPath])
 
   useEffect(() => {
     if (selectedPath === null) return
@@ -183,15 +190,15 @@ export function App() {
 
   const moveSelection = useCallback(
     (delta: number) => {
-      if (entryRows.length === 0) return
-      const currentIndex = entryRows.findIndex((entryRow) => entryRow.path === selectedPath)
+      if (selectablePaths.length === 0) return
+      const currentIndex = selectablePaths.indexOf(selectedPath ?? '')
       const nextIndex = Math.max(
         0,
-        Math.min(entryRows.length - 1, (currentIndex === -1 ? 0 : currentIndex) + delta),
+        Math.min(selectablePaths.length - 1, (currentIndex === -1 ? 0 : currentIndex) + delta),
       )
-      setSelectedPath(entryRows[nextIndex]!.path)
+      setSelectedPath(selectablePaths[nextIndex]!)
     },
-    [entryRows, selectedPath],
+    [selectablePaths, selectedPath],
   )
 
   useEffect(() => {
@@ -204,7 +211,9 @@ export function App() {
         moveSelection(-1)
       } else if (keyboardEvent.key === 'Enter') {
         keyboardEvent.preventDefault()
-        if (selectedRow !== undefined && selectedRow.entry.kind === 'directory') {
+        // The root line goes up a level; a directory row goes into it.
+        if (selectedPath === ROOT_LINE_PATH) focusParentDirectory()
+        else if (selectedRow !== undefined && selectedRow.entry.kind === 'directory') {
           focusDirectory(selectedRow.path)
         }
       } else if (keyboardEvent.key === 'ArrowRight') {
@@ -213,55 +222,54 @@ export function App() {
           toggleDirectory(selectedRow.path)
         }
       } else if (keyboardEvent.key === 'ArrowLeft') {
-        if (selectedRow === undefined) return
         keyboardEvent.preventDefault()
-        if (!isSearching && selectedRow.entry.kind === 'directory' && selectedRow.isOpen) {
+        // On the root line, left also walks up a level.
+        if (selectedPath === ROOT_LINE_PATH) {
+          focusParentDirectory()
+        } else if (selectedRow === undefined) {
+          return
+        } else if (!isSearching && selectedRow.entry.kind === 'directory' && selectedRow.isOpen) {
           toggleDirectory(selectedRow.path)
         } else {
           const parentPath = parentTreePath(selectedRow.path)
-          if (parentPath !== focusPath) setSelectedPath(parentPath)
+          setSelectedPath(parentPath === focusPath ? ROOT_LINE_PATH : parentPath)
         }
-      } else if (keyboardEvent.key === 'Backspace' && pattern === '') {
-        keyboardEvent.preventDefault()
-        focusParentDirectory()
       } else if (keyboardEvent.key === 'Escape') {
         setPattern('')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [moveSelection, selectedRow, focusDirectory, toggleDirectory, focusParentDirectory, pattern, focusPath])
+  }, [moveSelection, selectedRow, selectedPath, focusDirectory, toggleDirectory, focusParentDirectory, isSearching, focusPath])
 
   const rootName = rootPath === null ? '…' : baseName(rootPath) || rootPath
   const focusLabel = focusPath === '' ? rootName : baseName(focusPath)
+  const focusFullPath =
+    rootPath === null ? '…' : focusPath === '' ? rootPath : `${rootPath}/${focusPath}`
 
   return (
     <div className="grid min-h-screen place-items-center bg-void bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(111,183,255,0.08),transparent_55%),radial-gradient(90%_70%_at_80%_120%,rgba(255,110,199,0.06),transparent_60%)] p-[clamp(14px,3vw,40px)] font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
       <div className="flex h-[min(720px,92vh)] w-full max-w-[1080px] flex-col overflow-hidden rounded-[14px] border border-line bg-term shadow-[0_40px_120px_-30px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.05)_inset]">
         <TitleBar rootPath={rootPath} themeMode={themeMode} onSelectThemeMode={setThemeMode} />
-        <RootLine
-          rootName={rootName}
-          focusPath={focusPath}
+        <TreeView
+          rootFullPath={focusFullPath}
+          isRootLineSelected={selectedPath === ROOT_LINE_PATH}
+          focusEntryCount={focusEntryCount}
+          rows={rows}
           showSizes={showSizes}
           showHidden={showHidden}
           showGitignored={showGitignored}
+          selectedPath={selectedPath}
+          listingError={listingError}
+          onSelect={setSelectedPath}
+          onFocusParent={focusParentDirectory}
+          onToggleDirectory={toggleDirectory}
           onFocusDirectory={focusDirectory}
           onToggleSizes={() => setShowSizes((previousShowSizes) => !previousShowSizes)}
           onToggleHidden={() => setShowHidden((previousShowHidden) => !previousShowHidden)}
           onToggleGitignored={() =>
             setShowGitignored((previousShowGitignored) => !previousShowGitignored)
           }
-        />
-        <TreeView
-          rootName={focusLabel}
-          focusEntryCount={focusEntryCount}
-          rows={rows}
-          showSizes={showSizes}
-          selectedPath={selectedPath}
-          listingError={listingError}
-          onSelect={setSelectedPath}
-          onToggleDirectory={toggleDirectory}
-          onFocusDirectory={focusDirectory}
         />
         <CommandBar
           focusLabel={focusLabel}

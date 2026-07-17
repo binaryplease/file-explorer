@@ -2,10 +2,9 @@ import { IconChevronRight } from '@tabler/icons-react'
 
 const KEY_HINTS: Array<{ keyLabel: string; action: string }> = [
   { keyLabel: '↑↓', action: 'move' },
-  { keyLabel: '↵', action: 'focus dir' },
+  { keyLabel: '↵', action: 'open dir / up on path' },
   { keyLabel: '→', action: 'expand' },
   { keyLabel: '←', action: 'collapse' },
-  { keyLabel: '⌫', action: 'up' },
   { keyLabel: 'esc', action: 'clear' },
 ]
 

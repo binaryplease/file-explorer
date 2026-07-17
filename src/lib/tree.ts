@@ -40,6 +40,12 @@ export type TreeRowsResult = {
   bestMatchPath: string | null
 }
 
+// Sentinel selection value for the tree's first line — the current directory
+// itself. It can never collide with a real entry path (those are relative to
+// the served root and never start with a slash). Selecting it and pressing
+// Enter walks up one level, broot-style.
+export const ROOT_LINE_PATH = '/__root_line__'
+
 export function joinTreePath(parentPath: string, childName: string): string {
   return parentPath === '' ? childName : `${parentPath}/${childName}`
 }

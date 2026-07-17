@@ -1,6 +1,7 @@
-import { IconChevronDown } from '@tabler/icons-react'
-import type { EntryRow, TreeRowModel } from '../lib/tree'
+import { IconFolderOpen } from '@tabler/icons-react'
+import { ROOT_LINE_PATH, type EntryRow, type TreeRowModel } from '../lib/tree'
 import { formatBytes, LARGE_FILE_THRESHOLD_BYTES } from '../lib/format'
+import { ViewChips } from './ViewChips'
 
 function entryNameColorClass(row: EntryRow): string {
   // Gitignored entries render dimmed wherever they are shown.
@@ -85,39 +86,67 @@ function EntryRowView({
 }
 
 type TreeViewProps = {
-  rootName: string
+  rootFullPath: string
+  isRootLineSelected: boolean
   focusEntryCount: number | null
   rows: TreeRowModel[]
   showSizes: boolean
+  showHidden: boolean
+  showGitignored: boolean
   selectedPath: string | null
   listingError: string | null
   onSelect: (path: string) => void
+  onFocusParent: () => void
   onToggleDirectory: (path: string) => void
   onFocusDirectory: (path: string) => void
+  onToggleSizes: () => void
+  onToggleHidden: () => void
+  onToggleGitignored: () => void
 }
 
 export function TreeView({
-  rootName,
+  rootFullPath,
+  isRootLineSelected,
   focusEntryCount,
   rows,
   showSizes,
+  showHidden,
+  showGitignored,
   selectedPath,
   listingError,
   onSelect,
+  onFocusParent,
   onToggleDirectory,
   onFocusDirectory,
+  onToggleSizes,
+  onToggleHidden,
+  onToggleGitignored,
 }: TreeViewProps) {
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto pt-1 pb-2.5">
-      <div className="grid grid-cols-[1fr_104px_66px] items-center px-4 py-[3px]">
-        <span className="font-bold text-dir">
-          <IconChevronDown className="mr-1 inline size-3.5 align-[-2px] text-dim" stroke={2.5} />
-          {rootName}
+    <div className="min-h-0 flex-1 overflow-y-auto pb-2.5">
+      {/* The tree's first line is the current directory itself. Selecting it
+          and pressing Enter (or double-clicking) walks up one level. */}
+      <div
+        data-row-path={ROOT_LINE_PATH}
+        onClick={() => onSelect(ROOT_LINE_PATH)}
+        onDoubleClick={onFocusParent}
+        className={`sticky top-0 z-10 flex cursor-pointer items-center gap-3 border-b border-line bg-term px-4 py-[5px] transition-colors ${
+          isRootLineSelected ? 'bg-sel' : 'hover:bg-hover'
+        }`}
+      >
+        {isRootLineSelected && <span className="absolute inset-y-0 left-0 w-[3px] bg-sel-bar" />}
+        <span className="flex min-w-0 flex-1 items-center font-semibold text-dir">
+          <IconFolderOpen className="mr-1.5 inline size-3.5 flex-none text-dim" stroke={2} />
+          <span className="truncate">{rootFullPath}</span>
         </span>
-        <span />
-        <span className="text-right text-xs font-normal text-dim">
-          {focusEntryCount === null ? '…' : focusEntryCount}
-        </span>
+        <ViewChips
+          showSizes={showSizes}
+          showHidden={showHidden}
+          showGitignored={showGitignored}
+          onToggleSizes={onToggleSizes}
+          onToggleHidden={onToggleHidden}
+          onToggleGitignored={onToggleGitignored}
+        />
       </div>
       {listingError !== null && (
         <div className="px-4 py-2 text-xs text-bar-a">{listingError}</div>
