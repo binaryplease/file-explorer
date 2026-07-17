@@ -175,17 +175,18 @@ export function App() {
   const focusEntryCount = focusListing === undefined ? null : focusListing.length
 
   // The tree's first line (the current directory itself) is selectable too,
-  // sitting above the entry rows. It is a "you are here" marker; Enter does
-  // nothing on it (walking up is done with h or a double-click).
+  // sitting above the entry rows. Enter on it walks up one level and the
+  // selection stays on this line, broot-style.
   const selectablePaths = useMemo(
     () => [ROOT_LINE_PATH, ...entryRows.map((entryRow) => entryRow.path)],
     [entryRows],
   )
 
-  // Keep the selection on a visible row, defaulting to the root line — the
-  // current-directory line broot opens with. While the listing is still
-  // loading (no rows yet) leave the selection alone so a pre-seeded selection
-  // — e.g. the directory we just came out of — survives until the rows arrive.
+  // Keep the selection on a visible row, defaulting to the root line — broot
+  // opens with the current-directory line selected, so Enter walks up out of
+  // the box. While the listing is still loading (no rows yet) leave the
+  // selection alone so a pre-seeded selection — e.g. the directory we just
+  // came out of — survives until the rows arrive.
   useEffect(() => {
     if (entryRows.length === 0) return
     if (selectedPath !== null && selectablePaths.includes(selectedPath)) return
@@ -245,14 +246,14 @@ export function App() {
     window.location.assign(rawFileUrl(filePath))
   }, [])
 
-  // broot's open_stay (Enter / →): a directory becomes the new root, a file
-  // opens in place. The root line is the current directory itself, so there is
-  // nothing to open on it — Enter does not walk up the tree.
+  // broot's open_stay (Enter / →): the root line goes to the parent, a
+  // directory becomes the new root, a file opens in place.
   const openSelection = useCallback(() => {
-    if (selectedRow === undefined) return
-    if (selectedRow.entry.kind === 'directory') focusDirectory(selectedRow.path)
+    if (selectedPath === ROOT_LINE_PATH) focusParentDirectory()
+    else if (selectedRow === undefined) return
+    else if (selectedRow.entry.kind === 'directory') focusDirectory(selectedRow.path)
     else if (selectedRow.entry.kind === 'file') openFileInPlace(selectedRow.path)
-  }, [selectedRow, focusDirectory, openFileInPlace])
+  }, [selectedPath, selectedRow, focusParentDirectory, focusDirectory, openFileInPlace])
 
   // broot's back verb: pop the most recent state change — an active filter
   // first, then the focus history (which lives in the browser history, so
@@ -305,6 +306,9 @@ export function App() {
         if (matchPaths.length === 0) return
         keyboardEvent.preventDefault()
         walkMatches(keyboardEvent.shiftKey ? -1 : 1)
+      } else if (key === 'Backspace' && pattern === '') {
+        keyboardEvent.preventDefault()
+        focusParentDirectory()
       } else if (key === 'h' && letterKeysNavigate) {
         keyboardEvent.preventDefault()
         focusParentDirectory()
