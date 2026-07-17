@@ -1,4 +1,3 @@
-import { IconFolderOpen } from '@tabler/icons-react'
 import { ROOT_LINE_PATH, type EntryRow, type TreeRowModel } from '../lib/tree'
 import { formatBytes, LARGE_FILE_THRESHOLD_BYTES } from '../lib/format'
 import { ViewChips } from './ViewChips'
@@ -123,22 +122,11 @@ export function TreeView({
   onToggleGitignored,
 }: TreeViewProps) {
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto pb-2.5">
-      {/* The tree's first line is the current directory itself. Selecting it
-          and pressing Enter (or double-clicking) walks up one level. */}
-      <div
-        data-row-path={ROOT_LINE_PATH}
-        onClick={() => onSelect(ROOT_LINE_PATH)}
-        onDoubleClick={onFocusParent}
-        className={`sticky top-0 z-10 flex cursor-pointer items-center gap-3 border-b border-line bg-term px-4 py-[5px] transition-colors ${
-          isRootLineSelected ? 'bg-sel' : 'hover:bg-hover'
-        }`}
-      >
-        {isRootLineSelected && <span className="absolute inset-y-0 left-0 w-[3px] bg-sel-bar" />}
-        <span className="flex min-w-0 flex-1 items-center font-semibold text-dir">
-          <IconFolderOpen className="mr-1.5 inline size-3.5 flex-none text-dim" stroke={2} />
-          <span className="truncate">{rootFullPath}</span>
-        </span>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* View-mode chips ride a slim strip on the tree panel's header, above
+          the rows they reconfigure (ADR-0031) — off the tree lines themselves,
+          so the root line reads as an ordinary line. */}
+      <div className="flex flex-none items-center justify-end px-4 py-1.5">
         <ViewChips
           showSizes={showSizes}
           showHidden={showHidden}
@@ -148,42 +136,62 @@ export function TreeView({
           onToggleGitignored={onToggleGitignored}
         />
       </div>
-      {listingError !== null && (
-        <div className="px-4 py-2 text-xs text-bar-a">{listingError}</div>
-      )}
-      {listingError === null && focusEntryCount === 0 && (
-        <div className="px-4 py-2 text-xs text-faint">empty directory</div>
-      )}
-      {rows.map((row) =>
-        row.type === 'entry' ? (
-          <EntryRowView
-            key={row.path}
-            row={row}
-            isSelected={row.path === selectedPath}
-            showSizes={showSizes}
-            onSelect={onSelect}
-            onToggleDirectory={onToggleDirectory}
-            onFocusDirectory={onFocusDirectory}
-          />
-        ) : (
-          <div
-            key={row.path}
-            className="px-4 py-px text-[11.5px] whitespace-pre text-faint"
-          >
-            {row.connectorPrefix}…{' '}
-            {[
-              row.hiddenCount > 0
-                ? `${row.hiddenCount} hidden ( .dotfile${row.hiddenCount !== 1 ? 's' : ''} )`
-                : null,
-              row.ignoredCount > 0
-                ? `${row.ignoredCount} gitignored`
-                : null,
-            ]
-              .filter((labelPart) => labelPart !== null)
-              .join(' · ')}
-          </div>
-        ),
-      )}
+      <div className="min-h-0 flex-1 overflow-y-auto pb-2.5">
+        {/* The tree's first line is the current directory itself — a normal
+            tree row, selected by default. Enter (or double-click) on it walks
+            up one level, broot-style. */}
+        <div
+          data-row-path={ROOT_LINE_PATH}
+          onClick={() => onSelect(ROOT_LINE_PATH)}
+          onDoubleClick={onFocusParent}
+          className={`relative grid cursor-pointer grid-cols-[1fr_104px_66px] items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
+            isRootLineSelected ? 'bg-sel' : 'hover:bg-hover'
+          }`}
+        >
+          {isRootLineSelected && <span className="absolute inset-y-0 left-0 w-[3px] bg-sel-bar" />}
+          <span className="overflow-hidden font-semibold text-ellipsis text-dir">
+            {rootFullPath}
+          </span>
+          <span />
+          <span />
+        </div>
+        {listingError !== null && (
+          <div className="px-4 py-2 text-xs text-bar-a">{listingError}</div>
+        )}
+        {listingError === null && focusEntryCount === 0 && (
+          <div className="px-4 py-2 text-xs text-faint">empty directory</div>
+        )}
+        {rows.map((row) =>
+          row.type === 'entry' ? (
+            <EntryRowView
+              key={row.path}
+              row={row}
+              isSelected={row.path === selectedPath}
+              showSizes={showSizes}
+              onSelect={onSelect}
+              onToggleDirectory={onToggleDirectory}
+              onFocusDirectory={onFocusDirectory}
+            />
+          ) : (
+            <div
+              key={row.path}
+              className="px-4 py-px text-[11.5px] whitespace-pre text-faint"
+            >
+              {row.connectorPrefix}…{' '}
+              {[
+                row.hiddenCount > 0
+                  ? `${row.hiddenCount} hidden ( .dotfile${row.hiddenCount !== 1 ? 's' : ''} )`
+                  : null,
+                row.ignoredCount > 0
+                  ? `${row.ignoredCount} gitignored`
+                  : null,
+              ]
+                .filter((labelPart) => labelPart !== null)
+                .join(' · ')}
+            </div>
+          ),
+        )}
+      </div>
     </div>
   )
 }

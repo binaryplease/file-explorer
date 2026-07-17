@@ -170,13 +170,15 @@ export function App() {
     [entryRows],
   )
 
-  // Keep the selection on a visible row. While the listing is still loading
-  // (no rows yet) leave the selection alone so a pre-seeded selection — e.g.
-  // the directory we just came out of — survives until the rows arrive.
+  // Keep the selection on a visible row, defaulting to the root line — broot
+  // opens with the current-directory line selected, so Enter walks up out of
+  // the box. While the listing is still loading (no rows yet) leave the
+  // selection alone so a pre-seeded selection — e.g. the directory we just
+  // came out of — survives until the rows arrive.
   useEffect(() => {
     if (entryRows.length === 0) return
     if (selectedPath !== null && selectablePaths.includes(selectedPath)) return
-    setSelectedPath(entryRows[0]!.path)
+    setSelectedPath(ROOT_LINE_PATH)
   }, [entryRows, selectablePaths, selectedPath])
 
   useEffect(() => {
