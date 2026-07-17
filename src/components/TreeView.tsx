@@ -160,8 +160,8 @@ export function TreeView({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-2.5">
         {/* The tree's first line is the current directory itself — a normal
-            tree row, selected by default. Enter (or double-click) on it walks
-            up one level, broot-style. */}
+            tree row, selected by default. Double-click on it walks up one
+            level, broot-style; Enter does nothing on it. */}
         <div
           data-row-path={ROOT_LINE_PATH}
           onClick={() => onSelect(ROOT_LINE_PATH)}
