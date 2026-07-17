@@ -11,6 +11,10 @@ NODE_ENV = "development"
 ZINK_BASE_URL = "http://localhost:3000"
 # ZINK_DEPLOY_KEY = ""
 
+# Directory served by the explorer. Defaults to the home directory of the user
+# running the server; a positional CLI argument to the server wins over this.
+# EXPLORER_ROOT = "/path/to/serve"
+
 [tasks.dev]
 description = "Start dev servers (Elysia + Vite) concurrently"
 run = 'bunx concurrently -k -n server,client "bun --watch server/index.ts" "bunx vite"'

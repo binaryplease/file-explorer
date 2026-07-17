@@ -1,8 +1,10 @@
+import { join, resolve } from 'node:path'
 import { Elysia } from 'elysia'
 import { openapi } from '@elysiajs/openapi'
 import { z } from 'zod/v4'
 import { config, isDev } from './config'
 import { DiscoveryDocSchema, HealthResponseSchema } from './routes/discovery.schema'
+import { filesystemRoutes } from './routes/filesystem'
 
 const SERVICE_NAME = 'binp-file-explorer'
 const SERVICE_VERSION = '0.1.0'
@@ -38,7 +40,10 @@ const app = new Elysia()
             'A high-speed Bun file explorer. Browse a served filesystem and publish any HTML file or folder to zink (= ZIP + LINK) for an instant share link.\n\n' +
             'Discovery entrypoint: `GET /api` (ADR-0020).',
         },
-        tags: [{ name: 'system', description: 'Discovery, liveness, and metadata endpoints.' }],
+        tags: [
+          { name: 'system', description: 'Discovery, liveness, and metadata endpoints.' },
+          { name: 'filesystem', description: 'Browsing the served filesystem.' },
+        ],
       },
     }),
   )
@@ -74,10 +79,26 @@ const app = new Elysia()
       description: 'Returns `{ ok: true }` when the server is up. No auth required.',
     },
   })
+  .use(filesystemRoutes)
 
-// In production the built client is served from dist/client (added by the
-// developer alongside the explorer UI). In dev, Vite serves it on :5173 and
-// proxies /api here.
+// In production the built client is served from dist/client (this file runs as
+// dist/server/index.js, so the client sits one directory over). In dev, Vite
+// serves it on :5173 and proxies /api here.
+if (!isDev) {
+  const clientDirectory = resolve(import.meta.dir, '../client')
+  app.get('/*', async ({ request }) => {
+    const requestedPathname = decodeURIComponent(new URL(request.url).pathname)
+    const candidatePath = resolve(clientDirectory, `.${requestedPathname}`)
+    const isInsideClientDirectory =
+      candidatePath === clientDirectory || candidatePath.startsWith(`${clientDirectory}/`)
+    if (isInsideClientDirectory) {
+      const assetFile = Bun.file(candidatePath)
+      if (await assetFile.exists()) return assetFile
+    }
+    // SPA fallback: any non-asset path renders the explorer shell.
+    return Bun.file(join(clientDirectory, 'index.html'))
+  })
+}
 
 // ADR-0018: a port conflict is a fatal startup error. Elysia's listen surfaces
 // EADDRINUSE by default — do not swallow it.
@@ -89,6 +110,7 @@ app.listen({
 
 const localBase = `http://${config.HOST}:${config.PORT}`
 console.log(`binp-file-explorer running at ${localBase}`)
+console.log(`Serving ${config.EXPLORER_ROOT}`)
 console.log('Discovery')
 console.log(`  docs:      ${localBase}/api/docs`)
 console.log(`  openapi:   ${localBase}/api/openapi.json`)

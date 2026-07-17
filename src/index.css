@@ -1,1 +1,29 @@
 @import "tailwindcss";
+
+/* Design tokens from concept CON009 (grove, dark palette). Single source of
+   truth — all styling is done with Tailwind utilities over these tokens. */
+@theme {
+  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Mono",
+    "Fira Code", monospace;
+
+  --color-void: #080a0f;
+  --color-term: #0e1119;
+  --color-term-2: #121622;
+  --color-chrome: #0b0e15;
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-2: rgb(255 255 255 / 0.04);
+  --color-fg: #c7cedb;
+  --color-dim: #67728a;
+  --color-faint: #3f4759;
+  --color-dir: #6fb7ff;
+  --color-file: #b7c0d0;
+  --color-exec: #57e0a0;
+  --color-match: #ffd16b;
+  --color-match-bg: rgb(255 209 107 / 0.16);
+  --color-sel: rgb(111 183 255 / 0.13);
+  --color-sel-bar: #6fb7ff;
+  --color-bar-a: #ff6ec7;
+  --color-bar-b: #9b7bff;
+  --color-prompt: #57e0a0;
+  --color-accent: #6fb7ff;
+}

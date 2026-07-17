@@ -30,7 +30,18 @@ mise run dev      # Elysia (:3000) + Vite (:5173) — open http://localhost:5173
 `mise run typecheck` type-checks; `mise run build` produces `dist/client` +
 `dist/server`; `mise run start` runs the production server.
 
+## Serving a location
+
+The explorer serves the **home directory** of the user running the server by
+default. To open it at a specific location instead, set `EXPLORER_ROOT` (see
+`.mise.toml`) or pass a positional argument: `bun server/index.ts ~/projects`.
+Listings never escape the served root. This is a **local-only** tool — the
+server binds to loopback and is not meant to be hosted.
+
 ## Status
 
-Scaffolded. The explorer itself is built by the follow-on task —
-see [`task/0001-file-explorer-mvp.md`](task/0001-file-explorer-mvp.md).
+Prototype: broot-style navigation (tree with lazy expansion, fuzzy filter with
+match highlighting, keyboard-first navigation, size bars, hidden-files toggle,
+deep-linkable focus via `?path=` with natural back-button history), styled after
+concept CON009. Not yet built: previews, file actions (open/publish-to-zink),
+directory sizing.
