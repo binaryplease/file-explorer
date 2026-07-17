@@ -6,25 +6,35 @@ import {
   FilesystemErrorSchema,
   ListDirectoryQuerySchema,
 } from '../../shared/filesystem.schema'
+import { SearchSubtreeQuerySchema, SearchSubtreeResultSchema } from '../../shared/search.schema'
+import type { ListDirectoryFailureReason } from '../services/filesystem'
 
 // Created at startup so a bad EXPLORER_ROOT crashes the boot, not a request.
 const filesystemService = createFilesystemService({ rootAbsolutePath: config.EXPLORER_ROOT })
+
+function failureStatusAndMessage(
+  reason: ListDirectoryFailureReason,
+  requestedPath: string,
+): { statusCode: 400 | 403 | 404; message: string } {
+  switch (reason) {
+    case 'outside-root':
+      return { statusCode: 400, message: `path escapes the served root: ${requestedPath}` }
+    case 'not-a-directory':
+      return { statusCode: 400, message: `not a directory: ${requestedPath}` }
+    case 'not-found':
+      return { statusCode: 404, message: `no such directory: ${requestedPath}` }
+    case 'not-readable':
+      return { statusCode: 403, message: `directory is not readable: ${requestedPath}` }
+  }
+}
 
 export const filesystemRoutes = new Elysia().get(
   '/api/fs/list',
   async ({ query, status }) => {
     const result = await filesystemService.listDirectory(query.path)
     if (!result.ok) {
-      switch (result.reason) {
-        case 'outside-root':
-          return status(400, { error: `path escapes the served root: ${query.path}` })
-        case 'not-a-directory':
-          return status(400, { error: `not a directory: ${query.path}` })
-        case 'not-found':
-          return status(404, { error: `no such directory: ${query.path}` })
-        case 'not-readable':
-          return status(403, { error: `directory is not readable: ${query.path}` })
-      }
+      const { statusCode, message } = failureStatusAndMessage(result.reason, query.path)
+      return status(statusCode, { error: message })
     }
     return result.listing
   },
@@ -43,6 +53,44 @@ export const filesystemRoutes = new Elysia().get(
         'Lists one directory of the served filesystem, relative to the served root ' +
         '(`EXPLORER_ROOT`, defaulting to the home directory of the user running the server). ' +
         'Paths that lexically escape the root are rejected with 400.',
+    },
+  },
+).get(
+  '/api/fs/search',
+  async ({ query, request, status }) => {
+    const result = await filesystemService.searchSubtree(query.path, {
+      pattern: query.pattern,
+      showHidden: query.showHidden,
+      showGitignored: query.showGitignored,
+      limit: query.limit,
+      // Typing a new character aborts the previous request; the walk stops
+      // with it (broot's Dam, in HTTP form).
+      abortSignal: request.signal,
+    })
+    if (!result.ok) {
+      const { statusCode, message } = failureStatusAndMessage(result.reason, query.path)
+      return status(statusCode, { error: message })
+    }
+    return result.result
+  },
+  {
+    query: SearchSubtreeQuerySchema,
+    response: {
+      200: SearchSubtreeResultSchema,
+      400: FilesystemErrorSchema,
+      403: FilesystemErrorSchema,
+      404: FilesystemErrorSchema,
+    },
+    detail: {
+      tags: ['filesystem'],
+      summary: 'Fuzzy-search a subtree',
+      description:
+        'Recursively fuzzy-searches entry names under a directory of the served filesystem, ' +
+        "re-engineered from broot's search-driven tree builder: a breadth-first walk gathers up " +
+        'to 10× `limit` scored matches within a ~900ms budget, then trims to the best-scoring ' +
+        '`limit` matches plus the ancestor directories connecting them to the searched root. ' +
+        'Hidden (dot) and gitignored entries are pruned unless the corresponding toggle is set. ' +
+        'Aborting the request cancels the walk.',
     },
   },
 )

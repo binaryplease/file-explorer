@@ -3,9 +3,11 @@ import type { EntryRow, TreeRowModel } from '../lib/tree'
 import { formatBytes, LARGE_FILE_THRESHOLD_BYTES } from '../lib/format'
 
 function entryNameColorClass(row: EntryRow): string {
-  if (row.entry.kind === 'directory') return 'font-semibold text-dir'
-  if (row.entry.kind === 'other') return 'text-dim italic'
-  return row.entry.isExecutable ? 'text-exec' : 'text-file'
+  // Gitignored entries render dimmed wherever they are shown.
+  const ignoredClass = row.entry.isGitignored ? ' opacity-55' : ''
+  if (row.entry.kind === 'directory') return `font-semibold text-dir${ignoredClass}`
+  if (row.entry.kind === 'other') return `text-dim italic${ignoredClass}`
+  return (row.entry.isExecutable ? 'text-exec' : 'text-file') + ignoredClass
 }
 
 type EntryRowViewProps = {
@@ -139,8 +141,17 @@ export function TreeView({
             key={row.path}
             className="px-4 py-px text-[11.5px] whitespace-pre text-faint"
           >
-            {row.connectorPrefix}… {row.hiddenCount} hidden ( .dotfile
-            {row.hiddenCount !== 1 ? 's' : ''} )
+            {row.connectorPrefix}…{' '}
+            {[
+              row.hiddenCount > 0
+                ? `${row.hiddenCount} hidden ( .dotfile${row.hiddenCount !== 1 ? 's' : ''} )`
+                : null,
+              row.ignoredCount > 0
+                ? `${row.ignoredCount} gitignored`
+                : null,
+            ]
+              .filter((labelPart) => labelPart !== null)
+              .join(' · ')}
           </div>
         ),
       )}

@@ -41,3 +41,7 @@ run = "NODE_ENV=production bun dist/server/index.js"
 [tasks.typecheck]
 description = "Type-check all TypeScript"
 run = "bunx tsc --noEmit"
+
+[tasks.test]
+description = "Run unit tests (bun test)"
+run = "bun test"

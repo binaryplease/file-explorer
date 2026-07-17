@@ -28,6 +28,13 @@ export const DirectoryEntrySchema = z.object({
   isExecutable: z.boolean().default(false).describe('True when any execute bit is set on a file.'),
   isHidden: z.boolean().default(false).describe('True for dot-files.'),
   isSymlink: z.boolean().default(false).describe('True when the entry itself is a symlink.'),
+  isGitignored: z
+    .boolean()
+    .default(false)
+    .describe(
+      'True when a `.gitignore` rule between the served root and the entry excludes it ' +
+        '(the `.git` directory itself counts as ignored).',
+    ),
 })
 export type DirectoryEntry = z.infer<typeof DirectoryEntrySchema>
 

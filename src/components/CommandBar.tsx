@@ -14,6 +14,9 @@ type CommandBarProps = {
   pattern: string
   isFiltering: boolean
   matchCount: number
+  // True when the search walk stopped early (time budget / overscan cap), so
+  // `matchCount` is a lower bound.
+  matchCountIsLowerBound: boolean
   entryRowCount: number
   focusEntryCount: number | null
   onPatternChange: (nextPattern: string) => void
@@ -24,6 +27,7 @@ export function CommandBar({
   pattern,
   isFiltering,
   matchCount,
+  matchCountIsLowerBound,
   entryRowCount,
   focusEntryCount,
   onPatternChange,
@@ -38,7 +42,7 @@ export function CommandBar({
           type="text"
           value={pattern}
           onChange={(changeEvent) => onPatternChange(changeEvent.target.value)}
-          placeholder="type to fuzzy-filter the tree…"
+          placeholder="type to fuzzy-search this subtree…"
           autoComplete="off"
           spellCheck={false}
           className="w-full flex-1 bg-transparent font-mono text-[13.5px] text-fg caret-prompt outline-none placeholder:text-faint"
@@ -48,9 +52,12 @@ export function CommandBar({
         <span>
           {isFiltering ? (
             <>
-              <span className="text-match">{matchCount}</span> match
-              {matchCount !== 1 ? 'es' : ''} · <b className="font-semibold text-fg">{entryRowCount}</b>{' '}
-              shown
+              <span className="text-match">
+                {matchCount}
+                {matchCountIsLowerBound ? '+' : ''}
+              </span>{' '}
+              match{matchCount !== 1 || matchCountIsLowerBound ? 'es' : ''} ·{' '}
+              <b className="font-semibold text-fg">{entryRowCount}</b> shown
             </>
           ) : (
             <>

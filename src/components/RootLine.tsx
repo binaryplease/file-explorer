@@ -26,9 +26,11 @@ type RootLineProps = {
   focusPath: string
   showSizes: boolean
   showHidden: boolean
+  showGitignored: boolean
   onFocusDirectory: (path: string) => void
   onToggleSizes: () => void
   onToggleHidden: () => void
+  onToggleGitignored: () => void
 }
 
 // Breadcrumb of the focused directory plus the view-mode chips. The chips sit
@@ -38,9 +40,11 @@ export function RootLine({
   focusPath,
   showSizes,
   showHidden,
+  showGitignored,
   onFocusDirectory,
   onToggleSizes,
   onToggleHidden,
+  onToggleGitignored,
 }: RootLineProps) {
   const focusSegments = focusPath === '' ? [] : focusPath.split('/')
 
@@ -70,6 +74,7 @@ export function RootLine({
       <span className="flex-1" />
       <ToggleChip label="sizes" isOn={showSizes} onToggle={onToggleSizes} />
       <ToggleChip label="hidden" isOn={showHidden} onToggle={onToggleHidden} />
+      <ToggleChip label="gitignored" isOn={showGitignored} onToggle={onToggleGitignored} />
     </div>
   )
 }

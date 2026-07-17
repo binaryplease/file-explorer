@@ -40,8 +40,11 @@ server binds to loopback and is not meant to be hosted.
 
 ## Status
 
-Prototype: broot-style navigation (tree with lazy expansion, fuzzy filter with
-match highlighting, keyboard-first navigation, size bars, hidden-files toggle,
-deep-linkable focus via `?path=` with natural back-button history), styled after
-concept CON009. Not yet built: previews, file actions (open/publish-to-zink),
+Prototype: broot-style navigation (tree with lazy expansion, keyboard-first
+navigation, size bars, hidden and gitignored toggles, deep-linkable focus via
+`?path=` with natural back-button history), styled after concept CON009.
+Typing fuzzy-searches the whole focused subtree server-side with broot's
+scored-match algorithms re-engineered in TypeScript (bounded best-first walk,
+gitignore-aware pruning, results ranked by score with the best match
+pre-selected). Not yet built: previews, file actions (open/publish-to-zink),
 directory sizing.

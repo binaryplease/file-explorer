@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DirectoryEntry } from '../shared/filesystem.schema'
-import { fetchDirectoryListing } from './lib/api'
-import { buildTreeRows, joinTreePath, parentTreePath, type EntryRow } from './lib/tree'
+import type { SearchSubtreeResult } from '../shared/search.schema'
+import { fetchDirectoryListing, fetchSearchResult } from './lib/api'
+import {
+  buildSearchRows,
+  buildTreeRows,
+  joinTreePath,
+  parentTreePath,
+  type EntryRow,
+} from './lib/tree'
 import { TitleBar } from './components/TitleBar'
 import { RootLine } from './components/RootLine'
 import { TreeView } from './components/TreeView'
@@ -35,6 +42,8 @@ export function App() {
   const [pattern, setPattern] = useState('')
   const [showSizes, setShowSizes] = useState(true)
   const [showHidden, setShowHidden] = useState(false)
+  const [showGitignored, setShowGitignored] = useState(false)
+  const [searchResult, setSearchResult] = useState<SearchSubtreeResult | null>(null)
   const [listingError, setListingError] = useState<string | null>(null)
   const { themeMode, setThemeMode } = useTheme()
 
@@ -55,6 +64,44 @@ export function App() {
   useEffect(() => {
     void loadListing(focusPath)
   }, [focusPath, loadListing])
+
+  // Server-side recursive fuzzy search, broot-style: every keystroke fires a
+  // request and aborts the one before it, which cancels the walk server-side.
+  // The previous result stays on screen until the new one lands, so typing
+  // never flashes an unfiltered tree.
+  useEffect(() => {
+    if (pattern === '') {
+      setSearchResult(null)
+      return
+    }
+    const abortController = new AbortController()
+    fetchSearchResult({
+      relativePath: focusPath,
+      pattern,
+      showHidden,
+      showGitignored,
+      limit: 100,
+      abortSignal: abortController.signal,
+    })
+      .then((result) => {
+        setSearchResult(result)
+        setListingError(null)
+        // Land the selection on the best-scoring match, like broot.
+        const bestNode = result.nodes.reduce<(typeof result.nodes)[number] | null>(
+          (currentBest, node) =>
+            node.score !== null && (currentBest === null || node.score > (currentBest.score ?? 0))
+              ? node
+              : currentBest,
+          null,
+        )
+        if (bestNode !== null) setSelectedPath(joinTreePath(result.relativePath, bestNode.path))
+      })
+      .catch((searchError: unknown) => {
+        if (abortController.signal.aborted) return
+        setListingError(searchError instanceof Error ? searchError.message : String(searchError))
+      })
+    return () => abortController.abort()
+  }, [pattern, focusPath, showHidden, showGitignored])
 
   // Browser back/forward walks the focus history naturally.
   useEffect(() => {
@@ -82,8 +129,12 @@ export function App() {
     setOpenPaths((previousOpenPaths) => new Set(previousOpenPaths).add(previousFocusPath))
   }, [focusPath, focusDirectory])
 
+  const isSearching = pattern !== ''
+
   const toggleDirectory = useCallback(
     (directoryPath: string) => {
+      // Search rows are a server-pruned view; expand/collapse is browse-only.
+      if (isSearching) return
       setOpenPaths((previousOpenPaths) => {
         const nextOpenPaths = new Set(previousOpenPaths)
         if (nextOpenPaths.has(directoryPath)) nextOpenPaths.delete(directoryPath)
@@ -92,13 +143,19 @@ export function App() {
       })
       if (listings[directoryPath] === undefined) void loadListing(directoryPath)
     },
-    [listings, loadListing],
+    [listings, loadListing, isSearching],
   )
 
-  const { rows, entryRowCount, matchCount } = useMemo(
-    () => buildTreeRows({ focusPath, listings, openPaths, pattern, showHidden, showSizes }),
-    [focusPath, listings, openPaths, pattern, showHidden, showSizes],
+  const browseView = useMemo(
+    () => buildTreeRows({ focusPath, listings, openPaths, showHidden, showGitignored, showSizes }),
+    [focusPath, listings, openPaths, showHidden, showGitignored, showSizes],
   )
+  const searchView = useMemo(
+    () => (searchResult === null ? null : buildSearchRows({ result: searchResult, showSizes })),
+    [searchResult, showSizes],
+  )
+  const { rows, entryRowCount, matchCount } =
+    isSearching && searchView !== null ? searchView : browseView
   const entryRows = useMemo(
     () => rows.filter((row): row is EntryRow => row.type === 'entry'),
     [rows],
@@ -158,7 +215,7 @@ export function App() {
       } else if (keyboardEvent.key === 'ArrowLeft') {
         if (selectedRow === undefined) return
         keyboardEvent.preventDefault()
-        if (selectedRow.entry.kind === 'directory' && selectedRow.isOpen) {
+        if (!isSearching && selectedRow.entry.kind === 'directory' && selectedRow.isOpen) {
           toggleDirectory(selectedRow.path)
         } else {
           const parentPath = parentTreePath(selectedRow.path)
@@ -187,9 +244,13 @@ export function App() {
           focusPath={focusPath}
           showSizes={showSizes}
           showHidden={showHidden}
+          showGitignored={showGitignored}
           onFocusDirectory={focusDirectory}
           onToggleSizes={() => setShowSizes((previousShowSizes) => !previousShowSizes)}
           onToggleHidden={() => setShowHidden((previousShowHidden) => !previousShowHidden)}
+          onToggleGitignored={() =>
+            setShowGitignored((previousShowGitignored) => !previousShowGitignored)
+          }
         />
         <TreeView
           rootName={focusLabel}
@@ -205,8 +266,9 @@ export function App() {
         <CommandBar
           focusLabel={focusLabel}
           pattern={pattern}
-          isFiltering={pattern !== ''}
+          isFiltering={isSearching}
           matchCount={matchCount}
+          matchCountIsLowerBound={searchResult?.stats.truncated ?? false}
           entryRowCount={entryRowCount}
           focusEntryCount={focusEntryCount}
           onPatternChange={setPattern}
