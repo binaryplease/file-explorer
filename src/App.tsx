@@ -306,9 +306,6 @@ export function App() {
         if (matchPaths.length === 0) return
         keyboardEvent.preventDefault()
         walkMatches(keyboardEvent.shiftKey ? -1 : 1)
-      } else if (key === 'Backspace' && pattern === '') {
-        keyboardEvent.preventDefault()
-        focusParentDirectory()
       } else if (key === 'h' && letterKeysNavigate) {
         keyboardEvent.preventDefault()
         focusParentDirectory()
