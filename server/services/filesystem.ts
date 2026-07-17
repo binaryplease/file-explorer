@@ -36,11 +36,18 @@ export type SearchSubtreeServiceResult =
   | { ok: false; reason: ListDirectoryFailureReason }
 
 // Search walk budgets, per broot's tree builder (tree_build/builder.rs): keep
-// walking until 10× the wanted match count is gathered or ~900ms elapsed, then
-// trim to the best-scoring matches. See
+// walking until 10× the targeted line count is gathered, or until the target
+// is reached and ~900ms elapsed, then trim to the best-scoring lines. See
 // `.nightshift/research/2026-07-17-broot-engine.md`.
 const SEARCH_TIME_BUDGET_MILLISECONDS = 900
 const SEARCH_OVERSCAN_FACTOR = 10
+// broot walks until interrupted by a keystroke; a server request needs a hard
+// stop even when matches are scarce and the good-enough rule never fires.
+const SEARCH_HARD_TIME_LIMIT_MILLISECONDS = 3000
+// Depth doping, per broot's make_bline: shallow lines outrank deep ones, and
+// direct matches get a small extra bump over ancestor-only directories.
+const SEARCH_DEPTH_DOPING_BASE = 10_000
+const SEARCH_DIRECT_MATCH_BONUS = 10
 
 // Factory per ADR-0007. Confines every listing to `rootAbsolutePath`; a request
 // that lexically escapes the root is rejected, never resolved.
@@ -200,89 +207,90 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
     return { ok: true, absolutePath }
   }
 
-  // --- Recursive fuzzy search (re-engineered from broot's tree builder) ---
+  // --- Recursive fuzzy search (re-engineered from broot's tree builder,
+  // `tree_build/builder.rs`, used as the reference spec) ---
 
-  type PendingDirectory = {
-    absolutePath: string
-    relativePath: string // from the search root; '' for the search root itself
-    ignoreChain: IgnoreFile[]
-    isIgnored: boolean // the directory (or an ancestor) is gitignored
-  }
-
-  type WalkMatch = {
-    relativePath: string
+  // The builder's working line, broot's BLine. Lines live in an arena (a flat
+  // array) and reference each other by index.
+  type BuildLine = {
+    parentIndex: number | null
     name: string
-    score: number
-    dirent: Dirent
+    subpath: string // from the search root; '' for the search root itself
+    absolutePath: string
+    depth: number
+    kind: 'directory' | 'file' | 'other'
+    isSymlink: boolean
     isHidden: boolean
     isGitignored: boolean
+    ignoreChain: IgnoreFile[] // for directories: the chain governing their children
+    childIndexes: number[] | null // null until the directory's children are loaded
+    nextChildIndex: number // children emitted so far; children.length − this = unlisted
+    hasMatch: boolean // shown: a direct match, or a directory containing one
+    directMatch: boolean
+    score: number
+    keptChildCount: number
   }
 
-  type VisitedDirectory = { name: string; isHidden: boolean; isGitignored: boolean }
-
-  function directoryNode(
-    relativePath: string,
-    directoryInfo: VisitedDirectory,
-    score: number | null,
-  ): SearchNode {
+  // Minimal binary min-heap for the trim step: pops the lowest-scoring
+  // removable line first (broot's BinaryHeap<SortableBId> with reversed Ord).
+  function createRemovalHeap() {
+    const heapedLineIndexes: number[] = []
+    const heapedScores: number[] = []
+    function swap(firstSlot: number, secondSlot: number): void {
+      ;[heapedLineIndexes[firstSlot], heapedLineIndexes[secondSlot]] = [
+        heapedLineIndexes[secondSlot]!,
+        heapedLineIndexes[firstSlot]!,
+      ]
+      ;[heapedScores[firstSlot], heapedScores[secondSlot]] = [
+        heapedScores[secondSlot]!,
+        heapedScores[firstSlot]!,
+      ]
+    }
     return {
-      path: relativePath,
-      entry: {
-        name: directoryInfo.name,
-        kind: 'directory',
-        sizeBytes: null,
-        childCount: null,
-        isExecutable: false,
-        isHidden: directoryInfo.isHidden,
-        isSymlink: false,
-        isGitignored: directoryInfo.isGitignored,
-      },
-      score,
-    }
-  }
-
-  // Resolves a kept match into a full DirectoryEntry. Only the trimmed final
-  // matches are stat'ed — the walk itself never stats.
-  async function describeMatch(searchRootAbsolutePath: string, match: WalkMatch): Promise<SearchNode> {
-    const shared = { isHidden: match.isHidden, isGitignored: match.isGitignored }
-    const isSymlink = match.dirent.isSymbolicLink()
-    let entry: DirectoryEntry = {
-      name: match.name,
-      kind: 'other',
-      sizeBytes: null,
-      childCount: null,
-      isExecutable: false,
-      isSymlink,
-      ...shared,
-    }
-    if (match.dirent.isDirectory()) {
-      entry = { ...entry, kind: 'directory' }
-    } else if (match.dirent.isFile() || isSymlink) {
-      try {
-        const entryInfo = await stat(join(searchRootAbsolutePath, match.relativePath))
-        if (entryInfo.isDirectory()) {
-          entry = { ...entry, kind: 'directory' }
-        } else if (entryInfo.isFile()) {
-          entry = {
-            ...entry,
-            kind: 'file',
-            sizeBytes: entryInfo.size,
-            isExecutable: (entryInfo.mode & 0o111) !== 0,
-          }
+      push(lineIndex: number, score: number): void {
+        heapedLineIndexes.push(lineIndex)
+        heapedScores.push(score)
+        let slot = heapedScores.length - 1
+        while (slot > 0) {
+          const parentSlot = (slot - 1) >> 1
+          if (heapedScores[parentSlot]! <= heapedScores[slot]!) break
+          swap(parentSlot, slot)
+          slot = parentSlot
         }
-      } catch {
-        // Vanished or broken symlink: stays `other`.
-      }
+      },
+      pop(): number | null {
+        if (heapedScores.length === 0) return null
+        const poppedLineIndex = heapedLineIndexes[0]!
+        swap(0, heapedScores.length - 1)
+        heapedLineIndexes.pop()
+        heapedScores.pop()
+        let slot = 0
+        while (true) {
+          const leftSlot = slot * 2 + 1
+          const rightSlot = leftSlot + 1
+          let smallestSlot = slot
+          if (leftSlot < heapedScores.length && heapedScores[leftSlot]! < heapedScores[smallestSlot]!)
+            smallestSlot = leftSlot
+          if (rightSlot < heapedScores.length && heapedScores[rightSlot]! < heapedScores[smallestSlot]!)
+            smallestSlot = rightSlot
+          if (smallestSlot === slot) break
+          swap(slot, smallestSlot)
+          slot = smallestSlot
+        }
+        return poppedLineIndex
+      },
     }
-    return { path: match.relativePath, entry, score: match.score }
   }
 
-  // Bounded best-first search under `requestedRelativePath`, broot-style:
-  // breadth-first over directories (shallow matches surface first), gathering
-  // up to `limit × 10` scored name matches within a ~900ms budget, then
-  // trimming to the best-scoring `limit` while keeping every ancestor chain.
-  // Symlinked directories are not descended into (no cycles), and the client
-  // aborting the request stops the walk.
+  // Bounded best-first search under `requestedRelativePath`, broot-style.
+  // The pattern scores each entry's *subpath* from the search root (broot's
+  // default PathFuzzy mode), so everything inside a matching directory is a
+  // match too. Level-by-level breadth-first gather, round-robin across the
+  // directories of the current level; scores are depth-doped so shallow
+  // matches win; then the lowest-scoring leaves are trimmed until the tree
+  // fits `limit` lines, keeping every ancestor chain and per-directory
+  // "unlisted" counts. Symlinked directories are not descended into (no
+  // cycles), and the client aborting the request stops the walk.
   async function searchSubtree(
     requestedRelativePath: string,
     searchOptions: SearchSubtreeOptions,
@@ -290,124 +298,285 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
     const searchRootAbsolutePath = resolveWithinRoot(requestedRelativePath)
     if (searchRootAbsolutePath === null) return { ok: false, reason: 'outside-root' }
 
+    // The search root itself must be listable: report failures like listDirectory.
+    try {
+      await readdir(searchRootAbsolutePath)
+    } catch (readError) {
+      const errorCode = (readError as NodeJS.ErrnoException).code
+      if (errorCode === 'ENOENT') return { ok: false, reason: 'not-found' }
+      if (errorCode === 'ENOTDIR') return { ok: false, reason: 'not-a-directory' }
+      return { ok: false, reason: 'not-readable' }
+    }
+
     const startedAt = performance.now()
-    const deadline = startedAt + SEARCH_TIME_BUDGET_MILLISECONDS
+    const goodEnoughDeadline = startedAt + SEARCH_TIME_BUDGET_MILLISECONDS
+    const hardDeadline = startedAt + SEARCH_HARD_TIME_LIMIT_MILLISECONDS
     const overscanTarget = searchOptions.limit * SEARCH_OVERSCAN_FACTOR
 
     const baseContext = await buildIgnoreContext(searchRootAbsolutePath)
-    const pendingDirectories: PendingDirectory[] = [
+    const lines: BuildLine[] = [
       {
+        parentIndex: null,
+        name: '',
+        subpath: '',
         absolutePath: searchRootAbsolutePath,
-        relativePath: '',
+        depth: 0,
+        kind: 'directory',
+        isSymlink: false,
+        isHidden: false,
+        isGitignored: baseContext.isWithinIgnoredDirectory,
         ignoreChain: baseContext.ignoreChain,
-        isIgnored: baseContext.isWithinIgnoredDirectory,
+        childIndexes: null,
+        nextChildIndex: 0,
+        hasMatch: true, // the root line always shows, like broot's from_root
+        directMatch: false,
+        score: 0,
+        keptChildCount: 0,
       },
     ]
-    const visitedDirectories = new Map<string, VisitedDirectory>()
-    const matches: WalkMatch[] = []
     let scannedDirectoryCount = 0
-    let truncated = false
-    let queueIndex = 0
+    let discoveredMatchCount = 0
 
-    while (queueIndex < pendingDirectories.length) {
-      if (
-        searchOptions.abortSignal.aborted ||
-        matches.length >= overscanTarget ||
-        performance.now() > deadline
-      ) {
-        truncated = true
-        break
+    // broot's load_children: read a directory, filter, score, sort its
+    // children case-insensitively, and report whether any child matched.
+    // Non-matching files are dropped; directories always survive (they may
+    // contain matches).
+    async function loadChildren(directoryIndex: number): Promise<boolean> {
+      const directoryLine = lines[directoryIndex]!
+      // The directory's own .gitignore governs its children (the search
+      // root's own file is already in its chain via buildIgnoreContext).
+      if (directoryLine.subpath !== '') {
+        const ownIgnoreFile = await loadIgnoreFile(directoryLine.absolutePath)
+        if (ownIgnoreFile !== null)
+          directoryLine.ignoreChain = [...directoryLine.ignoreChain, ownIgnoreFile]
       }
-      const directory = pendingDirectories[queueIndex++]!
-
       let directoryEntries: Dirent[]
       try {
-        directoryEntries = await readdir(directory.absolutePath, { withFileTypes: true })
-      } catch (readError) {
-        if (scannedDirectoryCount === 0 && queueIndex === 1) {
-          // The search root itself is unreadable: report it like listDirectory.
-          const errorCode = (readError as NodeJS.ErrnoException).code
-          if (errorCode === 'ENOENT') return { ok: false, reason: 'not-found' }
-          if (errorCode === 'ENOTDIR') return { ok: false, reason: 'not-a-directory' }
-          return { ok: false, reason: 'not-readable' }
-        }
-        // Unreadable subdirectory: skip it, keep searching.
-        continue
+        directoryEntries = await readdir(directoryLine.absolutePath, { withFileTypes: true })
+      } catch {
+        // Unreadable subdirectory: treat as empty, keep searching elsewhere.
+        directoryLine.childIndexes = []
+        return false
       }
       scannedDirectoryCount++
-
-      // The search root's own .gitignore is already in the base chain.
-      let effectiveIgnoreChain = directory.ignoreChain
-      if (directory.relativePath !== '') {
-        const ownIgnoreFile = await loadIgnoreFile(directory.absolutePath)
-        if (ownIgnoreFile !== null) {
-          effectiveIgnoreChain = [...directory.ignoreChain, ownIgnoreFile]
-        }
-      }
-
+      const childDepth = directoryLine.depth + 1
+      const childIndexes: number[] = []
+      let hasChildMatch = false
       for (const dirent of directoryEntries) {
         const entryName = dirent.name
         const entryIsHidden = entryName.startsWith('.')
         if (!searchOptions.showHidden && entryIsHidden) continue
         const entryIsDirectory = dirent.isDirectory()
-        const entryAbsolutePath = join(directory.absolutePath, entryName)
+        const entryAbsolutePath = join(directoryLine.absolutePath, entryName)
         const entryIsGitignored =
-          directory.isIgnored ||
+          directoryLine.isGitignored ||
           (entryName === '.git' && entryIsDirectory) ||
-          isPathIgnored(effectiveIgnoreChain, entryAbsolutePath, entryIsDirectory)
+          isPathIgnored(directoryLine.ignoreChain, entryAbsolutePath, entryIsDirectory)
         if (!searchOptions.showGitignored && entryIsGitignored) continue
 
-        const entryRelativePath =
-          directory.relativePath === '' ? entryName : `${directory.relativePath}/${entryName}`
-        if (entryIsDirectory) {
-          pendingDirectories.push({
-            absolutePath: entryAbsolutePath,
-            relativePath: entryRelativePath,
-            ignoreChain: effectiveIgnoreChain,
-            isIgnored: entryIsGitignored,
-          })
-          visitedDirectories.set(entryRelativePath, {
-            name: entryName,
-            isHidden: entryIsHidden,
-            isGitignored: entryIsGitignored,
-          })
+        const entrySubpath =
+          directoryLine.subpath === '' ? entryName : `${directoryLine.subpath}/${entryName}`
+        const scored = fuzzyScore(searchOptions.pattern, entrySubpath)
+        if (scored === null && !entryIsDirectory) continue
+        const directMatch = scored !== null
+        if (directMatch) {
+          discoveredMatchCount++
+          hasChildMatch = true
         }
-        const scored = fuzzyScore(searchOptions.pattern, entryName)
-        if (scored !== null) {
-          matches.push({
-            relativePath: entryRelativePath,
-            name: entryName,
-            score: scored.score,
-            dirent,
-            isHidden: entryIsHidden,
-            isGitignored: entryIsGitignored,
-          })
+        childIndexes.push(lines.length)
+        lines.push({
+          parentIndex: directoryIndex,
+          name: entryName,
+          subpath: entrySubpath,
+          absolutePath: entryAbsolutePath,
+          depth: childDepth,
+          kind: entryIsDirectory ? 'directory' : dirent.isFile() ? 'file' : 'other',
+          isSymlink: dirent.isSymbolicLink(),
+          isHidden: entryIsHidden,
+          isGitignored: entryIsGitignored,
+          ignoreChain: directoryLine.ignoreChain,
+          childIndexes: null,
+          nextChildIndex: 0,
+          hasMatch: directMatch,
+          directMatch,
+          score:
+            SEARCH_DEPTH_DOPING_BASE -
+            childDepth +
+            (scored === null ? 0 : scored.score + SEARCH_DIRECT_MATCH_BONUS),
+          keptChildCount: 0,
+        })
+      }
+      childIndexes.sort((firstIndex, secondIndex) => {
+        const firstName = lines[firstIndex]!.name.toLowerCase()
+        const secondName = lines[secondIndex]!.name.toLowerCase()
+        return firstName < secondName ? -1 : firstName > secondName ? 1 : 0
+      })
+      directoryLine.childIndexes = childIndexes
+      return hasChildMatch
+    }
+
+    function nextChild(directoryIndex: number): number | null {
+      const directoryLine = lines[directoryIndex]!
+      const childIndexes = directoryLine.childIndexes!
+      if (directoryLine.nextChildIndex >= childIndexes.length) return null
+      return childIndexes[directoryLine.nextChildIndex++]!
+    }
+
+    // Gather, broot's gather_lines: emit lines one at a time, round-robin
+    // across the open directories of the current level; descend a level only
+    // when the current one is exhausted. `okLineCount` counts lines that
+    // would display (matches + directories containing matches).
+    const outLineIndexes: number[] = [0]
+    let okLineCount = 1
+    let totalSearch = true
+    await loadChildren(0)
+    const openDirectories: number[] = [0]
+    let openDirectoriesHead = 0
+    let nextLevelDirectories: number[] = []
+
+    gather: while (true) {
+      if (
+        searchOptions.abortSignal.aborted ||
+        performance.now() > hardDeadline ||
+        okLineCount > overscanTarget ||
+        (okLineCount >= searchOptions.limit && performance.now() > goodEnoughDeadline)
+      ) {
+        totalSearch = false
+        break
+      }
+      if (openDirectoriesHead < openDirectories.length) {
+        const directoryIndex = openDirectories[openDirectoriesHead++]!
+        const childIndex = nextChild(directoryIndex)
+        if (childIndex !== null) {
+          openDirectories.push(directoryIndex)
+          const childLine = lines[childIndex]!
+          if (childLine.hasMatch) okLineCount++
+          if (childLine.kind === 'directory') nextLevelDirectories.push(childIndex)
+          outLineIndexes.push(childIndex)
         }
+      } else {
+        // This level is finished: go deeper.
+        if (nextLevelDirectories.length === 0) break
+        for (const nextLevelDirectoryIndex of nextLevelDirectories) {
+          if (searchOptions.abortSignal.aborted || performance.now() > hardDeadline) {
+            totalSearch = false
+            break gather
+          }
+          const hasChildMatch = await loadChildren(nextLevelDirectoryIndex)
+          if (hasChildMatch) {
+            // Make the whole ancestor chain displayable (broot: "we must
+            // ensure the ancestors are made Ok").
+            let ancestorIndex: number | null = nextLevelDirectoryIndex
+            while (ancestorIndex !== null) {
+              const ancestorLine: BuildLine = lines[ancestorIndex]!
+              if (!ancestorLine.hasMatch) {
+                ancestorLine.hasMatch = true
+                okLineCount++
+              }
+              ancestorIndex = ancestorLine.parentIndex
+            }
+          }
+          openDirectories.push(nextLevelDirectoryIndex)
+        }
+        nextLevelDirectories = []
+      }
+    }
+    const walkMatchCount = discoveredMatchCount
+
+    // With a pattern the root is never trimmed (broot's trim_root=false):
+    // finish emitting the search root's children so every top-level match
+    // is at least present before trimming.
+    let remainingRootChildIndex: number | null
+    while ((remainingRootChildIndex = nextChild(0)) !== null) {
+      outLineIndexes.push(remainingRootChildIndex)
+    }
+
+    // Trim, broot's trim_excess: only when the walk stopped early. Repeatedly
+    // drop the lowest-scoring displayable leaf (never a top-level line),
+    // cascading to parents left childless; each removal feeds the parent's
+    // unlisted count through nextChildIndex.
+    if (!totalSearch) {
+      let keptLineCount = 1
+      for (const lineIndex of outLineIndexes) {
+        if (lineIndex === 0) continue
+        const line = lines[lineIndex]!
+        if (line.hasMatch) {
+          keptLineCount++
+          lines[line.parentIndex!]!.keptChildCount++
+        }
+      }
+      const removalHeap = createRemovalHeap()
+      for (const lineIndex of outLineIndexes) {
+        if (lineIndex === 0) continue
+        const line = lines[lineIndex]!
+        if (line.hasMatch && line.keptChildCount === 0 && line.depth > 1) {
+          removalHeap.push(lineIndex, line.score)
+        }
+      }
+      while (keptLineCount > searchOptions.limit) {
+        const removedLineIndex = removalHeap.pop()
+        if (removedLineIndex === null) break
+        const removedLine = lines[removedLineIndex]!
+        removedLine.hasMatch = false
+        const parentIndex = removedLine.parentIndex!
+        const parentLine = lines[parentIndex]!
+        parentLine.keptChildCount--
+        parentLine.nextChildIndex--
+        if (parentLine.keptChildCount === 0 && parentIndex !== 0) {
+          removalHeap.push(parentIndex, parentLine.score)
+        }
+        keptLineCount--
       }
     }
 
-    matches.sort(
-      (firstMatch, secondMatch) =>
-        secondMatch.score - firstMatch.score ||
-        firstMatch.relativePath.localeCompare(secondMatch.relativePath),
-    )
-    const keptMatches = matches.slice(0, searchOptions.limit)
-
-    const nodesByPath = new Map<string, SearchNode>()
-    for (const keptMatch of keptMatches) {
-      nodesByPath.set(keptMatch.relativePath, await describeMatch(searchRootAbsolutePath, keptMatch))
-      // Connect the match to the search root: every ancestor directory was
-      // necessarily visited during the walk.
-      let ancestorPath = keptMatch.relativePath
-      while (true) {
-        const lastSlashIndex = ancestorPath.lastIndexOf('/')
-        if (lastSlashIndex === -1) break
-        ancestorPath = ancestorPath.slice(0, lastSlashIndex)
-        if (nodesByPath.has(ancestorPath)) break
-        const directoryInfo = visitedDirectories.get(ancestorPath)
-        if (directoryInfo === undefined) break
-        nodesByPath.set(ancestorPath, directoryNode(ancestorPath, directoryInfo, null))
+    // Assemble the kept lines, in emission order. Kept directories whose
+    // children were never loaded get a listing now, purely to count their
+    // unlisted entries (broot's take_as_tree does the same). Only kept files
+    // are stat'ed — the walk itself never stats.
+    const nodes: SearchNode[] = []
+    let returnedMatchCount = 0
+    for (const lineIndex of outLineIndexes) {
+      if (lineIndex === 0) continue
+      const line = lines[lineIndex]!
+      if (!line.hasMatch) continue
+      if (line.kind === 'directory' && line.childIndexes === null) await loadChildren(lineIndex)
+      const unlisted =
+        line.kind === 'directory' ? line.childIndexes!.length - line.nextChildIndex : 0
+      let entry: DirectoryEntry = {
+        name: line.name,
+        kind: line.kind === 'directory' ? 'directory' : 'other',
+        sizeBytes: null,
+        childCount: null,
+        isExecutable: false,
+        isSymlink: line.isSymlink,
+        isHidden: line.isHidden,
+        isGitignored: line.isGitignored,
       }
+      if (line.kind === 'file' || (line.kind === 'other' && line.isSymlink)) {
+        try {
+          const entryInfo = await stat(line.absolutePath)
+          if (entryInfo.isDirectory()) {
+            entry = { ...entry, kind: 'directory' }
+          } else if (entryInfo.isFile()) {
+            entry = {
+              ...entry,
+              kind: 'file',
+              sizeBytes: entryInfo.size,
+              isExecutable: (entryInfo.mode & 0o111) !== 0,
+            }
+          }
+        } catch {
+          // Vanished or broken symlink: stays `other`.
+        }
+      }
+      if (line.directMatch) returnedMatchCount++
+      nodes.push({
+        path: line.subpath,
+        entry,
+        score: line.directMatch ? line.score : null,
+        directMatch: line.directMatch,
+        unlisted,
+      })
     }
 
     return {
@@ -416,12 +585,12 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
         rootPath: rootAbsolutePath,
         relativePath: relative(rootAbsolutePath, searchRootAbsolutePath),
         pattern: searchOptions.pattern,
-        nodes: [...nodesByPath.values()],
+        nodes,
         stats: {
-          matchCount: matches.length,
-          returnedMatchCount: keptMatches.length,
+          matchCount: walkMatchCount,
+          returnedMatchCount,
           scannedDirectoryCount,
-          truncated,
+          truncated: !totalSearch,
           elapsedMilliseconds: Math.round(performance.now() - startedAt),
         },
       },

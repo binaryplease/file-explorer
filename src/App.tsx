@@ -89,7 +89,10 @@ export function App() {
       pattern,
       showHidden,
       showGitignored,
-      limit: 100,
+      // broot's targeted_size is the screen height: the server trims the
+      // result tree to roughly what fits the viewport, plus a little slack
+      // since ours scrolls.
+      limit: Math.min(500, Math.max(30, (measurePageRowCount() + 1) * 2)),
       abortSignal: abortController.signal,
     })
       .then((result) => {

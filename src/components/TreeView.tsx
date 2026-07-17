@@ -52,6 +52,21 @@ function EntryRowView({
       {isSelected && <span className="absolute inset-y-0 left-0 w-[3px] bg-sel-bar" />}
       <span className="overflow-hidden text-ellipsis">
         <span className="text-faint">{row.connectorPrefix}</span>
+        {/* broot path-search display: the parent part of a matched subpath
+            rides ahead of the name, dimmed, matches still highlighted. */}
+        {row.pathPrefixSegments.length > 0 && (
+          <span className="text-dim">
+            {row.pathPrefixSegments.map((segment, segmentIndex) =>
+              segment.matched ? (
+                <span key={segmentIndex} className="rounded-[2px] bg-match-bg text-match">
+                  {segment.text}
+                </span>
+              ) : (
+                <span key={segmentIndex}>{segment.text}</span>
+              ),
+            )}
+          </span>
+        )}
         <span className={entryNameColorClass(row)}>
           {row.nameSegments.map((segment, segmentIndex) =>
             segment.matched ? (
@@ -64,6 +79,8 @@ function EntryRowView({
           )}
         </span>
         {isDirectory && <span className="font-normal text-faint">/</span>}
+        {/* broot's " …": matches hide inside this directory, unlisted. */}
+        {row.showUnlistedSuffix && <span className="text-faint"> …</span>}
         {showChildCount && (
           <span className="text-[11px] text-faint"> {row.entry.childCount}</span>
         )}
@@ -178,6 +195,15 @@ export function TreeView({
               onFocusDirectory={onFocusDirectory}
               onOpenFile={onOpenFile}
             />
+          ) : row.type === 'search-unlisted' ? (
+            // broot's pruning line: matches trimmed from this directory's view.
+            <div
+              key={row.path}
+              className="px-4 py-px text-[11.5px] whitespace-pre text-faint"
+            >
+              {row.connectorPrefix}
+              {row.unlistedCount} unlisted
+            </div>
           ) : (
             <div
               key={row.path}

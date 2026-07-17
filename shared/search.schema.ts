@@ -15,8 +15,22 @@ export const SearchNodeSchema = z.object({
     .nullable()
     .default(null)
     .describe(
-      'Fuzzy score of the name match (higher is better). Null for directories included only ' +
-        'because they are ancestors of matches.',
+      'Line score, broot-style: fuzzy subpath score plus a shallow-depth bonus (higher is ' +
+        'better). Null for directories included only because they contain matches.',
+    ),
+  directMatch: z
+    .boolean()
+    .default(false)
+    .describe('True when the pattern fuzzy-matches this node subpath itself (broot path-fuzzy).'),
+  unlisted: z
+    .number()
+    .int()
+    .nonnegative()
+    .default(0)
+    .describe(
+      'For directories: how many matching children were found (or would match) but are not in ' +
+        '`nodes`, because of trimming or because the walk never listed them. Broot renders this ' +
+        'as the " …" suffix / "N unlisted" line.',
     ),
 })
 export type SearchNode = z.infer<typeof SearchNodeSchema>
@@ -77,7 +91,10 @@ export const SearchSubtreeQuerySchema = z.object({
     .describe('Directory to search under, relative to the served root. Defaults to the root itself.'),
   // Required input, deliberately defaultless (ADR-0029): an empty pattern is a
   // caller bug, not a searchable value.
-  pattern: z.string().min(1).describe('Fuzzy pattern to score entry names against.'),
+  pattern: z
+    .string()
+    .min(1)
+    .describe('Fuzzy pattern, scored against each subpath from the searched directory (broot default).'),
   showHidden: z
     .stringbool()
     .default(false)
@@ -92,6 +109,9 @@ export const SearchSubtreeQuerySchema = z.object({
     .positive()
     .max(500)
     .default(100)
-    .describe('Maximum number of matches to return (the walk overscans 10× this).'),
+    .describe(
+      "Target size of the result tree in lines, broot's targeted_size (the client passes its " +
+        'viewport height). The walk overscans 10× this, then trims to the best-scoring lines.',
+    ),
 })
 export type SearchSubtreeQuery = z.infer<typeof SearchSubtreeQuerySchema>
