@@ -5,15 +5,16 @@ import {
   DirectoryListingSchema,
   FilesystemErrorSchema,
   ListDirectoryQuerySchema,
+  ReadFileQuerySchema,
 } from '../../shared/filesystem.schema'
 import { SearchSubtreeQuerySchema, SearchSubtreeResultSchema } from '../../shared/search.schema'
-import type { ListDirectoryFailureReason } from '../services/filesystem'
+import type { ListDirectoryFailureReason, ReadFileFailureReason } from '../services/filesystem'
 
 // Created at startup so a bad EXPLORER_ROOT crashes the boot, not a request.
 const filesystemService = createFilesystemService({ rootAbsolutePath: config.EXPLORER_ROOT })
 
 function failureStatusAndMessage(
-  reason: ListDirectoryFailureReason,
+  reason: ListDirectoryFailureReason | ReadFileFailureReason,
   requestedPath: string,
 ): { statusCode: 400 | 403 | 404; message: string } {
   switch (reason) {
@@ -21,10 +22,12 @@ function failureStatusAndMessage(
       return { statusCode: 400, message: `path escapes the served root: ${requestedPath}` }
     case 'not-a-directory':
       return { statusCode: 400, message: `not a directory: ${requestedPath}` }
+    case 'not-a-file':
+      return { statusCode: 400, message: `not a file: ${requestedPath}` }
     case 'not-found':
-      return { statusCode: 404, message: `no such directory: ${requestedPath}` }
+      return { statusCode: 404, message: `no such entry: ${requestedPath}` }
     case 'not-readable':
-      return { statusCode: 403, message: `directory is not readable: ${requestedPath}` }
+      return { statusCode: 403, message: `entry is not readable: ${requestedPath}` }
   }
 }
 
@@ -91,6 +94,31 @@ export const filesystemRoutes = new Elysia().get(
         '`limit` matches plus the ancestor directories connecting them to the searched root. ' +
         'Hidden (dot) and gitignored entries are pruned unless the corresponding toggle is set. ' +
         'Aborting the request cancels the walk.',
+    },
+  },
+).get(
+  '/api/fs/raw',
+  async ({ query, status }) => {
+    const result = await filesystemService.resolveFile(query.path)
+    if (!result.ok) {
+      const { statusCode, message } = failureStatusAndMessage(result.reason, query.path)
+      return status(statusCode, { error: message })
+    }
+    // Bun.file streams the bytes and infers the content type from the
+    // extension, so HTML files render in place — the explorer's "open" is a
+    // same-tab navigation to this URL (browser back returns to the tree).
+    return Bun.file(result.absolutePath)
+  },
+  {
+    query: ReadFileQuerySchema,
+    detail: {
+      tags: ['filesystem'],
+      summary: 'Serve a file',
+      description:
+        'Streams one file of the served filesystem, relative to the served root, with a ' +
+        'content type inferred from the extension (HTML renders in the browser). The client ' +
+        'opens files in place by navigating to this URL in the same tab. Paths that lexically ' +
+        'escape the root are rejected with 400.',
     },
   },
 )

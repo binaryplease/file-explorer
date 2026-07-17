@@ -1,11 +1,12 @@
 import { IconChevronRight } from '@tabler/icons-react'
 
 const KEY_HINTS: Array<{ keyLabel: string; action: string }> = [
-  { keyLabel: '↑↓', action: 'move' },
-  { keyLabel: '↵', action: 'open dir / up on path' },
-  { keyLabel: '→', action: 'expand' },
-  { keyLabel: '←', action: 'collapse' },
-  { keyLabel: 'esc', action: 'clear' },
+  { keyLabel: '↑↓ j k', action: 'move' },
+  { keyLabel: '↵ →', action: 'open' },
+  { keyLabel: '← esc', action: 'back' },
+  { keyLabel: 'h ⌫', action: 'parent' },
+  { keyLabel: 'tab', action: 'next match' },
+  { keyLabel: '^d ^u', action: 'page' },
 ]
 
 type CommandBarProps = {

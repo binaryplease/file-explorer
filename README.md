@@ -41,10 +41,14 @@ server binds to loopback and is not meant to be hosted.
 ## Status
 
 Prototype: broot-style navigation (tree with lazy expansion, keyboard-first
-navigation, size bars, hidden and gitignored toggles, deep-linkable focus via
-`?path=` with natural back-button history), styled after concept CON009.
-Typing fuzzy-searches the whole focused subtree server-side with broot's
-scored-match algorithms re-engineered in TypeScript (bounded best-first walk,
-gitignore-aware pruning, results ranked by score with the best match
-pre-selected). Not yet built: previews, file actions (open/publish-to-zink),
-directory sizing.
+navigation with broot's default keys — `↵`/`→` open, `←`/`esc` back through
+history, `h`/`⌫` parent, `j`/`k` move, `ctrl-d`/`ctrl-u` page,
+`tab`/`shift-tab` walk matches — size bars, hidden and gitignored toggles,
+deep-linkable focus via `?path=` with natural back-button history), styled
+after concept CON009. Typing fuzzy-searches the whole focused subtree
+server-side with broot's scored-match algorithms re-engineered in TypeScript
+(bounded best-first walk, gitignore-aware pruning, results ranked by score
+with the best match pre-selected). Files open in place via `/api/fs/raw`
+(same-tab navigation, back button returns to the tree). Not yet built:
+previews, publish-to-zink, directory sizing, broot's computed screen-fit
+openness (R8 — manual expand/collapse kept for now as a deliberate departure).

@@ -17,6 +17,7 @@ type EntryRowViewProps = {
   onSelect: (path: string) => void
   onToggleDirectory: (path: string) => void
   onFocusDirectory: (path: string) => void
+  onOpenFile: (path: string) => void
 }
 
 function EntryRowView({
@@ -26,6 +27,7 @@ function EntryRowView({
   onSelect,
   onToggleDirectory,
   onFocusDirectory,
+  onOpenFile,
 }: EntryRowViewProps) {
   const isDirectory = row.entry.kind === 'directory'
   const showChildCount = isDirectory && !row.isOpen && (row.entry.childCount ?? 0) > 0
@@ -41,6 +43,7 @@ function EntryRowView({
       }}
       onDoubleClick={() => {
         if (isDirectory) onFocusDirectory(row.path)
+        else if (row.entry.kind === 'file') onOpenFile(row.path)
       }}
       className={`relative grid cursor-pointer grid-cols-[1fr_104px_66px] items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
         isSelected ? 'bg-sel' : 'hover:bg-hover'
@@ -98,6 +101,7 @@ type TreeViewProps = {
   onFocusParent: () => void
   onToggleDirectory: (path: string) => void
   onFocusDirectory: (path: string) => void
+  onOpenFile: (path: string) => void
   onToggleSizes: () => void
   onToggleHidden: () => void
   onToggleGitignored: () => void
@@ -117,6 +121,7 @@ export function TreeView({
   onFocusParent,
   onToggleDirectory,
   onFocusDirectory,
+  onOpenFile,
   onToggleSizes,
   onToggleHidden,
   onToggleGitignored,
@@ -171,6 +176,7 @@ export function TreeView({
               onSelect={onSelect}
               onToggleDirectory={onToggleDirectory}
               onFocusDirectory={onFocusDirectory}
+              onOpenFile={onOpenFile}
             />
           ) : (
             <div

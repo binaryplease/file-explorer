@@ -18,6 +18,13 @@ async function parseErrorResponse(response: Response, fallbackLabel: string): Pr
   )
 }
 
+// URL that serves a file's bytes with a browser-renderable content type.
+// "Opening" a file is a same-tab navigation to this URL, so the browser back
+// button returns to the tree naturally.
+export function rawFileUrl(relativePath: string): string {
+  return `/api/fs/raw?path=${encodeURIComponent(relativePath)}`
+}
+
 export async function fetchDirectoryListing(relativePath: string): Promise<DirectoryListing> {
   const response = await fetch(`/api/fs/list?path=${encodeURIComponent(relativePath)}`)
   if (!response.ok) return parseErrorResponse(response, 'listing')

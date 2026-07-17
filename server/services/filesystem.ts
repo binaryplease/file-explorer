@@ -17,6 +17,12 @@ export type ListDirectoryResult =
   | { ok: true; listing: DirectoryListing }
   | { ok: false; reason: ListDirectoryFailureReason }
 
+export type ReadFileFailureReason = 'outside-root' | 'not-found' | 'not-a-file' | 'not-readable'
+
+export type ResolveFileResult =
+  | { ok: true; absolutePath: string }
+  | { ok: false; reason: ReadFileFailureReason }
+
 export type SearchSubtreeOptions = {
   pattern: string
   showHidden: boolean
@@ -176,6 +182,22 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
         entries,
       },
     }
+  }
+
+  // Resolves a relative path to an absolute file path for serving its bytes.
+  // Same confinement as listings: paths that escape the root are rejected.
+  async function resolveFile(requestedRelativePath: string): Promise<ResolveFileResult> {
+    const absolutePath = resolveWithinRoot(requestedRelativePath)
+    if (absolutePath === null) return { ok: false, reason: 'outside-root' }
+    try {
+      const fileInfo = await stat(absolutePath)
+      if (!fileInfo.isFile()) return { ok: false, reason: 'not-a-file' }
+    } catch (statError) {
+      const errorCode = (statError as NodeJS.ErrnoException).code
+      if (errorCode === 'ENOENT' || errorCode === 'ENOTDIR') return { ok: false, reason: 'not-found' }
+      return { ok: false, reason: 'not-readable' }
+    }
+    return { ok: true, absolutePath }
   }
 
   // --- Recursive fuzzy search (re-engineered from broot's tree builder) ---
@@ -406,7 +428,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
     }
   }
 
-  return { rootAbsolutePath, listDirectory, searchSubtree }
+  return { rootAbsolutePath, listDirectory, resolveFile, searchSubtree }
 }
 
 export type FilesystemService = ReturnType<typeof createFilesystemService>

@@ -55,6 +55,14 @@ export const ListDirectoryQuerySchema = z.object({
 })
 export type ListDirectoryQuery = z.infer<typeof ListDirectoryQuerySchema>
 
+export const ReadFileQuerySchema = z.object({
+  path: z
+    .string()
+    .default('')
+    .describe('File to serve, relative to the served root.'),
+})
+export type ReadFileQuery = z.infer<typeof ReadFileQuerySchema>
+
 export const FilesystemErrorSchema = z.object({
   error: z.string().describe('Human-readable reason the listing failed.'),
 })

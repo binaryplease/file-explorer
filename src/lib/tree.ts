@@ -120,7 +120,7 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
         type: 'entry',
         path: childPath,
         entry: child,
-        connectorPrefix: leadPrefix + (isLastRow ? '└─ ' : '├─ '),
+        connectorPrefix: leadPrefix + (isLastRow ? '└──' : '├──'),
         isOpen,
         nameSegments: unmatchedSegments(child.name),
         isMatch: false,
@@ -136,7 +136,7 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
       rows.push({
         type: 'unlisted',
         path: `${parentPath}#unlisted`,
-        connectorPrefix: `${leadPrefix}└─ `,
+        connectorPrefix: `${leadPrefix}└──`,
         hiddenCount,
         ignoredCount,
       })
@@ -193,7 +193,7 @@ export function buildSearchRows(options: SearchViewOptions): TreeRowsResult {
         type: 'entry',
         path: rowPath,
         entry: child.entry,
-        connectorPrefix: leadPrefix + (isLastRow ? '└─ ' : '├─ '),
+        connectorPrefix: leadPrefix + (isLastRow ? '└──' : '├──'),
         isOpen: hasChildren,
         nameSegments: isMatch
           ? fuzzyMatch(result.pattern, child.entry.name).segments
