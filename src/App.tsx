@@ -134,11 +134,10 @@ export function App() {
 
   const focusParentDirectory = useCallback(() => {
     if (focusPath === '') return
-    const previousFocusPath = focusPath
     focusDirectory(parentTreePath(focusPath))
-    // Land on the directory we just came out of.
-    setSelectedPath(previousFocusPath)
-    setOpenPaths((previousOpenPaths) => new Set(previousOpenPaths).add(previousFocusPath))
+    // broot keeps the selection on the top line (the new current directory)
+    // after walking up — it neither jumps to nor expands the directory we left.
+    setSelectedPath(ROOT_LINE_PATH)
   }, [focusPath, focusDirectory])
 
   const isSearching = pattern !== ''
@@ -176,7 +175,8 @@ export function App() {
   const focusEntryCount = focusListing === undefined ? null : focusListing.length
 
   // The tree's first line (the current directory itself) is selectable too,
-  // sitting above the entry rows. Enter on it walks up one level, broot-style.
+  // sitting above the entry rows. Enter on it walks up one level and the
+  // selection stays on this line, broot-style.
   const selectablePaths = useMemo(
     () => [ROOT_LINE_PATH, ...entryRows.map((entryRow) => entryRow.path)],
     [entryRows],
