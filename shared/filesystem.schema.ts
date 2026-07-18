@@ -63,6 +63,23 @@ export const ReadFileQuerySchema = z.object({
 })
 export type ReadFileQuery = z.infer<typeof ReadFileQuerySchema>
 
+export const OpenFileRequestSchema = z.object({
+  path: z
+    .string()
+    .default('')
+    .describe('File to open with the OS default application, relative to the served root.'),
+})
+export type OpenFileRequest = z.infer<typeof OpenFileRequestSchema>
+
+export const OpenFileResultSchema = z.object({
+  opened: z
+    .boolean()
+    .default(false)
+    .describe('True once the OS default-application launcher was spawned for the file.'),
+  path: z.string().default('').describe('The opened file, relative to the served root.'),
+})
+export type OpenFileResult = z.infer<typeof OpenFileResultSchema>
+
 export const FilesystemErrorSchema = z.object({
   error: z.string().describe('Human-readable reason the listing failed.'),
 })

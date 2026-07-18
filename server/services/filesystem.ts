@@ -6,6 +6,7 @@ import type { DirectoryEntry, DirectoryListing } from '../../shared/filesystem.s
 import type { SearchNode, SearchSubtreeResult } from '../../shared/search.schema'
 import { fuzzyScore } from '../../shared/fuzzy'
 import { isPathIgnored, loadIgnoreFile, type IgnoreFile } from './ignore'
+import { openPathWithDefaultApplication } from './open'
 
 export type ListDirectoryFailureReason =
   | 'outside-root'
@@ -22,6 +23,14 @@ export type ReadFileFailureReason = 'outside-root' | 'not-found' | 'not-a-file' 
 export type ResolveFileResult =
   | { ok: true; absolutePath: string }
   | { ok: false; reason: ReadFileFailureReason }
+
+// Opening reuses the file resolution failures and adds one for a launcher that
+// couldn't be spawned (e.g. no `xdg-open` on PATH).
+export type OpenFileFailureReason = ReadFileFailureReason | 'open-failed'
+
+export type OpenFileServiceResult =
+  | { ok: true; relativePath: string }
+  | { ok: false; reason: OpenFileFailureReason }
 
 export type SearchSubtreeOptions = {
   pattern: string
@@ -205,6 +214,20 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       return { ok: false, reason: 'not-readable' }
     }
     return { ok: true, absolutePath }
+  }
+
+  // Opens a file with the OS default application on the host machine — the
+  // explorer's "open" gesture. Confinement matches resolveFile: only files
+  // inside the served root can be opened.
+  async function openFile(requestedRelativePath: string): Promise<OpenFileServiceResult> {
+    const resolved = await resolveFile(requestedRelativePath)
+    if (!resolved.ok) return { ok: false, reason: resolved.reason }
+    try {
+      openPathWithDefaultApplication(resolved.absolutePath)
+    } catch {
+      return { ok: false, reason: 'open-failed' }
+    }
+    return { ok: true, relativePath: relative(rootAbsolutePath, resolved.absolutePath) }
   }
 
   // --- Recursive fuzzy search (re-engineered from broot's tree builder,
@@ -597,7 +620,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
     }
   }
 
-  return { rootAbsolutePath, listDirectory, resolveFile, searchSubtree }
+  return { rootAbsolutePath, listDirectory, resolveFile, openFile, searchSubtree }
 }
 
 export type FilesystemService = ReturnType<typeof createFilesystemService>

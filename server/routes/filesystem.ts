@@ -5,6 +5,8 @@ import {
   DirectoryListingSchema,
   FilesystemErrorSchema,
   ListDirectoryQuerySchema,
+  OpenFileRequestSchema,
+  OpenFileResultSchema,
   ReadFileQuerySchema,
 } from '../../shared/filesystem.schema'
 import { SearchSubtreeQuerySchema, SearchSubtreeResultSchema } from '../../shared/search.schema'
@@ -105,8 +107,9 @@ export const filesystemRoutes = new Elysia().get(
       return status(statusCode, { error: message })
     }
     // Bun.file streams the bytes and infers the content type from the
-    // extension. The explorer's "open" is a same-tab navigation to this URL
-    // (browser back returns to the tree).
+    // extension — a raw byte-serving endpoint (download/preview). The
+    // explorer's own "open" hands the file to the OS default application via
+    // POST /api/fs/open instead.
     return Bun.file(result.absolutePath)
   },
   {
@@ -116,9 +119,43 @@ export const filesystemRoutes = new Elysia().get(
       summary: 'Serve a file',
       description:
         'Streams one file of the served filesystem, relative to the served root, with a ' +
-        'content type inferred from the extension. The client opens files in place by ' +
-        'navigating to this URL in the same tab. Paths that lexically escape the root are ' +
-        'rejected with 400.',
+        'content type inferred from the extension, for download or preview. Paths that ' +
+        'lexically escape the root are rejected with 400.',
+    },
+  },
+).post(
+  '/api/fs/open',
+  async ({ body, status }) => {
+    const result = await filesystemService.openFile(body.path)
+    if (!result.ok) {
+      if (result.reason === 'open-failed') {
+        return status(500, {
+          error: `failed to open with the default application: ${body.path}`,
+        })
+      }
+      const { statusCode, message } = failureStatusAndMessage(result.reason, body.path)
+      return status(statusCode, { error: message })
+    }
+    return { opened: true, path: result.relativePath }
+  },
+  {
+    body: OpenFileRequestSchema,
+    response: {
+      200: OpenFileResultSchema,
+      400: FilesystemErrorSchema,
+      403: FilesystemErrorSchema,
+      404: FilesystemErrorSchema,
+      500: FilesystemErrorSchema,
+    },
+    detail: {
+      tags: ['filesystem'],
+      summary: 'Open a file with the OS default application',
+      description:
+        'Opens one file of the served filesystem with the operating system default ' +
+        'application on the machine hosting the explorer (the desktop double-click gesture). ' +
+        'The explorer is a local-only, loopback tool, so that machine is the user running it. ' +
+        'Paths that lexically escape the root are rejected with 400; a launcher that cannot be ' +
+        'spawned yields 500.',
     },
   },
 )

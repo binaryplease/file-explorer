@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DirectoryEntry } from '../shared/filesystem.schema'
 import type { SearchSubtreeResult } from '../shared/search.schema'
-import { fetchDirectoryListing, fetchSearchResult, rawFileUrl } from './lib/api'
+import {
+  fetchDirectoryListing,
+  fetchSearchResult,
+  openFileWithDefaultApplication,
+} from './lib/api'
 import {
   buildSearchRows,
   buildTreeRows,
@@ -241,20 +245,23 @@ export function App() {
     [matchPaths, selectedPath],
   )
 
-  // "Open" is a same-tab navigation to the file's raw URL, so the browser
-  // back button returns to the tree with its history intact.
-  const openFileInPlace = useCallback((filePath: string) => {
-    window.location.assign(rawFileUrl(filePath))
+  // "Open" hands the file to the OS default application on the host machine
+  // (the desktop double-click gesture); a launcher failure surfaces in the same
+  // error strip as listing errors.
+  const openFile = useCallback((filePath: string) => {
+    openFileWithDefaultApplication(filePath).catch((openError: unknown) => {
+      setListingError(openError instanceof Error ? openError.message : String(openError))
+    })
   }, [])
 
   // broot's open_stay (Enter / →): the root line goes to the parent, a
-  // directory becomes the new root, a file opens in place.
+  // directory becomes the new root, a file opens with the OS default app.
   const openSelection = useCallback(() => {
     if (selectedPath === ROOT_LINE_PATH) focusParentDirectory()
     else if (selectedRow === undefined) return
     else if (selectedRow.entry.kind === 'directory') focusDirectory(selectedRow.path)
-    else if (selectedRow.entry.kind === 'file') openFileInPlace(selectedRow.path)
-  }, [selectedPath, selectedRow, focusParentDirectory, focusDirectory, openFileInPlace])
+    else if (selectedRow.entry.kind === 'file') openFile(selectedRow.path)
+  }, [selectedPath, selectedRow, focusParentDirectory, focusDirectory, openFile])
 
   // broot's back verb: pop the most recent state change — an active filter
   // first, then the focus history (which lives in the browser history, so
@@ -422,7 +429,7 @@ export function App() {
           onFocusParent={focusParentDirectory}
           onToggleDirectory={toggleDirectory}
           onFocusDirectory={focusDirectory}
-          onOpenFile={openFileInPlace}
+          onOpenFile={openFile}
           onToggleSizes={toggleSizes}
           onToggleHidden={toggleHidden}
           onToggleGitignored={toggleGitignored}

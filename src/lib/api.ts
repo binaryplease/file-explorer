@@ -1,7 +1,9 @@
 import {
   DirectoryListingSchema,
   FilesystemErrorSchema,
+  OpenFileResultSchema,
   type DirectoryListing,
+  type OpenFileResult,
 } from '../../shared/filesystem.schema'
 import { SearchSubtreeResultSchema, type SearchSubtreeResult } from '../../shared/search.schema'
 
@@ -18,11 +20,19 @@ async function parseErrorResponse(response: Response, fallbackLabel: string): Pr
   )
 }
 
-// URL that serves a file's bytes with a browser-renderable content type.
-// "Opening" a file is a same-tab navigation to this URL, so the browser back
-// button returns to the tree naturally.
-export function rawFileUrl(relativePath: string): string {
-  return `/api/fs/raw?path=${encodeURIComponent(relativePath)}`
+// "Opening" a file asks the server to hand it to the OS default application on
+// the host machine (a local-only, loopback tool, so that's the user's own
+// machine) — the desktop double-click gesture, not an in-browser navigation.
+export async function openFileWithDefaultApplication(
+  relativePath: string,
+): Promise<OpenFileResult> {
+  const response = await fetch('/api/fs/open', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ path: relativePath }),
+  })
+  if (!response.ok) return parseErrorResponse(response, 'open')
+  return OpenFileResultSchema.parse(await response.json())
 }
 
 export async function fetchDirectoryListing(relativePath: string): Promise<DirectoryListing> {

@@ -45,8 +45,10 @@ deep-linkable focus via `?path=` with natural back-button history), styled
 after concept CON009. Typing fuzzy-searches the whole focused subtree
 server-side with broot's scored-match algorithms re-engineered in TypeScript
 (bounded best-first walk, gitignore-aware pruning, results ranked by score
-with the best match pre-selected). Files open in place via `/api/fs/raw`
-(same-tab navigation, back button returns to the tree). Not yet built:
+with the best match pre-selected). Pressing `↵`/`→` on a file opens it with the
+operating system's default application on the host machine (via
+`POST /api/fs/open` — this is a local-only, loopback tool, so that's your own
+machine); `/api/fs/raw` still serves raw bytes for download/preview. Not yet built:
 directory sizing, broot's computed screen-fit openness (R8 — manual
 expand/collapse kept for now as a deliberate departure).
 
