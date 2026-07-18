@@ -295,8 +295,12 @@ export function App() {
         keyboardEvent.preventDefault()
         goBack()
       } else if (key === 'Escape') {
+        // broot-style: Esc first pulls the selection back up to the tree's
+        // first line (the current-directory line); only once that line is
+        // already selected does a further Esc go back.
         keyboardEvent.preventDefault()
-        goBack()
+        if (selectedPath !== ROOT_LINE_PATH) setSelectedPath(ROOT_LINE_PATH)
+        else goBack()
       } else if (key === 'Tab' && isSearching) {
         if (matchPaths.length === 0) return
         keyboardEvent.preventDefault()
@@ -314,6 +318,7 @@ export function App() {
     pattern,
     isSearching,
     matchPaths,
+    selectedPath,
   ])
 
   const rootName = rootPath === null ? '…' : baseName(rootPath) || rootPath
