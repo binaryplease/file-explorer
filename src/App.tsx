@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DirectoryEntry } from '../shared/filesystem.schema'
 import type { SearchSubtreeResult } from '../shared/search.schema'
 import { fetchDirectoryListing, fetchSearchResult, rawFileUrl } from './lib/api'
@@ -54,6 +54,7 @@ export function App() {
   const [showGitignored, setShowGitignored] = useState(false)
   const [searchResult, setSearchResult] = useState<SearchSubtreeResult | null>(null)
   const [listingError, setListingError] = useState<string | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const { themeMode, setThemeMode } = useTheme()
 
   const loadListing = useCallback(async (relativePath: string) => {
@@ -269,6 +270,29 @@ export function App() {
       const inputTarget =
         keyboardEvent.target instanceof HTMLInputElement ? keyboardEvent.target : null
 
+      const searchInputElement = searchInputRef.current
+      const isSearchInputFocused =
+        searchInputElement !== null && document.activeElement === searchInputElement
+
+      // broot's always-active input: a character (or Backspace) typed while the
+      // search field isn't focused is redirected into it, so filtering can start
+      // from anywhere without clicking the box first. We focus the field and let
+      // the browser deliver the keystroke natively, keeping insertion, caret
+      // movement and deletion correct. Modifier combos stay browser/app shortcuts;
+      // navigation keys (arrows, Enter, Tab, Esc) fall through to the handlers
+      // below and keep working from anywhere.
+      if (
+        !isSearchInputFocused &&
+        searchInputElement !== null &&
+        !keyboardEvent.ctrlKey &&
+        !keyboardEvent.metaKey &&
+        !keyboardEvent.altKey &&
+        (key.length === 1 || key === 'Backspace')
+      ) {
+        searchInputElement.focus()
+        return
+      }
+
       if (key === 'ArrowDown') {
         keyboardEvent.preventDefault()
         moveSelection(1, 'cycle')
@@ -352,6 +376,7 @@ export function App() {
           }
         />
         <CommandBar
+          inputRef={searchInputRef}
           focusLabel={focusLabel}
           pattern={pattern}
           isFiltering={isSearching}

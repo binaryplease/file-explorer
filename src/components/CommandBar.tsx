@@ -1,4 +1,5 @@
 import { IconChevronRight } from '@tabler/icons-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 
 const KEY_HINTS: Array<{ keyLabel: string; action: string }> = [
   { keyLabel: '↑↓', action: 'move' },
@@ -8,7 +9,13 @@ const KEY_HINTS: Array<{ keyLabel: string; action: string }> = [
   { keyLabel: '^d ^u', action: 'page' },
 ]
 
+// A monospace sample whose width, divided by its length, is one glyph's advance.
+const CARET_MEASURE_SAMPLE = '0000000000'
+
 type CommandBarProps = {
+  // The search field's element, so the app can keep it always-active — any key
+  // typed anywhere is redirected here (broot-style).
+  inputRef: RefObject<HTMLInputElement | null>
   focusLabel: string
   pattern: string
   isFiltering: boolean
@@ -22,6 +29,7 @@ type CommandBarProps = {
 }
 
 export function CommandBar({
+  inputRef,
   focusLabel,
   pattern,
   isFiltering,
@@ -31,21 +39,85 @@ export function CommandBar({
   focusEntryCount,
   onPatternChange,
 }: CommandBarProps) {
+  const measureRef = useRef<HTMLSpanElement | null>(null)
+  const [glyphWidth, setGlyphWidth] = useState(0)
+  const [caretIndex, setCaretIndex] = useState(0)
+  const [horizontalScroll, setHorizontalScroll] = useState(0)
+
+  // Monospace: every glyph advances by the same width, so the caret sits exactly
+  // at caretIndex × glyphWidth. Measure that advance before first paint, and
+  // again once web fonts load (the fallback metrics differ).
+  useLayoutEffect(() => {
+    function measureGlyphWidth() {
+      const measureElement = measureRef.current
+      if (measureElement === null) return
+      setGlyphWidth(measureElement.getBoundingClientRect().width / CARET_MEASURE_SAMPLE.length)
+    }
+    measureGlyphWidth()
+    void document.fonts?.ready.then(measureGlyphWidth)
+  }, [])
+
+  // Keep the custom caret glued to the real text cursor: its character index and
+  // the input's horizontal scroll both shift it.
+  const syncCaretFromInput = useCallback(() => {
+    const inputElement = inputRef.current
+    if (inputElement === null) return
+    setCaretIndex(inputElement.selectionStart ?? inputElement.value.length)
+    setHorizontalScroll(inputElement.scrollLeft)
+  }, [inputRef])
+
+  // selectionchange covers arrow-key and click cursor moves; the effect on
+  // `pattern` covers programmatic edits (the type-anywhere redirect appends to
+  // the value without firing the input's own events).
+  useEffect(() => {
+    document.addEventListener('selectionchange', syncCaretFromInput)
+    return () => document.removeEventListener('selectionchange', syncCaretFromInput)
+  }, [syncCaretFromInput])
+  useEffect(() => {
+    syncCaretFromInput()
+  }, [pattern, syncCaretFromInput])
+
+  const caretLeft = Math.max(0, caretIndex * glyphWidth - horizontalScroll)
+
   return (
     <div className="flex-none border-t border-line bg-chrome">
       <div className="flex items-center gap-2.5 px-[18px] py-[11px]">
         <span className="flex-none font-semibold text-dir">{focusLabel}</span>
         <IconChevronRight className="size-4 flex-none text-prompt" stroke={3} />
-        <input
-          autoFocus
-          type="text"
-          value={pattern}
-          onChange={(changeEvent) => onPatternChange(changeEvent.target.value)}
-          placeholder="type to fuzzy-search this subtree…"
-          autoComplete="off"
-          spellCheck={false}
-          className="w-full flex-1 bg-transparent font-mono text-[13.5px] text-fg caret-prompt outline-none placeholder:text-faint"
-        />
+        <div className="relative flex min-w-0 flex-1 items-center">
+          {/* Hidden monospace sample, measured only to derive one glyph's advance. */}
+          <span
+            ref={measureRef}
+            aria-hidden="true"
+            className="pointer-events-none invisible absolute font-mono text-[13.5px]"
+          >
+            {CARET_MEASURE_SAMPLE}
+          </span>
+          <input
+            ref={inputRef}
+            autoFocus
+            type="text"
+            value={pattern}
+            onChange={(changeEvent) => onPatternChange(changeEvent.target.value)}
+            onInput={syncCaretFromInput}
+            onClick={syncCaretFromInput}
+            onKeyUp={syncCaretFromInput}
+            onScroll={syncCaretFromInput}
+            placeholder="type to fuzzy-search this subtree…"
+            autoComplete="off"
+            spellCheck={false}
+            aria-label="Fuzzy-search this subtree"
+            className="w-full bg-transparent font-mono text-[13.5px] text-fg caret-transparent outline-none placeholder:text-faint"
+          />
+          {/* Always-on, always-blinking caret (width = --caret-width, default
+              2px), drawn by us so it blinks regardless of focus and its width is
+              a design token — neither of which the native caret allows. */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 h-[1.05em] -translate-y-1/2 animate-caret-blink bg-prompt"
+            style={{ left: caretLeft, width: 'var(--caret-width)' }}
+          />
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-4 border-t border-line-2 px-[18px] py-[7px] text-[11px] text-dim">
         <span>
