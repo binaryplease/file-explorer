@@ -264,6 +264,16 @@ export function App() {
     else window.history.back()
   }, [pattern])
 
+  // Reveal-everything toggle: flip both the hidden and gitignored views in a
+  // single stroke. If either is currently off we turn both on; only once both
+  // are on does it clear both back off — so the shortcut always lands on a
+  // clean "show everything" / "show nothing extra" state.
+  const toggleHiddenAndGitignored = useCallback(() => {
+    const shouldShowAll = !(showHidden && showGitignored)
+    setShowHidden(shouldShowAll)
+    setShowGitignored(shouldShowAll)
+  }, [showHidden, showGitignored])
+
   useEffect(() => {
     function handleKeyDown(keyboardEvent: KeyboardEvent) {
       const { key } = keyboardEvent
@@ -293,7 +303,17 @@ export function App() {
         return
       }
 
-      if (key === 'ArrowDown') {
+      // DEVIATION FROM BROOT: broot has no single "reveal everything" key — it
+      // exposes hidden and gitignored files through two separate toggles (its
+      // `:toggle_hidden` / `:toggle_git_ignore`, bound by default to Alt-h and
+      // Alt-i). We add Alt-a on top of those as a one-stroke shortcut that flips
+      // both views together (both on / both off). `code === 'KeyA'` rather than
+      // `key`, because Alt rewrites `key` to a composed character on some
+      // keyboard layouts (e.g. 'å' on macOS) while the physical code is stable.
+      if (keyboardEvent.altKey && keyboardEvent.code === 'KeyA') {
+        keyboardEvent.preventDefault()
+        toggleHiddenAndGitignored()
+      } else if (key === 'ArrowDown') {
         keyboardEvent.preventDefault()
         moveSelection(1, 'cycle')
       } else if (key === 'ArrowUp') {
@@ -338,6 +358,7 @@ export function App() {
     walkMatches,
     openSelection,
     goBack,
+    toggleHiddenAndGitignored,
     focusParentDirectory,
     pattern,
     isSearching,

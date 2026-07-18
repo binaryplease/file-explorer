@@ -49,3 +49,8 @@ with the best match pre-selected). Files open in place via `/api/fs/raw`
 (same-tab navigation, back button returns to the tree). Not yet built:
 directory sizing, broot's computed screen-fit openness (R8 — manual
 expand/collapse kept for now as a deliberate departure).
+
+Deviation from broot's keyboard shortcuts: broot reveals hidden and gitignored
+files through two independent toggles (`:toggle_hidden` / `:toggle_git_ignore`,
+Alt-h / Alt-i by default). We add `alt+a` on top of those — a one-stroke
+"reveal everything" that flips both views together (both on / both off).
