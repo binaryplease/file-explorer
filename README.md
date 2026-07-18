@@ -1,17 +1,14 @@
 # binp-file-explorer
 
 A **high-speed Bun file explorer** — a web app for browsing a served filesystem
-fast, and publishing any HTML file or folder to [zink](https://github.com/binaryplease/binp-zink)
-(= ZIP + LINK) for an instant, shareable link.
+fast.
 
 ## Goals
 
 - **Incredibly fast.** Bun-native filesystem serving; directory listings and
   file streaming that feel instant even on large trees.
-- **Browse and open in place.** Opening an HTML file navigates in the same tab
+- **Browse and open in place.** Opening a file navigates in the same tab
   so the browser back button walks the history naturally.
-- **Publish to zink.** One action uploads the selected HTML file or folder to a
-  zink instance and returns the share link.
 
 ## Stack
 
@@ -50,5 +47,5 @@ server-side with broot's scored-match algorithms re-engineered in TypeScript
 (bounded best-first walk, gitignore-aware pruning, results ranked by score
 with the best match pre-selected). Files open in place via `/api/fs/raw`
 (same-tab navigation, back button returns to the tree). Not yet built:
-previews, publish-to-zink, directory sizing, broot's computed screen-fit
-openness (R8 — manual expand/collapse kept for now as a deliberate departure).
+directory sizing, broot's computed screen-fit openness (R8 — manual
+expand/collapse kept for now as a deliberate departure).

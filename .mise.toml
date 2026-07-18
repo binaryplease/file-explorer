@@ -5,12 +5,6 @@ bun = "1"
 PORT = "3000"
 NODE_ENV = "development"
 
-# The zink instance this explorer publishes to (ADR: publish-to-zink feature).
-# `POST <ZINK_BASE_URL>/api/upload` with the `x-deploy-key` header. Leave the
-# key empty against an open-mode zink; set it when the operator gated uploads.
-ZINK_BASE_URL = "http://localhost:3000"
-# ZINK_DEPLOY_KEY = ""
-
 # Directory served by the explorer. Defaults to the home directory of the user
 # running the server; a positional CLI argument to the server wins over this.
 # EXPLORER_ROOT = "/path/to/serve"

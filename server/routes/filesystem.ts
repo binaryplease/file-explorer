@@ -105,8 +105,8 @@ export const filesystemRoutes = new Elysia().get(
       return status(statusCode, { error: message })
     }
     // Bun.file streams the bytes and infers the content type from the
-    // extension, so HTML files render in place — the explorer's "open" is a
-    // same-tab navigation to this URL (browser back returns to the tree).
+    // extension. The explorer's "open" is a same-tab navigation to this URL
+    // (browser back returns to the tree).
     return Bun.file(result.absolutePath)
   },
   {
@@ -116,9 +116,9 @@ export const filesystemRoutes = new Elysia().get(
       summary: 'Serve a file',
       description:
         'Streams one file of the served filesystem, relative to the served root, with a ' +
-        'content type inferred from the extension (HTML renders in the browser). The client ' +
-        'opens files in place by navigating to this URL in the same tab. Paths that lexically ' +
-        'escape the root are rejected with 400.',
+        'content type inferred from the extension. The client opens files in place by ' +
+        'navigating to this URL in the same tab. Paths that lexically escape the root are ' +
+        'rejected with 400.',
     },
   },
 )

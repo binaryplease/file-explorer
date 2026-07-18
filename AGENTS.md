@@ -1,9 +1,7 @@
 # binp-file-explorer — AGENTS.md
 
-A **high-speed Bun file explorer**: browse a served filesystem fast, open HTML
-files in place (same-tab navigation, natural back-button history), and **publish
-an HTML file or folder to [zink](https://github.com/binaryplease/binp-zink)** for
-an instant share link.
+A **high-speed Bun file explorer**: browse a served filesystem fast and open
+files in place (same-tab navigation, natural back-button history).
 
 Stack follows **ADR-0003** (default application tech stack). This file is the
 authoritative "how things are done here" reference — read it before building.
@@ -25,12 +23,12 @@ authoritative "how things are done here" reference — read it before building.
 ## Derivation (ADR-0006)
 
 Scaffolded **fresh per ADR-0003**, taking the build/dev-env/deploy conventions
-and the ADR-0020 discovery skeleton from **`binp-zink`** (the freshest
-ADR-0003-compliant sibling). Strategy: **Hybrid** — infra/dev-env conventions
-adopted; zink's *product* surface (auth, forms, domains, emails, admin) is **not
-copied**. `binp-zink` is referenced as the *publish target*, not as a code
-source. If you later need a well-tested piece from it (e.g. static-file serving,
-thumbnails), extract-and-transplant it deliberately and note it in the task file.
+and the ADR-0020 discovery skeleton from the freshest ADR-0003-compliant
+sibling. Strategy: **Hybrid** — infra/dev-env conventions adopted; the
+sibling's *product* surface (auth, forms, domains, emails, admin) is **not
+copied**. If you later need a well-tested piece from it (e.g. static-file
+serving, thumbnails), extract-and-transplant it deliberately and note it in the
+task file.
 
 ## Dev commands
 
@@ -64,20 +62,6 @@ In dev, Vite proxies `/api/*` to Elysia on :3000. In production Elysia serves
 - **ADR-0025 / ADR-0031** — never hide UI controls (disable with an explanation);
   affordances live adjacent to what they change.
 
-## Publishing to zink
-
-The publish-to-zink feature is a **client** of a zink instance, configured by env
-(`ZINK_BASE_URL`, optional `ZINK_DEPLOY_KEY`; see `server/config.ts`):
-
-- `POST <ZINK_BASE_URL>/api/upload` — multipart, field `file`. Send one `file`
-  part for a single `.html`/`.zip`, or repeat the `file` part (one per file, each
-  file's relative path in its multipart filename) to publish a whole folder.
-- Gate with the `x-deploy-key: <ZINK_DEPLOY_KEY>` header when the target zink runs
-  in gated mode (omit in open mode).
-- The response carries the share slug and a one-time `editToken` (needed to
-  re-upload/replace later). Persist the token if the explorer offers "update in
-  place". Introspect the live contract at `<ZINK_BASE_URL>/api/openapi.json`.
-
 ## Structure
 
 ```
@@ -100,4 +84,4 @@ binp-file-explorer/
 Not yet wired. When the app is real, follow **ADR-0002** (Deploy Coordinator:
 Nix flake package + NixOS module or GHCR Docker image, Caddy vhost) and
 **ADR-0008** (GHCR package name = repo name, no suffix). Add `flake.nix`,
-`.github/workflows/`, and a `Caddyfile` then — a lean copy from `binp-zink`.
+`.github/workflows/`, and a `Caddyfile` then.

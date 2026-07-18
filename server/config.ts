@@ -13,11 +13,6 @@ const EnvironmentSchema = z.object({
   // user running the server; set it (or pass a positional CLI argument) to open
   // the explorer at a specific location instead.
   EXPLORER_ROOT: z.string().min(1).default(homedir()),
-  // The zink instance this explorer publishes to (publish-to-zink feature).
-  ZINK_BASE_URL: z.url().default('http://localhost:3000'),
-  // Operator's `ZINK_DEPLOY_KEY`, sent as `x-deploy-key` when the target zink
-  // gates uploads. Null in open mode.
-  ZINK_DEPLOY_KEY: z.string().min(1).nullable().default(null),
 })
 
 export type Config = z.infer<typeof EnvironmentSchema>
@@ -29,8 +24,6 @@ export const config: Config = EnvironmentSchema.parse({
   // First positional argument wins (`bun server/index.ts ~/projects`), then the
   // environment, then the schema default (home directory).
   EXPLORER_ROOT: process.argv[2] || process.env.EXPLORER_ROOT || undefined,
-  ZINK_BASE_URL: process.env.ZINK_BASE_URL,
-  ZINK_DEPLOY_KEY: process.env.ZINK_DEPLOY_KEY || null,
 })
 
 export const isDev = config.NODE_ENV !== 'production'

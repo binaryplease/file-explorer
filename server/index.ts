@@ -37,7 +37,7 @@ const app = new Elysia()
           title: 'File Explorer API',
           version: SERVICE_VERSION,
           description:
-            'A high-speed Bun file explorer. Browse a served filesystem and publish any HTML file or folder to zink (= ZIP + LINK) for an instant share link.\n\n' +
+            'A high-speed Bun file explorer. Browse a served filesystem.\n\n' +
             'Discovery entrypoint: `GET /api` (ADR-0020).',
         },
         tags: [
