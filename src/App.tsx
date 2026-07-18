@@ -14,6 +14,7 @@ import { TitleBar } from './components/TitleBar'
 import { TreeView } from './components/TreeView'
 import { CommandBar } from './components/CommandBar'
 import { useTheme } from './lib/theme'
+import { useViewSettings } from './lib/viewSettings'
 
 function readFocusPathFromUrl(): string {
   return new URLSearchParams(window.location.search).get('path') ?? ''
@@ -49,9 +50,8 @@ export function App() {
   const [openPaths, setOpenPaths] = useState<ReadonlySet<string>>(new Set())
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [pattern, setPattern] = useState('')
-  const [showSizes, setShowSizes] = useState(true)
-  const [showHidden, setShowHidden] = useState(false)
-  const [showGitignored, setShowGitignored] = useState(false)
+  const { viewSettings, setViewSettings } = useViewSettings()
+  const { showSizes, showHidden, showGitignored } = viewSettings
   const [searchResult, setSearchResult] = useState<SearchSubtreeResult | null>(null)
   const [listingError, setListingError] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -264,15 +264,41 @@ export function App() {
     else window.history.back()
   }, [pattern])
 
+  const toggleSizes = useCallback(() => {
+    setViewSettings((previousViewSettings) => ({
+      ...previousViewSettings,
+      showSizes: !previousViewSettings.showSizes,
+    }))
+  }, [setViewSettings])
+
+  const toggleHidden = useCallback(() => {
+    setViewSettings((previousViewSettings) => ({
+      ...previousViewSettings,
+      showHidden: !previousViewSettings.showHidden,
+    }))
+  }, [setViewSettings])
+
+  const toggleGitignored = useCallback(() => {
+    setViewSettings((previousViewSettings) => ({
+      ...previousViewSettings,
+      showGitignored: !previousViewSettings.showGitignored,
+    }))
+  }, [setViewSettings])
+
   // Reveal-everything toggle: flip both the hidden and gitignored views in a
   // single stroke. If either is currently off we turn both on; only once both
   // are on does it clear both back off — so the shortcut always lands on a
   // clean "show everything" / "show nothing extra" state.
   const toggleHiddenAndGitignored = useCallback(() => {
-    const shouldShowAll = !(showHidden && showGitignored)
-    setShowHidden(shouldShowAll)
-    setShowGitignored(shouldShowAll)
-  }, [showHidden, showGitignored])
+    setViewSettings((previousViewSettings) => {
+      const shouldShowAll = !(previousViewSettings.showHidden && previousViewSettings.showGitignored)
+      return {
+        ...previousViewSettings,
+        showHidden: shouldShowAll,
+        showGitignored: shouldShowAll,
+      }
+    })
+  }, [setViewSettings])
 
   useEffect(() => {
     function handleKeyDown(keyboardEvent: KeyboardEvent) {
@@ -313,6 +339,12 @@ export function App() {
       if (keyboardEvent.altKey && keyboardEvent.code === 'KeyA') {
         keyboardEvent.preventDefault()
         toggleHiddenAndGitignored()
+      } else if (keyboardEvent.altKey && keyboardEvent.code === 'KeyS') {
+        // Alt-s flips the size column/bars on and off. `code === 'KeyS'` rather
+        // than `key`, because Alt rewrites `key` to a composed character on some
+        // keyboard layouts (e.g. 'ß' / 'Í') while the physical code is stable.
+        keyboardEvent.preventDefault()
+        toggleSizes()
       } else if (key === 'ArrowDown') {
         keyboardEvent.preventDefault()
         moveSelection(1, 'cycle')
@@ -358,6 +390,7 @@ export function App() {
     walkMatches,
     openSelection,
     goBack,
+    toggleSizes,
     toggleHiddenAndGitignored,
     focusParentDirectory,
     pattern,
@@ -390,11 +423,9 @@ export function App() {
           onToggleDirectory={toggleDirectory}
           onFocusDirectory={focusDirectory}
           onOpenFile={openFileInPlace}
-          onToggleSizes={() => setShowSizes((previousShowSizes) => !previousShowSizes)}
-          onToggleHidden={() => setShowHidden((previousShowHidden) => !previousShowHidden)}
-          onToggleGitignored={() =>
-            setShowGitignored((previousShowGitignored) => !previousShowGitignored)
-          }
+          onToggleSizes={toggleSizes}
+          onToggleHidden={toggleHidden}
+          onToggleGitignored={toggleGitignored}
         />
         <CommandBar
           inputRef={searchInputRef}
