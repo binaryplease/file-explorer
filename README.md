@@ -7,8 +7,10 @@ fast.
 
 - **Incredibly fast.** Bun-native filesystem serving; directory listings and
   file streaming that feel instant even on large trees.
-- **Browse and open in place.** Opening a file navigates in the same tab
-  so the browser back button walks the history naturally.
+- **Browse and preview in place.** File contents appear in a bounded preview
+  panel without leaving the tree; the browser back button walks the navigation
+  history naturally. Everything beyond core navigation is async — the tree
+  always paints first.
 
 ## Stack
 

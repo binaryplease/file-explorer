@@ -1,7 +1,7 @@
 # binp-file-explorer — AGENTS.md
 
-A **high-speed Bun file explorer**: browse a served filesystem fast and open
-files in place (same-tab navigation, natural back-button history).
+A **high-speed Bun file explorer**: browse a served filesystem fast,
+broot-style — lazy tree navigation, ranked fuzzy search, in-place previews.
 
 Stack follows **ADR-0003** (default application tech stack). This file is the
 authoritative "how things are done here" reference — read it before building.
@@ -45,6 +45,13 @@ copied**. If you later need a well-tested piece from it (e.g. static-file
 serving, thumbnails), extract-and-transplant it deliberately and note it in the
 task file.
 
+**`binp-fex` is an ideas reference only.** The diverged sibling explorer names
+features worth building (git status, previews, directory sizes, palette,
+CLI daemon) — but its code is never transplanted. We engineer our own
+implementations, optimized for performance and bound by the responsiveness
+principle below. Rationale and per-operation comparison:
+`.nightshift/research/2026-07-18-file-explorer-vs-fex-comparison.md`.
+
 ## Dev commands
 
 Via mise (`.mise.toml`):
@@ -76,6 +83,17 @@ In dev, Vite proxies `/api/*` to Elysia on :3000. In production Elysia serves
   declares a default.
 - **ADR-0025 / ADR-0031** — never hide UI controls (disable with an explanation);
   affordances live adjacent to what they change.
+
+## Responsiveness principle (binding)
+
+The core navigation mechanism — the broot loop of list / fuzzy-search / move —
+always comes first. **Every feature beyond it must be async and non-blocking**:
+a listing or search response never waits on enrichment work (git status,
+previews, directory sizes, thumbnails, …). Enrichment arrives after the tree
+has painted, is cancellable when the user navigates away, and degrades to
+absent rather than delaying the core. If a feature cannot be built this way,
+it does not ship. Perf budgets live in `.nightshift/backlog.md` (performance
+policy).
 
 ## Structure
 
