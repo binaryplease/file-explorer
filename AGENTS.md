@@ -6,6 +6,21 @@ files in place (same-tab navigation, natural back-button history).
 Stack follows **ADR-0003** (default application tech stack). This file is the
 authoritative "how things are done here" reference — read it before building.
 
+## Project context — read `.nightshift/` first
+
+Before starting any non-trivial task, consult `.nightshift/` — the local dev
+notebook (gitignored) that is the single source of truth for plans, decisions,
+and open questions. Look here on your own; you should not need to be told.
+
+- `backlog.md` — current intent: next steps, ideas, open questions.
+- `log.md` — reverse-chronological run journal: what works now, what's next.
+- `research/` — dated deep-dives backing backlog decisions
+  (`YYYY-MM-DD-<topic>.md`).
+
+Record session outcomes back here — append to `log.md`, update `backlog.md` — so
+the next agent inherits the context. See `.nightshift/README.md` for the full
+layout.
+
 ## Tech stack
 
 | Layer | Choice | Notes |
@@ -76,7 +91,7 @@ binp-file-explorer/
     index.ts          # Elysia entry: ADR-0020 discovery + health, listen
     config.ts         # env parsing (Zod)
     routes/           # route handlers + *.schema.ts (Zod)
-  task/               # ADR-0005 tracking files
+  .nightshift/        # local dev notebook (gitignored): backlog, log, research/
 ```
 
 ## Deployment
