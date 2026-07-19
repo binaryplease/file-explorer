@@ -1,6 +1,6 @@
-import { statSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import type { Dirent } from 'node:fs'
-import { lstat, readdir, stat } from 'node:fs/promises'
+import { lstat, readdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { DirectoryEntry, DirectoryListing } from '../../shared/filesystem.schema'
 import type { SearchNode, SearchSubtreeResult } from '../../shared/search.schema'
@@ -58,8 +58,19 @@ const SEARCH_HARD_TIME_LIMIT_MILLISECONDS = 3000
 const SEARCH_DEPTH_DOPING_BASE = 10_000
 const SEARCH_DIRECT_MATCH_BONUS = 10
 
+// True when `absolutePath` is `containerAbsolutePath` itself or sits beneath
+// it. Compares path segments, so a sibling (`../elsewhere`) is rejected while a
+// legitimately-named child (`..config`) is not.
+function isPathWithin(containerAbsolutePath: string, absolutePath: string): boolean {
+  const pathFromContainer = relative(containerAbsolutePath, absolutePath)
+  if (pathFromContainer === '') return true
+  if (isAbsolute(pathFromContainer)) return false
+  return pathFromContainer !== '..' && !pathFromContainer.startsWith('../')
+}
+
 // Factory per ADR-0007. Confines every listing to `rootAbsolutePath`; a request
-// that lexically escapes the root is rejected, never resolved.
+// that escapes the root — lexically, or through a symlink pointing outside it —
+// is rejected, never resolved.
 export function createFilesystemService(options: { rootAbsolutePath: string }) {
   const rootAbsolutePath = resolve(options.rootAbsolutePath)
 
@@ -68,11 +79,32 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
     throw new Error(`explorer root is not a directory: ${rootAbsolutePath}`)
   }
 
+  // The root may itself be reached through a symlink (`/tmp`, a home directory
+  // on a mounted volume). Real paths are only comparable against another real
+  // path, so resolve the root once here rather than on every request.
+  const rootRealPath = realpathSync(rootAbsolutePath)
+
   function resolveWithinRoot(requestedRelativePath: string): string | null {
     const absolutePath = resolve(rootAbsolutePath, requestedRelativePath)
-    const pathFromRoot = relative(rootAbsolutePath, absolutePath)
-    if (pathFromRoot.startsWith('..') || isAbsolute(pathFromRoot)) return null
+    if (!isPathWithin(rootAbsolutePath, absolutePath)) return null
     return absolutePath
+  }
+
+  // The lexical check above cannot see through symlinks: a link *inside* the
+  // root pointing *outside* it resolves to a path that still looks contained.
+  // Re-check containment against the root's real path for paths that exist.
+  //
+  // Callers run this only after their own stat/readdir has succeeded, so a
+  // non-existent path is reported as not-found by that check and never reaches
+  // here — which also keeps the extra syscall off the miss path.
+  async function isRealPathWithinRoot(absolutePath: string): Promise<boolean> {
+    try {
+      return isPathWithin(rootRealPath, await realpath(absolutePath))
+    } catch {
+      // Vanished between the caller's existence check and this call. Deny:
+      // confinement must not depend on winning a race.
+      return false
+    }
   }
 
   // Collects the `.gitignore` files that govern `directoryAbsolutePath`, from
@@ -177,6 +209,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       if (errorCode === 'ENOTDIR') return { ok: false, reason: 'not-a-directory' }
       return { ok: false, reason: 'not-readable' }
     }
+    if (!(await isRealPathWithinRoot(absolutePath))) return { ok: false, reason: 'outside-root' }
 
     const { ignoreChain, isWithinIgnoredDirectory } = await buildIgnoreContext(absolutePath)
     const entries = await Promise.all(
@@ -213,6 +246,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       if (errorCode === 'ENOENT' || errorCode === 'ENOTDIR') return { ok: false, reason: 'not-found' }
       return { ok: false, reason: 'not-readable' }
     }
+    if (!(await isRealPathWithinRoot(absolutePath))) return { ok: false, reason: 'outside-root' }
     return { ok: true, absolutePath }
   }
 
@@ -330,6 +364,8 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       if (errorCode === 'ENOTDIR') return { ok: false, reason: 'not-a-directory' }
       return { ok: false, reason: 'not-readable' }
     }
+    if (!(await isRealPathWithinRoot(searchRootAbsolutePath)))
+      return { ok: false, reason: 'outside-root' }
 
     const startedAt = performance.now()
     const goodEnoughDeadline = startedAt + SEARCH_TIME_BUDGET_MILLISECONDS

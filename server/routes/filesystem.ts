@@ -57,7 +57,8 @@ export const filesystemRoutes = new Elysia().get(
       description:
         'Lists one directory of the served filesystem, relative to the served root ' +
         '(`EXPLORER_ROOT`, defaulting to the home directory of the user running the server). ' +
-        'Paths that lexically escape the root are rejected with 400.',
+        'Paths that escape the root — lexically, or through a symlink pointing outside it — ' +
+        'are rejected with 400.',
     },
   },
 ).get(
@@ -120,7 +121,8 @@ export const filesystemRoutes = new Elysia().get(
       description:
         'Streams one file of the served filesystem, relative to the served root, with a ' +
         'content type inferred from the extension, for download or preview. Paths that ' +
-        'lexically escape the root are rejected with 400.',
+        'escape the root — lexically, or through a symlink pointing outside it — are ' +
+        'rejected with 400.',
     },
   },
 ).post(
@@ -154,8 +156,8 @@ export const filesystemRoutes = new Elysia().get(
         'Opens one file of the served filesystem with the operating system default ' +
         'application on the machine hosting the explorer (the desktop double-click gesture). ' +
         'The explorer is a local-only, loopback tool, so that machine is the user running it. ' +
-        'Paths that lexically escape the root are rejected with 400; a launcher that cannot be ' +
-        'spawned yields 500.',
+        'Paths that escape the root — lexically, or through a symlink pointing outside it — ' +
+        'are rejected with 400; a launcher that cannot be spawned yields 500.',
     },
   },
 )
