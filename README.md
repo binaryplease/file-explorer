@@ -36,12 +36,30 @@ default. To open it at a specific location instead, set `EXPLORER_ROOT` (see
 `.mise.toml`) or pass a positional argument: `bun server/index.ts ~/projects`.
 
 By default the root is the tree's **starting anchor**, not a boundary: browsing
-can follow a symlink or an absolute path out of it. This is a **local-only**
-tool — the server binds to loopback, runs with the privileges of the user who
-started it, and is not meant to be hosted. Set `EXPLORER_CONFINE=true` to make
-the root a real boundary instead: paths that escape it, lexically or through a
-symlink, are then refused, and escaping entries are listed with their target's
-metadata withheld.
+can follow a symlink or an absolute path out of it. Set `EXPLORER_CONFINE=true`
+to make the root a real boundary instead: paths that escape it, lexically or
+through a symlink, are then refused, and escaping entries are listed with their
+target's metadata withheld.
+
+## Security model
+
+This is a **local-only** tool. It binds to loopback, ships no CORS headers, and
+runs with the filesystem privileges of the user who started it — so the browser
+is the threat to design against, not the network.
+
+The control that does the work is **Host-header validation**: the server answers
+only for loopback names. Without it, DNS rebinding (an attacker's domain pointed
+at 127.0.0.1) makes any page the user visits same-origin with the explorer, and
+the same-origin policy stops protecting the responses. `EXPLORER_ALLOWED_HOSTS`
+(comma-separated) is the deliberate opt-out for a `HOST=0.0.0.0`-behind-Caddy
+deployment; anything not loopback and not named there gets a 421.
+
+`EXPLORER_CONFINE` is **not** that control, which is why it defaults to off:
+`EXPLORER_ROOT` defaults to the user's home directory, so a confined server
+still exposes `~/.ssh` and `~/.gnupg` to anything that gets past the origin
+check. Confinement is for a genuinely hosted surface serving a subtree that is
+not the user's own — turn it on together with an `EXPLORER_ROOT` worth
+confining to.
 
 ## Status
 

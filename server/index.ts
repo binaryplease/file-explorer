@@ -2,7 +2,8 @@ import { join, resolve } from 'node:path'
 import { Elysia } from 'elysia'
 import { openapi } from '@elysiajs/openapi'
 import { z } from 'zod/v4'
-import { config, isDev } from './config'
+import { additionalAllowedHosts, config, isDev } from './config'
+import { createTrustedHostGuard } from './services/trusted-host'
 import { DiscoveryDocSchema, HealthResponseSchema } from './routes/discovery.schema'
 import { createFilesystemRoutes } from './routes/filesystem'
 import { createPreviewRoutes } from './routes/preview'
@@ -23,7 +24,22 @@ function publicOrigin(request: Request): string {
   return `${proto}://${host}`
 }
 
+const trustedHostGuard = createTrustedHostGuard({ additionalAllowedHosts })
+
 const app = new Elysia()
+  // Answer only for the names this server is actually reachable under. Runs
+  // before routing, so it covers every endpoint including the static client —
+  // a rebound origin must not get a single byte. See services/trusted-host.ts
+  // for why this, and not path confinement, is the control that matters here.
+  .onRequest(({ request, set }) => {
+    if (trustedHostGuard.isTrusted(request.headers.get('host'))) return
+    set.status = 421
+    return {
+      error:
+        'refusing to answer for this Host. binp-file-explorer serves loopback origins only; ' +
+        'set EXPLORER_ALLOWED_HOSTS to serve another name deliberately.',
+    }
+  })
   // ADR-0020: human docs at /api/docs, machine spec at /api/openapi.json.
   .use(
     openapi({

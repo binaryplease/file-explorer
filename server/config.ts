@@ -23,6 +23,14 @@ const EnvironmentSchema = z.object({
     .stringbool()
     .default(false)
     .describe('Refuse paths that escape EXPLORER_ROOT, lexically or through a symlink.'),
+  // Extra Host header values to answer for, beyond loopback. Empty by default:
+  // the explorer is loopback-only, and answering for any other name is what
+  // makes DNS rebinding work. Only the documented `HOST=0.0.0.0`-behind-Caddy
+  // deployment needs this, and that operator must name their own domain.
+  EXPLORER_ALLOWED_HOSTS: z
+    .string()
+    .default('')
+    .describe('Comma-separated extra Host header values to serve, beyond loopback names.'),
 })
 
 export type Config = z.infer<typeof EnvironmentSchema>
@@ -35,6 +43,12 @@ export const config: Config = EnvironmentSchema.parse({
   // environment, then the schema default (home directory).
   EXPLORER_ROOT: process.argv[2] || process.env.EXPLORER_ROOT || undefined,
   EXPLORER_CONFINE: process.env.EXPLORER_CONFINE || undefined,
+  EXPLORER_ALLOWED_HOSTS: process.env.EXPLORER_ALLOWED_HOSTS || undefined,
 })
+
+// Parsed once here rather than re-split per request.
+export const additionalAllowedHosts = config.EXPLORER_ALLOWED_HOSTS.split(',')
+  .map((allowedHost) => allowedHost.trim())
+  .filter((allowedHost) => allowedHost !== '')
 
 export const isDev = config.NODE_ENV !== 'production'

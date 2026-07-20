@@ -11,8 +11,15 @@ NODE_ENV = "development"
 
 # Whether the served root is a real boundary or just the tree's starting anchor.
 # Off by default: this is a local-only loopback tool running with the user's own
-# filesystem privileges. Set true for any hosted surface.
+# filesystem privileges, and the default root is the home directory, so
+# confining to it protects nothing that matters. Turn it on for a genuinely
+# hosted surface, together with an EXPLORER_ROOT worth confining to.
 # EXPLORER_CONFINE = "true"
+
+# Extra Host header values to answer for, beyond loopback names. Empty means
+# loopback only, which is what closes DNS rebinding — see the security model in
+# README.md. Only needed for a HOST=0.0.0.0-behind-Caddy deployment.
+# EXPLORER_ALLOWED_HOSTS = "files.example.com"
 
 [tasks.dev]
 description = "Resolve free ports, then start dev servers (Elysia + Vite)"
