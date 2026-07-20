@@ -4,6 +4,8 @@ import { openapi } from '@elysiajs/openapi'
 import { z } from 'zod'
 import { additionalAllowedHosts, config, isDev } from './config'
 import { createTrustedHostGuard } from './services/trusted-host'
+import { createPublicOriginResolver } from './services/public-origin'
+import { resolveClientAssetPath } from './services/client-asset-path'
 import { createBindExposurePolicy } from './services/bind-exposure'
 import { DiscoveryDocSchema, HealthResponseSchema } from './routes/discovery.schema'
 import { createFilesystemRoutes } from './routes/filesystem'
@@ -13,19 +15,11 @@ import { filesystemService, previewService } from './services/instances'
 const SERVICE_NAME = 'binp-file-explorer'
 const SERVICE_VERSION = '0.1.0'
 
-// Per ADR-0020, discovery URLs must be absolute. Honour the forwarded-* headers
-// Caddy/Vite set so the URLs match the public origin; otherwise fall back to the
-// request's own Host.
-function publicOrigin(request: Request): string {
-  const url = new URL(request.url)
-  const forwardedProto = request.headers.get('x-forwarded-proto')
-  const forwardedHost = request.headers.get('x-forwarded-host')
-  const proto = forwardedProto?.split(',')[0]?.trim() || url.protocol.replace(':', '')
-  const host = forwardedHost?.split(',')[0]?.trim() || request.headers.get('host') || url.host
-  return `${proto}://${host}`
-}
-
 const trustedHostGuard = createTrustedHostGuard({ additionalAllowedHosts })
+// Per ADR-0020 the discovery URLs are absolute, so they name an origin. The
+// forwarded-* headers only get a say where the operator acknowledged a proxy —
+// see services/public-origin.ts.
+const publicOriginResolver = createPublicOriginResolver({ additionalAllowedHosts })
 
 const app = new Elysia()
   // Answer only for the names this server is actually reachable under. Runs
@@ -71,7 +65,7 @@ const app = new Elysia()
   .get(
     '/api',
     ({ request }) => {
-      const origin = publicOrigin(request)
+      const origin = publicOriginResolver.forRequest(request)
       return {
         name: SERVICE_NAME,
         version: SERVICE_VERSION,
@@ -107,12 +101,11 @@ const app = new Elysia()
 if (!isDev) {
   const clientDirectory = resolve(import.meta.dir, '../client')
   app.get('/*', async ({ request }) => {
-    const requestedPathname = decodeURIComponent(new URL(request.url).pathname)
-    const candidatePath = resolve(clientDirectory, `.${requestedPathname}`)
-    const isInsideClientDirectory =
-      candidatePath === clientDirectory || candidatePath.startsWith(`${clientDirectory}/`)
-    if (isInsideClientDirectory) {
-      const assetFile = Bun.file(candidatePath)
+    // null = malformed percent-encoding or a path escaping dist/client; both
+    // take the fallback rather than throwing a 500 (services/client-asset-path).
+    const assetPath = resolveClientAssetPath({ requestUrl: request.url, clientDirectory })
+    if (assetPath !== null) {
+      const assetFile = Bun.file(assetPath)
       if (await assetFile.exists()) return assetFile
     }
     // SPA fallback: any non-asset path renders the explorer shell.
