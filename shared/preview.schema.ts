@@ -12,6 +12,10 @@ export const PreviewKindSchema = z.enum([
   'empty',
   'too-large',
   'directory',
+  // A symlink leaving the served root. Not an error: the entry exists and the
+  // panel can describe it honestly ("out of bounds") without reading anything
+  // through it — the same contract as `empty` or `binary`.
+  'blocked',
   'unsupported',
 ])
 export type PreviewKind = z.infer<typeof PreviewKindSchema>

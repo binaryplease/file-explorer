@@ -194,15 +194,35 @@ describe('previewEntry', () => {
     expect(result.preview.lines.length).toBe(600)
   })
 
-  test('refuses a path that escapes the root through a symlink', async () => {
+  // A blocked entry is described, not errored: the panel always has something
+  // honest to render, the same contract as `empty` or `binary`.
+  test('marks a path that escapes the root through a symlink as blocked', async () => {
     const { rootPath, previewService } = await createScratchRoot()
     const outsidePath = await mkdtemp(join(tmpdir(), 'binp-preview-outside-'))
     await writeFile(join(outsidePath, 'secret.txt'), 'secret\n')
     await symlink(outsidePath, join(rootPath, 'escape'))
     const result = await previewService.previewEntry('escape/secret.txt')
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.reason).toBe('symlink-escapes-root')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.preview.kind).toBe('blocked')
+    // Describing it must not disclose anything read through the link.
+    expect(result.preview.lines).toEqual([])
+    expect(result.preview.sizeBytes).toBeNull()
+    expect(result.preview.directory).toBeNull()
+  })
+
+  // The symlink itself, not a path through it. Its target is a directory, which
+  // the marker must not reveal by summarising it.
+  test('marks an escaping symlink to a directory as blocked, not as a directory', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    const outsidePath = await mkdtemp(join(tmpdir(), 'binp-preview-outside-'))
+    await writeFile(join(outsidePath, 'secret.txt'), 'secret\n')
+    await symlink(outsidePath, join(rootPath, 'escape'))
+    const result = await previewService.previewEntry('escape')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.preview.kind).toBe('blocked')
+    expect(result.preview.directory).toBeNull()
   })
 
   test('reports a missing entry as not-found', async () => {

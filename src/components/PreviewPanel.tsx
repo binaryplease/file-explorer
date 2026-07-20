@@ -6,9 +6,11 @@ import {
   IconFileText,
   IconFileUnknown,
   IconFolder,
+  IconLock,
   IconPhoto,
 } from '@tabler/icons-react'
 import type { Preview, PreviewKind } from '../../shared/preview.schema'
+import { CONFINEMENT_BADGE_LABEL, confinementRefusalMessage } from '../lib/confinement'
 import { formatBytes } from '../lib/format'
 
 // One descriptor per preview kind (ADR-0026): the icon and the label the header
@@ -20,6 +22,9 @@ const PREVIEW_KIND_DESCRIPTORS: Record<PreviewKind, { label: string; Icon: typeo
   empty: { label: 'empty', Icon: IconFileOff },
   'too-large': { label: 'too large', Icon: IconAlertTriangle },
   directory: { label: 'directory', Icon: IconFolder },
+  // Same icon and words as the tree row's badge: one vocabulary for the state,
+  // so the panel and the row are recognisably describing the same thing.
+  blocked: { label: CONFINEMENT_BADGE_LABEL, Icon: IconLock },
   unsupported: { label: 'no preview', Icon: IconFileUnknown },
 }
 
@@ -27,11 +32,16 @@ const PREVIEW_KIND_DESCRIPTORS: Record<PreviewKind, { label: string; Icon: typeo
 // panel — binary bytes, an oversized image, an empty or unpreviewable entry.
 function PreviewMarker({ preview }: { preview: Preview }) {
   const { label, Icon } = PREVIEW_KIND_DESCRIPTORS[preview.kind]
+  // The refusal wording lives on the client (one source, shared with the tree
+  // row), so the server sends the `blocked` marker bare and the explanation is
+  // filled in here rather than duplicated across the seam.
+  const note =
+    preview.kind === 'blocked' ? confinementRefusalMessage(preview.name) : preview.note
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
       <Icon size={28} stroke={1.4} className="text-faint" />
       <span className="text-xs text-dim">{label}</span>
-      {preview.note !== null && <span className="text-[11px] text-faint">{preview.note}</span>}
+      {note !== null && <span className="text-[11px] text-faint">{note}</span>}
     </div>
   )
 }

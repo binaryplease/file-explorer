@@ -8,7 +8,7 @@ import {
   fetchSearchResult,
   openFileWithDefaultApplication,
 } from './lib/api'
-import { confinementRefusalMessage, isConfinementBlocked } from './lib/confinement'
+import { isConfinementBlocked } from './lib/confinement'
 import {
   buildSearchRows,
   buildTreeRows,
@@ -67,7 +67,10 @@ export function App() {
   const { viewSettings, setViewSettings } = useViewSettings()
   const { showSizes, showHidden, showGitignored, showPreview } = viewSettings
   const [searchResult, setSearchResult] = useState<SearchSubtreeResult | null>(null)
+  // Listing-scoped: the tree could not be loaded. Kept strictly separate from
+  // row-scoped refusals, which the rows render themselves.
   const [listingError, setListingError] = useState<string | null>(null)
+  const [refusedPath, setRefusedPath] = useState<string | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
@@ -303,27 +306,20 @@ export function App() {
   )
 
   // Acting on a symlink that leaves the served root is refused here, before any
-  // request: the server would refuse it too (403), but a blocked row must
-  // explain itself the instant it is acted on, not after a round trip. Returns
-  // true when it handled the interaction by refusing it.
+  // request (the server would refuse it too, with a 403). The reason itself is
+  // not stored: the row renders it from `escapesRoot` whenever it is selected,
+  // so there is no panel-scoped message to place, clear, or let go stale. All
+  // this records is *which* row was refused, so its reason line can acknowledge
+  // the attempt rather than appearing to ignore it.
   const refuseIfBlocked = useCallback(
     (entryPath: string): boolean => {
       const row = entryRows.find((entryRow) => entryRow.path === entryPath)
       if (row === undefined || !isConfinementBlocked(row.entry)) return false
-      setListingError(confinementRefusalMessage(row.entry.name))
+      setRefusedPath(entryPath)
       return true
     },
     [entryRows],
   )
-
-  // A refusal names the row it was raised for, so it must not outlive that
-  // row's selection — a notice about `escaping-directory` still on screen while
-  // `escaping-file` is selected reads as a statement about the wrong entry.
-  // Listing failures are unaffected in practice: a listing that failed has no
-  // rows to move between.
-  useEffect(() => {
-    setListingError(null)
-  }, [selectedPath])
 
   // "Open" hands the file to the OS default application on the host machine
   // (the desktop double-click gesture); a launcher failure surfaces in the same
@@ -586,6 +582,7 @@ export function App() {
             showGitignored={showGitignored}
             showPreview={showPreview}
             selectedPath={selectedPath}
+            refusedPath={refusedPath}
             listingError={listingError}
             onSelect={setSelectedPath}
             onFocusParent={focusParentDirectory}

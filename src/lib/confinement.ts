@@ -9,6 +9,12 @@ import type { DirectoryEntry } from '../../shared/filesystem.schema'
 // Short enough to ride on a tree row without pushing the name out of view.
 export const CONFINEMENT_BADGE_LABEL = 'outside root'
 
+// The row-adjacent register: one line at a typical tree width, so selecting a
+// blocked row costs a single line of reflow. The full sentence below is for
+// surfaces with room to spare — the preview panel and the tooltip.
+export const CONFINEMENT_SHORT_REASON =
+  'not allowed — this symlink points outside the served root'
+
 export function isConfinementBlocked(entry: DirectoryEntry): boolean {
   return entry.escapesRoot
 }

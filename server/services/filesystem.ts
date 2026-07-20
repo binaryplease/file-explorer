@@ -1,5 +1,5 @@
 import { realpathSync, statSync } from 'node:fs'
-import type { Dirent } from 'node:fs'
+import type { Dirent, Stats } from 'node:fs'
 import { lstat, readdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { DirectoryEntry, DirectoryListing } from '../../shared/filesystem.schema'
@@ -275,16 +275,21 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
   async function resolveFile(requestedRelativePath: string): Promise<ResolveFileResult> {
     const absolutePath = resolveWithinRoot(requestedRelativePath)
     if (absolutePath === null) return { ok: false, reason: 'outside-root' }
+    let entryInfo: Stats
     try {
-      const fileInfo = await stat(absolutePath)
-      if (!fileInfo.isFile()) return { ok: false, reason: 'not-a-file' }
+      entryInfo = await stat(absolutePath)
     } catch (statError) {
       const errorCode = (statError as NodeJS.ErrnoException).code
       if (errorCode === 'ENOENT' || errorCode === 'ENOTDIR') return { ok: false, reason: 'not-found' }
       return { ok: false, reason: 'not-readable' }
     }
+    // Confinement outranks the kind verdict, and must be answered before it:
+    // replying `not-a-file` for an escaping symlink discloses that its target is
+    // a directory — precisely the fact the listing withholds. Both kinds of
+    // escaping link now give the same answer.
     if (!(await isRealPathWithinRoot(absolutePath)))
       return { ok: false, reason: 'symlink-escapes-root' }
+    if (!entryInfo.isFile()) return { ok: false, reason: 'not-a-file' }
     return { ok: true, absolutePath }
   }
 

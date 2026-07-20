@@ -46,6 +46,19 @@ describe('symlink-escape confinement', () => {
     expect(result).toEqual({ ok: false, reason: 'symlink-escapes-root' })
   })
 
+  // The failure reason is itself a disclosure channel: answering `not-a-file`
+  // here would confirm that the target is a directory, which the listing goes
+  // out of its way to withhold. Both kinds of escaping link answer the same.
+  test('refuses an escaping symlink to a directory without revealing it is one', async () => {
+    const result = await filesystemService.resolveFile('escaping-directory')
+    expect(result).toEqual({ ok: false, reason: 'symlink-escapes-root' })
+  })
+
+  test('still reports a genuine directory inside the root as not-a-file', async () => {
+    const result = await filesystemService.resolveFile('inside')
+    expect(result).toEqual({ ok: false, reason: 'not-a-file' })
+  })
+
   test('refuses to search a subtree through a symlink leaving the root', async () => {
     const result = await filesystemService.searchSubtree('escaping-directory', {
       pattern: 'secret',

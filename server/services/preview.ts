@@ -195,10 +195,14 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
       return { ok: true, preview: await previewFile(relativePath, resolvedFile.absolutePath) }
     }
     if (resolvedFile.reason === 'outside-root') return { ok: false, reason: 'outside-root' }
-    // A confinement refusal is never softened into a directory summary below:
-    // the panel must say why, not quietly show something else.
-    if (resolvedFile.reason === 'symlink-escapes-root')
-      return { ok: false, reason: 'symlink-escapes-root' }
+    // A blocked entry is described, not refused. Reading *through* the symlink
+    // stays forbidden (list/raw/open still answer 403) — but saying "this one is
+    // out of bounds" discloses nothing the listing has not already told the
+    // client, and it is the honest thing for the panel to render. Returns before
+    // the directory branch below, which would otherwise summarise the target.
+    if (resolvedFile.reason === 'symlink-escapes-root') {
+      return { ok: true, preview: { ...emptyPreview(relativePath), kind: 'blocked' } }
+    }
     if (resolvedFile.reason === 'not-found') return { ok: false, reason: 'not-found' }
     if (resolvedFile.reason === 'not-readable') return { ok: false, reason: 'not-readable' }
 
@@ -215,8 +219,11 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
       }
     }
     if (listing.reason === 'outside-root') return { ok: false, reason: 'outside-root' }
-    if (listing.reason === 'symlink-escapes-root')
-      return { ok: false, reason: 'symlink-escapes-root' }
+    // Same marker as the file branch above, so the answer does not depend on
+    // which of the two resolutions noticed the escape first.
+    if (listing.reason === 'symlink-escapes-root') {
+      return { ok: true, preview: { ...emptyPreview(relativePath), kind: 'blocked' } }
+    }
     if (listing.reason === 'not-found') return { ok: false, reason: 'not-found' }
     if (listing.reason === 'not-readable') return { ok: false, reason: 'not-readable' }
     return {

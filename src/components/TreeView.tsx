@@ -3,6 +3,7 @@ import { ROOT_LINE_PATH, type EntryRow, type TreeRowModel } from '../lib/tree'
 import { formatBytes, LARGE_FILE_THRESHOLD_BYTES } from '../lib/format'
 import {
   CONFINEMENT_BADGE_LABEL,
+  CONFINEMENT_SHORT_REASON,
   confinementRefusalMessage,
   isConfinementBlocked,
 } from '../lib/confinement'
@@ -19,6 +20,7 @@ function entryNameColorClass(row: EntryRow): string {
 type EntryRowViewProps = {
   row: EntryRow
   isSelected: boolean
+  wasRefused: boolean
   showSizes: boolean
   onSelect: (path: string) => void
   onToggleDirectory: (path: string) => void
@@ -29,6 +31,7 @@ type EntryRowViewProps = {
 function EntryRowView({
   row,
   isSelected,
+  wasRefused,
   showSizes,
   onSelect,
   onToggleDirectory,
@@ -40,17 +43,26 @@ function EntryRowView({
   const isLargeFile =
     row.entry.sizeBytes !== null && row.entry.sizeBytes > LARGE_FILE_THRESHOLD_BYTES
   // A symlink out of the served root. The row stays selectable — selecting it is
-  // how the user reads the explanation — but it never navigates or opens, and
-  // the badge below states the refusal on the row itself (ADR-0031) rather than
-  // leaving the user to discover it by clicking into nothing.
+  // how the user reads the explanation — but it never navigates or opens.
   const isBlocked = isConfinementBlocked(row.entry)
   const blockedExplanation = isBlocked ? confinementRefusalMessage(row.entry.name) : undefined
+  // The reason appears as soon as the row is *selected*, not when an action is
+  // refused (ADR-0031: it belongs beside the row it describes, and the panel's
+  // error strip is scoped to the whole listing). Showing it on selection also
+  // means acting on the row never moves the rows underneath the cursor — the
+  // explanation is already on screen before the keypress.
+  const showReasonLine = isBlocked && isSelected
+  const reasonLineId = `blocked-reason-${encodeURIComponent(row.path)}`
 
   return (
+    <>
     <div
       data-row-path={row.path}
       title={blockedExplanation}
       aria-disabled={isBlocked}
+      // The explanation is a real element rather than a tooltip, so it reaches
+      // keyboard and screen-reader users too.
+      aria-describedby={showReasonLine ? reasonLineId : undefined}
       onClick={() => {
         onSelect(row.path)
         if (isDirectory && !isBlocked) onToggleDirectory(row.path)
@@ -127,6 +139,24 @@ function EntryRowView({
         {formatBytes(row.entry.sizeBytes)}
       </span>
     </div>
+    {showReasonLine && (
+      // Indented to sit under the entry's name, in the same idiom as the tree's
+      // other annotation lines ("N unlisted", "… hidden"). Calm while merely
+      // selected; it takes the alert token only once an action was actually
+      // refused, so the keypress gets an answer instead of silence.
+      <div
+        id={reasonLineId}
+        // Indented by the connector width so it hangs under the entry's name,
+        // wrapped lines included.
+        style={{ marginLeft: `${row.connectorPrefix.length}ch` }}
+        className={`px-4 pb-1 text-[11.5px] leading-snug ${
+          wasRefused ? 'text-bar-a' : 'text-dim'
+        }`}
+      >
+        {CONFINEMENT_SHORT_REASON}
+      </div>
+    )}
+    </>
   )
 }
 
@@ -140,6 +170,9 @@ type TreeViewProps = {
   showGitignored: boolean
   showPreview: boolean
   selectedPath: string | null
+  // The row whose action was last refused, so its reason line can acknowledge
+  // the attempt. Row-scoped, unlike `listingError`, which is about the listing.
+  refusedPath: string | null
   listingError: string | null
   onSelect: (path: string) => void
   onFocusParent: () => void
@@ -162,6 +195,7 @@ export function TreeView({
   showGitignored,
   showPreview,
   selectedPath,
+  refusedPath,
   listingError,
   onSelect,
   onFocusParent,
@@ -221,6 +255,7 @@ export function TreeView({
               key={row.path}
               row={row}
               isSelected={row.path === selectedPath}
+              wasRefused={row.path === refusedPath}
               showSizes={showSizes}
               onSelect={onSelect}
               onToggleDirectory={onToggleDirectory}
