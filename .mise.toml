@@ -9,6 +9,11 @@ NODE_ENV = "development"
 # running the server; a positional CLI argument to the server wins over this.
 # EXPLORER_ROOT = "/path/to/serve"
 
+# Whether the served root is a real boundary or just the tree's starting anchor.
+# Off by default: this is a local-only loopback tool running with the user's own
+# filesystem privileges. Set true for any hosted surface.
+# EXPLORER_CONFINE = "true"
+
 [tasks.dev]
 description = "Resolve free ports, then start dev servers (Elysia + Vite)"
 run = "bun scripts/dev.ts"

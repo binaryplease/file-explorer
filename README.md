@@ -34,8 +34,14 @@ mise run dev      # Elysia (:3000) + Vite (:5173) — open http://localhost:5173
 The explorer serves the **home directory** of the user running the server by
 default. To open it at a specific location instead, set `EXPLORER_ROOT` (see
 `.mise.toml`) or pass a positional argument: `bun server/index.ts ~/projects`.
-Listings never escape the served root. This is a **local-only** tool — the
-server binds to loopback and is not meant to be hosted.
+
+By default the root is the tree's **starting anchor**, not a boundary: browsing
+can follow a symlink or an absolute path out of it. This is a **local-only**
+tool — the server binds to loopback, runs with the privileges of the user who
+started it, and is not meant to be hosted. Set `EXPLORER_CONFINE=true` to make
+the root a real boundary instead: paths that escape it, lexically or through a
+symlink, are then refused, and escaping entries are listed with their target's
+metadata withheld.
 
 ## Status
 

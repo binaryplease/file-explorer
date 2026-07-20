@@ -79,10 +79,22 @@ function isPathWithin(containerAbsolutePath: string, absolutePath: string): bool
   return pathFromContainer !== '..' && !pathFromContainer.startsWith('../')
 }
 
-// Factory per ADR-0007. Confines every listing to `rootAbsolutePath`; a request
-// that escapes the root — lexically, or through a symlink pointing outside it —
-// is rejected, never resolved.
-export function createFilesystemService(options: { rootAbsolutePath: string }) {
+// Factory per ADR-0007.
+//
+// `confine` decides what the root *is*. Confined (the default, and what any
+// hosted surface must use), the root is a security boundary: a request that
+// escapes it — lexically, or through a symlink pointing outside it — is
+// rejected, never resolved. Unconfined, the root is only the tree's starting
+// anchor: absolute paths anywhere on the machine resolve, nothing is refused
+// for leaving the root, and the per-symlink `realpath()` disappears from the
+// hot path. Local-machine use runs unconfined (the process already has the
+// user's own filesystem privileges); see the 2026-07-20 decision in
+// `.nightshift/backlog.md`.
+export function createFilesystemService(options: {
+  rootAbsolutePath: string
+  confine?: boolean
+}) {
+  const confine = options.confine ?? true
   const rootAbsolutePath = resolve(options.rootAbsolutePath)
 
   const rootInfo = statSync(rootAbsolutePath, { throwIfNoEntry: false })
@@ -92,13 +104,26 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
 
   // The root may itself be reached through a symlink (`/tmp`, a home directory
   // on a mounted volume). Real paths are only comparable against another real
-  // path, so resolve the root once here rather than on every request.
-  const rootRealPath = realpathSync(rootAbsolutePath)
+  // path, so resolve the root once here rather than on every request. Only
+  // confinement compares against it, so only confinement pays for it.
+  const rootRealPath = confine ? realpathSync(rootAbsolutePath) : null
 
   function resolveWithinRoot(requestedRelativePath: string): string | null {
     const absolutePath = resolve(rootAbsolutePath, requestedRelativePath)
-    if (!isPathWithin(rootAbsolutePath, absolutePath)) return null
+    if (confine && !isPathWithin(rootAbsolutePath, absolutePath)) return null
     return absolutePath
+  }
+
+  // The path a resolved entry is addressed by on the wire, and the counterpart
+  // of `resolveWithinRoot`. Inside the anchor it stays relative, which keeps
+  // in-root browsing byte-identical to the confined format; outside it (only
+  // reachable unconfined) it is the absolute path rather than a `../../` chain
+  // — both round-trip through `resolve(root, …)`, but an absolute path also
+  // survives the client's plain string join (`lib/tree.ts:63`) and reads
+  // correctly in a breadcrumb.
+  function pathFromRoot(absolutePath: string): string {
+    if (!isPathWithin(rootAbsolutePath, absolutePath)) return absolutePath
+    return relative(rootAbsolutePath, absolutePath)
   }
 
   // The lexical check above cannot see through symlinks: a link *inside* the
@@ -107,10 +132,13 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
   //
   // Callers run this only after their own stat/readdir has succeeded, so a
   // non-existent path is reported as not-found by that check and never reaches
-  // here — which also keeps the extra syscall off the miss path.
+  // here — which also keeps the extra syscall off the miss path. Unconfined
+  // there is nothing to check and the syscall is skipped entirely; call sites
+  // short-circuit on `confine` first so no promise is even allocated.
   async function isRealPathWithinRoot(absolutePath: string): Promise<boolean> {
+    if (!confine) return true
     try {
-      return isPathWithin(rootRealPath, await realpath(absolutePath))
+      return isPathWithin(rootRealPath!, await realpath(absolutePath))
     } catch {
       // Vanished between the caller's existence check and this call. Deny:
       // confinement must not depend on winning a race.
@@ -128,13 +156,24 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
   ): Promise<{ ignoreChain: IgnoreFile[]; isWithinIgnoredDirectory: boolean }> {
     const ignoreChain: IgnoreFile[] = []
     let isWithinIgnoredDirectory = false
+
+    // Unconfined, a directory can sit outside the anchor entirely, and the
+    // anchor's ancestors are not its ancestors — walking up from the anchor
+    // would apply unrelated rules. Such a directory is its own base: only its
+    // own `.gitignore` governs it.
+    if (!isPathWithin(rootAbsolutePath, directoryAbsolutePath)) {
+      const ownIgnoreFile = await loadIgnoreFile(directoryAbsolutePath)
+      if (ownIgnoreFile !== null) ignoreChain.push(ownIgnoreFile)
+      return { ignoreChain, isWithinIgnoredDirectory }
+    }
+
     const rootIgnoreFile = await loadIgnoreFile(rootAbsolutePath)
     if (rootIgnoreFile !== null) ignoreChain.push(rootIgnoreFile)
 
-    const pathFromRoot = relative(rootAbsolutePath, directoryAbsolutePath)
-    if (pathFromRoot === '') return { ignoreChain, isWithinIgnoredDirectory }
+    const pathBelowRoot = relative(rootAbsolutePath, directoryAbsolutePath)
+    if (pathBelowRoot === '') return { ignoreChain, isWithinIgnoredDirectory }
     let currentAbsolutePath = rootAbsolutePath
-    for (const pathSegment of pathFromRoot.split('/')) {
+    for (const pathSegment of pathBelowRoot.split('/')) {
       currentAbsolutePath = join(currentAbsolutePath, pathSegment)
       if (!isWithinIgnoredDirectory) {
         isWithinIgnoredDirectory =
@@ -168,7 +207,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
     //
     // Costs one `realpath` per symlink, and none at all for ordinary entries:
     // the `isSymlink` above is read from the `lstat` this function already did.
-    if (isSymlink && !(await isRealPathWithinRoot(absolutePath))) {
+    if (confine && isSymlink && !(await isRealPathWithinRoot(absolutePath))) {
       return {
         name: entryName,
         kind: 'other',
@@ -245,7 +284,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       if (errorCode === 'ENOTDIR') return { ok: false, reason: 'not-a-directory' }
       return { ok: false, reason: 'not-readable' }
     }
-    if (!(await isRealPathWithinRoot(absolutePath)))
+    if (confine && !(await isRealPathWithinRoot(absolutePath)))
       return { ok: false, reason: 'symlink-escapes-root' }
 
     const { ignoreChain, isWithinIgnoredDirectory } = await buildIgnoreContext(absolutePath)
@@ -264,7 +303,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       ok: true,
       listing: {
         rootPath: rootAbsolutePath,
-        relativePath: relative(rootAbsolutePath, absolutePath),
+        relativePath: pathFromRoot(absolutePath),
         entries,
       },
     }
@@ -287,7 +326,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
     // replying `not-a-file` for an escaping symlink discloses that its target is
     // a directory — precisely the fact the listing withholds. Both kinds of
     // escaping link now give the same answer.
-    if (!(await isRealPathWithinRoot(absolutePath)))
+    if (confine && !(await isRealPathWithinRoot(absolutePath)))
       return { ok: false, reason: 'symlink-escapes-root' }
     if (!entryInfo.isFile()) return { ok: false, reason: 'not-a-file' }
     return { ok: true, absolutePath }
@@ -304,7 +343,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
     } catch {
       return { ok: false, reason: 'open-failed' }
     }
-    return { ok: true, relativePath: relative(rootAbsolutePath, resolved.absolutePath) }
+    return { ok: true, relativePath: pathFromRoot(resolved.absolutePath) }
   }
 
   // --- Recursive fuzzy search (re-engineered from broot's tree builder,
@@ -407,7 +446,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       if (errorCode === 'ENOTDIR') return { ok: false, reason: 'not-a-directory' }
       return { ok: false, reason: 'not-readable' }
     }
-    if (!(await isRealPathWithinRoot(searchRootAbsolutePath)))
+    if (confine && !(await isRealPathWithinRoot(searchRootAbsolutePath)))
       return { ok: false, reason: 'symlink-escapes-root' }
 
     const startedAt = performance.now()
@@ -647,7 +686,8 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       // Search results resolve symlinks to show what they point at, so they
       // need the same withholding as a listing: check before the stat below,
       // never after.
-      const escapesRoot = line.isSymlink && !(await isRealPathWithinRoot(line.absolutePath))
+      const escapesRoot =
+        confine && line.isSymlink && !(await isRealPathWithinRoot(line.absolutePath))
       let entry: DirectoryEntry = {
         name: line.name,
         kind: line.kind === 'directory' ? 'directory' : 'other',
@@ -690,7 +730,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       ok: true,
       result: {
         rootPath: rootAbsolutePath,
-        relativePath: relative(rootAbsolutePath, searchRootAbsolutePath),
+        relativePath: pathFromRoot(searchRootAbsolutePath),
         pattern: searchOptions.pattern,
         nodes,
         stats: {
@@ -704,7 +744,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
     }
   }
 
-  return { rootAbsolutePath, listDirectory, resolveFile, openFile, searchSubtree }
+  return { rootAbsolutePath, confine, listDirectory, resolveFile, openFile, searchSubtree }
 }
 
 export type FilesystemService = ReturnType<typeof createFilesystemService>

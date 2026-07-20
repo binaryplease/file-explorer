@@ -4,8 +4,9 @@ import { openapi } from '@elysiajs/openapi'
 import { z } from 'zod/v4'
 import { config, isDev } from './config'
 import { DiscoveryDocSchema, HealthResponseSchema } from './routes/discovery.schema'
-import { filesystemRoutes } from './routes/filesystem'
-import { previewRoutes } from './routes/preview'
+import { createFilesystemRoutes } from './routes/filesystem'
+import { createPreviewRoutes } from './routes/preview'
+import { filesystemService, previewService } from './services/instances'
 
 const SERVICE_NAME = 'binp-file-explorer'
 const SERVICE_VERSION = '0.1.0'
@@ -80,8 +81,8 @@ const app = new Elysia()
       description: 'Returns `{ ok: true }` when the server is up. No auth required.',
     },
   })
-  .use(filesystemRoutes)
-  .use(previewRoutes)
+  .use(createFilesystemRoutes({ filesystemService }))
+  .use(createPreviewRoutes({ previewService }))
 
 // In production the built client is served from dist/client (this file runs as
 // dist/server/index.js, so the client sits one directory over). In dev, Vite
@@ -112,7 +113,12 @@ app.listen({
 
 const localBase = `http://${config.HOST}:${config.PORT}`
 console.log(`binp-file-explorer running at ${localBase}`)
-console.log(`Serving ${config.EXPLORER_ROOT}`)
+console.log(
+  `Serving ${config.EXPLORER_ROOT} ` +
+    (config.EXPLORER_CONFINE
+      ? '(confined: paths escaping the root are refused)'
+      : '(unconfined: the root is the starting anchor, not a boundary)'),
+)
 console.log('Discovery')
 console.log(`  docs:      ${localBase}/api/docs`)
 console.log(`  openapi:   ${localBase}/api/openapi.json`)

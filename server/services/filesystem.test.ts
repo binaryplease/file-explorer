@@ -11,6 +11,9 @@ import { createFilesystemService } from './filesystem'
 let servedRoot: string
 let outsideDirectory: string
 let filesystemService: ReturnType<typeof createFilesystemService>
+// The same root and the same links, served with `confine: false` — the
+// local-machine default. Every refusal below must become a resolution.
+let unconfinedService: ReturnType<typeof createFilesystemService>
 
 beforeAll(async () => {
   // The temp dir itself is often reached through a symlink (/tmp, /var). Its
@@ -28,7 +31,10 @@ beforeAll(async () => {
   await symlink(outsideDirectory, join(servedRoot, 'escaping-directory'))
   await symlink(join(servedRoot, 'inside'), join(servedRoot, 'contained-link'))
 
+  // Constructed with `rootAbsolutePath` alone: confinement is the factory
+  // default, so these assertions also pin that default in place.
   filesystemService = createFilesystemService({ rootAbsolutePath: servedRoot })
+  unconfinedService = createFilesystemService({ rootAbsolutePath: servedRoot, confine: false })
 })
 
 afterAll(async () => {
@@ -167,5 +173,100 @@ describe('escaping symlinks are listed loudly, without leaking their target', ()
       expect(node.entry.sizeBytes).toBeNull()
       expect(node.entry.childCount).toBeNull()
     }
+  })
+})
+
+// The mirror of the two blocks above, with confinement off. Same fixture, same
+// escaping links; the root is now only the tree's starting anchor, so nothing
+// is refused for leaving it and no entry is ever marked `escapesRoot`.
+describe('unconfined mode — the root is a display anchor, not a boundary', () => {
+  test('serves a file through a symlink leaving the root', async () => {
+    const result = await unconfinedService.resolveFile('escaping-file')
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.absolutePath).toBe(join(servedRoot, 'escaping-file'))
+  })
+
+  test('lists a directory through a symlink leaving the root', async () => {
+    const result = await unconfinedService.listDirectory('escaping-directory')
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    expect(result.listing.entries.map((entry) => entry.name)).toContain('secret.txt')
+  })
+
+  test('searches a subtree through a symlink leaving the root', async () => {
+    const result = await unconfinedService.searchSubtree('escaping-directory', {
+      pattern: 'secret',
+      limit: 10,
+      showHidden: false,
+      showGitignored: false,
+      abortSignal: new AbortController().signal,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(`search failed: ${result.reason}`)
+    expect(result.result.nodes.map((node) => node.path)).toContain('secret.txt')
+  })
+
+  test('resolves a file for opening through a symlink leaving the root', async () => {
+    // openFile spawns the OS launcher, which a test must not do. It resolves
+    // through resolveFile first, so the escape verdict is observable there —
+    // and the escaping *directory* still answers not-a-file, the honest kind
+    // verdict that confinement had to withhold.
+    const result = await unconfinedService.resolveFile('escaping-directory')
+    expect(result).toEqual({ ok: false, reason: 'not-a-file' })
+  })
+
+  test('resolves a lexical escape instead of refusing it', async () => {
+    const result = await unconfinedService.resolveFile('../outside/secret.txt')
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.absolutePath).toBe(join(outsideDirectory, 'secret.txt'))
+  })
+
+  test('accepts an absolute path outside the root', async () => {
+    const result = await unconfinedService.listDirectory(outsideDirectory)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    expect(result.listing.entries.map((entry) => entry.name)).toContain('secret.txt')
+  })
+
+  // The wire-format decision the embeddable component depends on: a directory
+  // outside the anchor is addressed by its absolute path, not a `../../` chain,
+  // so the client's plain string join (`joinTreePath`) keeps producing a path
+  // the server can resolve. Inside the anchor the format is unchanged.
+  test('addresses out-of-root listings by absolute path, in-root ones relatively', async () => {
+    const outside = await unconfinedService.listDirectory(outsideDirectory)
+    if (!outside.ok) throw new Error(`listing failed: ${outside.reason}`)
+    expect(outside.listing.relativePath).toBe(outsideDirectory)
+    expect(outside.listing.rootPath).toBe(servedRoot)
+
+    const roundTripped = await unconfinedService.resolveFile(
+      `${outside.listing.relativePath}/secret.txt`,
+    )
+    expect(roundTripped.ok).toBe(true)
+
+    const inside = await unconfinedService.listDirectory('inside')
+    if (!inside.ok) throw new Error(`listing failed: ${inside.reason}`)
+    expect(inside.listing.relativePath).toBe('inside')
+  })
+
+  test('never marks an entry as escaping the root', async () => {
+    const result = await unconfinedService.listDirectory('')
+    if (!result.ok) throw new Error(`listing the root failed: ${result.reason}`)
+    expect(result.listing.entries.every((entry) => !entry.escapesRoot)).toBe(true)
+  })
+
+  // The counterpart of the confined block's withholding tests: with nothing to
+  // withhold, an escaping link reports its target's real metadata.
+  test('reports the real kind and metadata of a link pointing outside the root', async () => {
+    const result = await unconfinedService.listDirectory('')
+    if (!result.ok) throw new Error(`listing the root failed: ${result.reason}`)
+    const escapingDirectory = result.listing.entries.find(
+      (entry) => entry.name === 'escaping-directory',
+    )!
+    expect(escapingDirectory.kind).toBe('directory')
+    expect(escapingDirectory.childCount).toBe(1)
+
+    const escapingFile = result.listing.entries.find((entry) => entry.name === 'escaping-file')!
+    expect(escapingFile.kind).toBe('file')
+    expect(escapingFile.sizeBytes).toBe('secret'.length)
   })
 })
