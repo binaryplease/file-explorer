@@ -4,7 +4,11 @@ import type { ThemeMode } from '../lib/theme'
 type TitleBarProps = {
   rootPath: string | null
   themeMode: ThemeMode
-  onSelectThemeMode: (nextThemeMode: ThemeMode) => void
+  // The theme picker is the explorer's own palette control. It is omitted when
+  // the explorer is embedded in a host that owns the theme (the grove tokens
+  // inherit the host's `[data-theme]`), so this surface carries no redundant,
+  // host-fighting toggle — its absence is intentional, not a disabled control.
+  onSelectThemeMode?: (nextThemeMode: ThemeMode) => void
 }
 
 export function TitleBar({ rootPath, themeMode, onSelectThemeMode }: TitleBarProps) {
@@ -21,7 +25,9 @@ export function TitleBar({ rootPath, themeMode, onSelectThemeMode }: TitleBarPro
       </div>
       <div className="flex flex-none items-center gap-2.5 text-[11px] text-faint">
         <span className="hidden font-semibold text-prompt sm:inline">grove</span>
-        <ThemeToggle themeMode={themeMode} onSelectThemeMode={onSelectThemeMode} />
+        {onSelectThemeMode !== undefined && (
+          <ThemeToggle themeMode={themeMode} onSelectThemeMode={onSelectThemeMode} />
+        )}
       </div>
     </div>
   )

@@ -72,6 +72,17 @@ check. Confinement is for a genuinely hosted surface serving a subtree that is
 not the user's own — turn it on together with an `EXPLORER_ROOT` worth
 confining to.
 
+**Embedding (CORS).** Shipping no CORS headers is the default because the
+same-origin policy is what guards the responses. A host app that mounts this
+explorer's frontend into its own page while running this server as a separate
+process on another port (as nightshift-ui does) makes cross-origin requests the
+browser would otherwise refuse to read. `EXPLORER_ALLOWED_ORIGINS`
+(comma-separated exact Origins) is the deliberate opt-in for exactly that seam:
+the server reflects CORS headers back to a listed Origin and no other, leaving
+the loopback bind and the Host check fully intact. Empty (the default) means no
+cross-origin access at all — nothing is loosened unless an operator names the
+Origin.
+
 ## Status
 
 Prototype: broot-style navigation (tree with lazy expansion, keyboard-first

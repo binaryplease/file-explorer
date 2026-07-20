@@ -23,6 +23,15 @@ NODE_ENV = "development"
 # because binding off loopback publishes an unauthenticated filesystem API.
 # EXPLORER_ALLOWED_HOSTS = "files.example.com"
 
+# Exact browser Origins granted cross-origin (CORS) read access. Empty (the
+# default) means no CORS headers at all — the historical, most-restrictive
+# posture, relying on the same-origin policy to guard responses. Set it only for
+# the deliberate embedding seam, where a host app mounts this frontend into its
+# own page while running this server as a separate process on another port (e.g.
+# nightshift-ui): naming that host's Origin here returns CORS headers for it, and
+# nothing else. The loopback bind and Host-header guard are untouched.
+# EXPLORER_ALLOWED_ORIGINS = "http://localhost:5175"
+
 [tasks.dev]
 description = "Resolve free ports, then start dev servers (Elysia + Vite)"
 run = "bun scripts/dev.ts"

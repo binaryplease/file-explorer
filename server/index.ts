@@ -2,8 +2,9 @@ import { join, resolve } from 'node:path'
 import { Elysia } from 'elysia'
 import { openapi } from '@elysiajs/openapi'
 import { z } from 'zod'
-import { additionalAllowedHosts, config, isDev } from './config'
+import { additionalAllowedHosts, allowedOrigins, config, isDev } from './config'
 import { createTrustedHostGuard } from './services/trusted-host'
+import { createCorsPolicy } from './services/cors'
 import { createPublicOriginResolver } from './services/public-origin'
 import { resolveClientAssetPath } from './services/client-asset-path'
 import { createBindExposurePolicy } from './services/bind-exposure'
@@ -16,6 +17,9 @@ const SERVICE_NAME = 'binp-file-explorer'
 const SERVICE_VERSION = '0.1.0'
 
 const trustedHostGuard = createTrustedHostGuard({ additionalAllowedHosts })
+// Cross-origin read access for the deliberate embedding seam — empty allowlist
+// (the default) means no CORS at all. See services/cors.ts.
+const corsPolicy = createCorsPolicy({ allowedOrigins })
 // Per ADR-0020 the discovery URLs are absolute, so they name an origin. The
 // forwarded-* headers only get a say where the operator acknowledged a proxy —
 // see services/public-origin.ts.
@@ -33,6 +37,27 @@ const app = new Elysia()
       error:
         'refusing to answer for this Host. binp-file-explorer serves loopback origins only; ' +
         'set EXPLORER_ALLOWED_HOSTS to serve another name deliberately.',
+    }
+  })
+  // CORS preflight for the embedding seam. Runs after the Host guard (a rebound
+  // Host is already refused above) and before routing — there are no OPTIONS
+  // routes, so a preflight from an allowed Origin is answered here with 204 +
+  // the CORS headers. A preflight from an unlisted Origin gets no headers and
+  // the browser blocks the follow-up request, as designed.
+  .onRequest(({ request, set }) => {
+    if (request.method !== 'OPTIONS') return
+    const corsHeaders = corsPolicy.headersFor(request.headers.get('origin'))
+    set.headers = { ...set.headers, ...corsHeaders }
+    set.status = 204
+    return ''
+  })
+  // Reflect the CORS allow-origin header onto every actual response for an
+  // allowed Origin (a no-op for same-origin/unlisted requests, which carry no
+  // Origin or an unlisted one).
+  .onAfterHandle(({ request, set }) => {
+    const corsHeaders = corsPolicy.headersFor(request.headers.get('origin'))
+    for (const [headerName, headerValue] of Object.entries(corsHeaders)) {
+      set.headers[headerName] = headerValue
     }
   })
   // ADR-0020: human docs at /api/docs, machine spec at /api/openapi.json.

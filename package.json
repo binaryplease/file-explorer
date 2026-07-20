@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "exports": {
+    "./mount": "./src/mount.tsx",
+    "./theme.css": "./src/theme.css"
+  },
   "scripts": {
     "dev": "bun scripts/dev.ts",
     "dev:ports": "bun scripts/dev-ports.ts",

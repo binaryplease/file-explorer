@@ -23,19 +23,8 @@ import { TreeView } from './components/TreeView'
 import { CommandBar } from './components/CommandBar'
 import { useTheme } from './lib/theme'
 import { useViewSettings } from './lib/viewSettings'
-
-function readFocusPathFromUrl(): string {
-  return new URLSearchParams(window.location.search).get('path') ?? ''
-}
-
-function pushFocusPathToUrl(focusPath: string): void {
-  const nextUrl =
-    focusPath === ''
-      ? window.location.pathname
-      : `${window.location.pathname}?path=${encodeURIComponent(focusPath)}`
-  const currentUrl = `${window.location.pathname}${window.location.search}`
-  if (nextUrl !== currentUrl) window.history.pushState({}, '', nextUrl)
-}
+import { useApiBase } from './lib/apiBase'
+import { createUrlFocusNavigation, type FocusNavigation } from './lib/focusNavigation'
 
 function baseName(path: string): string {
   const lastSlashIndex = path.lastIndexOf('/')
@@ -57,12 +46,36 @@ function measurePageRowCount(): number {
 // row immediately regardless (AGENTS.md responsiveness principle).
 const PREVIEW_SETTLE_MILLISECONDS = 90
 
-export function App() {
+export type AppProps = {
+  // The focus-history seam: URL-backed standalone (deep-linkable `?path=`,
+  // browser back/forward), or in-memory when embedded in a host that owns the
+  // page URL. Defaults to the URL seam so the standalone app is unchanged.
+  navigation?: FocusNavigation
+  // A file to open selected and previewed on mount — the embedded "open this
+  // file" deep-link. When set, the preview column starts open so the file is
+  // shown, not merely highlighted in the tree.
+  initialSelectedPath?: string | null
+  // Whether this App is embedded in a host that owns the page theme. Embedded,
+  // the theme hook goes read-only (it inherits the host's `[data-theme]`) and
+  // the title-bar theme toggle is omitted.
+  embedded?: boolean
+}
+
+export function App({ navigation, initialSelectedPath = null, embedded = false }: AppProps = {}) {
+  // The navigation seam is created once (URL-backed by default). Threading it
+  // through a stable memo keeps its subscription/effect identity stable.
+  const focusNavigation = useMemo<FocusNavigation>(
+    () => navigation ?? createUrlFocusNavigation(),
+    [navigation],
+  )
+  // Where the API lives relative to this page ('' = same-origin standalone; an
+  // absolute origin when embedded against a separate explorer server).
+  const apiBaseUrl = useApiBase()
   const [rootPath, setRootPath] = useState<string | null>(null)
-  const [focusPath, setFocusPath] = useState<string>(readFocusPathFromUrl)
+  const [focusPath, setFocusPath] = useState<string>(() => focusNavigation.initialFocusPath())
   const [listings, setListings] = useState<Record<string, DirectoryEntry[] | undefined>>({})
   const [openPaths, setOpenPaths] = useState<ReadonlySet<string>>(new Set())
-  const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  const [selectedPath, setSelectedPath] = useState<string | null>(initialSelectedPath)
   const [pattern, setPattern] = useState('')
   const { viewSettings, setViewSettings } = useViewSettings()
   const { showSizes, showHidden, showGitignored, showPreview } = viewSettings
@@ -77,25 +90,43 @@ export function App() {
   const [isPreviewFocused, setIsPreviewFocused] = useState(false)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
-  const { themeMode, setThemeMode } = useTheme()
+  // Embedded, the host owns `<html data-theme>`; the hook goes read-only so it
+  // doesn't fight the host (the grove tokens inherit the host's scheme).
+  const { themeMode, setThemeMode } = useTheme({ manageDocument: !embedded })
 
-  const loadListing = useCallback(async (relativePath: string) => {
-    try {
-      const listing = await fetchDirectoryListing(relativePath)
-      setRootPath(listing.rootPath)
-      setListings((previousListings) => ({
-        ...previousListings,
-        [listing.relativePath]: listing.entries,
-      }))
-      setListingError(null)
-    } catch (loadError) {
-      setListingError(loadError instanceof Error ? loadError.message : String(loadError))
-    }
-  }, [])
+  const loadListing = useCallback(
+    async (relativePath: string) => {
+      try {
+        const listing = await fetchDirectoryListing(apiBaseUrl, relativePath)
+        setRootPath(listing.rootPath)
+        setListings((previousListings) => ({
+          ...previousListings,
+          [listing.relativePath]: listing.entries,
+        }))
+        setListingError(null)
+      } catch (loadError) {
+        setListingError(loadError instanceof Error ? loadError.message : String(loadError))
+      }
+    },
+    [apiBaseUrl],
+  )
 
   useEffect(() => {
     void loadListing(focusPath)
   }, [focusPath, loadListing])
+
+  // Opening straight onto a file (the embedded "preview this file" deep-open)
+  // must show it, not just highlight it — so the preview column starts open. A
+  // one-shot on mount: thereafter the user's own toggle owns the column.
+  useEffect(() => {
+    if (initialSelectedPath === null) return
+    setViewSettings((previousViewSettings) =>
+      previousViewSettings.showPreview
+        ? previousViewSettings
+        : { ...previousViewSettings, showPreview: true },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Server-side recursive fuzzy search, broot-style: every keystroke fires a
   // request and aborts the one before it, which cancels the walk server-side.
@@ -108,6 +139,7 @@ export function App() {
     }
     const abortController = new AbortController()
     fetchSearchResult({
+      baseUrl: apiBaseUrl,
       relativePath: focusPath,
       pattern,
       showHidden,
@@ -136,7 +168,7 @@ export function App() {
         setListingError(searchError instanceof Error ? searchError.message : String(searchError))
       })
     return () => abortController.abort()
-  }, [pattern, focusPath, showHidden, showGitignored])
+  }, [pattern, focusPath, showHidden, showGitignored, apiBaseUrl])
 
   // The preview always describes the selected row; the tree's first line (the
   // current directory itself) previews that directory.
@@ -156,7 +188,7 @@ export function App() {
     const abortController = new AbortController()
     setIsPreviewLoading(true)
     const settleTimer = window.setTimeout(() => {
-      fetchPreview(previewTargetPath, abortController.signal)
+      fetchPreview(apiBaseUrl, previewTargetPath, abortController.signal)
         .then((loadedPreview) => {
           if (abortController.signal.aborted) return
           setPreview(loadedPreview)
@@ -178,24 +210,27 @@ export function App() {
       window.clearTimeout(settleTimer)
       abortController.abort()
     }
-  }, [showPreview, previewTargetPath])
+  }, [showPreview, previewTargetPath, apiBaseUrl])
 
-  // Browser back/forward walks the focus history naturally.
+  // Focus changes that originate outside App — the browser back/forward buttons
+  // (URL seam) or the explorer's own "back" verb (in-memory seam) — arrive here
+  // and re-focus, exactly as a click does. One code path for both seams.
   useEffect(() => {
-    function handlePopState() {
-      setFocusPath(readFocusPathFromUrl())
+    return focusNavigation.subscribe((nextFocusPath) => {
+      setFocusPath(nextFocusPath)
       setPattern('')
-    }
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
+    })
+  }, [focusNavigation])
 
-  const focusDirectory = useCallback((nextFocusPath: string) => {
-    pushFocusPathToUrl(nextFocusPath)
-    setFocusPath(nextFocusPath)
-    setPattern('')
-    setSelectedPath(null)
-  }, [])
+  const focusDirectory = useCallback(
+    (nextFocusPath: string) => {
+      focusNavigation.push(nextFocusPath)
+      setFocusPath(nextFocusPath)
+      setPattern('')
+      setSelectedPath(null)
+    },
+    [focusNavigation],
+  )
 
   const focusParentDirectory = useCallback(() => {
     if (focusPath === '') return
@@ -327,11 +362,11 @@ export function App() {
   const openFile = useCallback(
     (filePath: string) => {
       if (refuseIfBlocked(filePath)) return
-      openFileWithDefaultApplication(filePath).catch((openError: unknown) => {
+      openFileWithDefaultApplication(apiBaseUrl, filePath).catch((openError: unknown) => {
         setListingError(openError instanceof Error ? openError.message : String(openError))
       })
     },
-    [refuseIfBlocked],
+    [refuseIfBlocked, apiBaseUrl],
   )
 
   // broot's open_stay (Enter): the root line goes to the parent, a
@@ -347,12 +382,12 @@ export function App() {
   }, [selectedPath, selectedRow, focusParentDirectory, focusDirectory, openFile, refuseIfBlocked])
 
   // broot's back verb: pop the most recent state change — an active filter
-  // first, then the focus history (which lives in the browser history, so
-  // this also composes with the browser's own back button).
+  // first, then the focus history through the navigation seam (the browser's
+  // own history standalone, an in-memory stack when embedded).
   const goBack = useCallback(() => {
     if (pattern !== '') setPattern('')
-    else window.history.back()
-  }, [pattern])
+    else focusNavigation.back()
+  }, [pattern, focusNavigation])
 
   const toggleSizes = useCallback(() => {
     setViewSettings((previousViewSettings) => ({
@@ -553,58 +588,78 @@ export function App() {
   const focusFullPath =
     rootPath === null ? '…' : focusPath === '' ? rootPath : `${rootPath}/${focusPath}`
 
+  // The tree/preview/command-bar body is identical in both mounts; only the
+  // outer chrome differs — a centred, full-screen card standalone, or a plain
+  // fill of the host's container when embedded (the host owns the frame, header
+  // and close, so the explorer drops its own TitleBar to avoid a second one).
+  const explorerBody = (
+    <>
+      {!embedded && (
+        <TitleBar rootPath={rootPath} themeMode={themeMode} onSelectThemeMode={setThemeMode} />
+      )}
+      {/* Tree and preview share one row; the preview is a column beside the
+          rows it describes (ADR-0031), never a modal over them. */}
+      <div className="flex min-h-0 flex-1">
+        <TreeView
+          rootFullPath={focusFullPath}
+          isRootLineSelected={selectedPath === ROOT_LINE_PATH}
+          focusEntryCount={focusEntryCount}
+          rows={rows}
+          showSizes={showSizes}
+          showHidden={showHidden}
+          showGitignored={showGitignored}
+          showPreview={showPreview}
+          selectedPath={selectedPath}
+          refusedPath={refusedPath}
+          listingError={listingError}
+          onSelect={setSelectedPath}
+          onFocusParent={focusParentDirectory}
+          onToggleDirectory={toggleDirectory}
+          onFocusDirectory={focusDirectory}
+          onOpenFile={openFile}
+          onToggleSizes={toggleSizes}
+          onToggleHidden={toggleHidden}
+          onToggleGitignored={toggleGitignored}
+          onTogglePreview={togglePreview}
+        />
+        {showPreview && (
+          <PreviewPanel
+            scrollRef={previewScrollRef}
+            isFocused={isPreviewFocused}
+            targetPath={previewTargetPath}
+            preview={preview}
+            previewError={previewError}
+            isLoading={isPreviewLoading}
+            onFocusChange={setIsPreviewFocused}
+          />
+        )}
+      </div>
+      <CommandBar
+        inputRef={searchInputRef}
+        focusLabel={focusLabel}
+        pattern={pattern}
+        isFiltering={isSearching}
+        matchCount={matchCount}
+        matchCountIsLowerBound={searchResult?.stats.truncated ?? false}
+        entryRowCount={entryRowCount}
+        focusEntryCount={focusEntryCount}
+        onPatternChange={setPattern}
+      />
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-term font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
+        {explorerBody}
+      </div>
+    )
+  }
+
   return (
     <div className="grid min-h-screen place-items-center bg-void bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(111,183,255,0.08),transparent_55%),radial-gradient(90%_70%_at_80%_120%,rgba(255,110,199,0.06),transparent_60%)] p-[clamp(14px,3vw,40px)] font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
       <div className="flex h-[min(720px,92vh)] w-full max-w-[1080px] flex-col overflow-hidden rounded-[14px] border border-line bg-term shadow-[0_40px_120px_-30px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.05)_inset]">
-        <TitleBar rootPath={rootPath} themeMode={themeMode} onSelectThemeMode={setThemeMode} />
-        {/* Tree and preview share one row; the preview is a column beside the
-            rows it describes (ADR-0031), never a modal over them. */}
-        <div className="flex min-h-0 flex-1">
-          <TreeView
-            rootFullPath={focusFullPath}
-            isRootLineSelected={selectedPath === ROOT_LINE_PATH}
-            focusEntryCount={focusEntryCount}
-            rows={rows}
-            showSizes={showSizes}
-            showHidden={showHidden}
-            showGitignored={showGitignored}
-            showPreview={showPreview}
-            selectedPath={selectedPath}
-            refusedPath={refusedPath}
-            listingError={listingError}
-            onSelect={setSelectedPath}
-            onFocusParent={focusParentDirectory}
-            onToggleDirectory={toggleDirectory}
-            onFocusDirectory={focusDirectory}
-            onOpenFile={openFile}
-            onToggleSizes={toggleSizes}
-            onToggleHidden={toggleHidden}
-            onToggleGitignored={toggleGitignored}
-            onTogglePreview={togglePreview}
-          />
-          {showPreview && (
-            <PreviewPanel
-              scrollRef={previewScrollRef}
-              isFocused={isPreviewFocused}
-              targetPath={previewTargetPath}
-              preview={preview}
-              previewError={previewError}
-              isLoading={isPreviewLoading}
-              onFocusChange={setIsPreviewFocused}
-            />
-          )}
-        </div>
-        <CommandBar
-          inputRef={searchInputRef}
-          focusLabel={focusLabel}
-          pattern={pattern}
-          isFiltering={isSearching}
-          matchCount={matchCount}
-          matchCountIsLowerBound={searchResult?.stats.truncated ?? false}
-          entryRowCount={entryRowCount}
-          focusEntryCount={focusEntryCount}
-          onPatternChange={setPattern}
-        />
+        {explorerBody}
       </div>
     </div>
   )

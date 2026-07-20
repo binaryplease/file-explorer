@@ -37,10 +37,22 @@ function applyResolvedTheme(resolvedTheme: ResolvedTheme): void {
 // Owns the app's color-theme state: the persisted mode plus the side effect of
 // projecting the resolved theme onto <html>. Re-resolves live when the mode is
 // `system` and the OS preference flips.
-export function useTheme(): { themeMode: ThemeMode; setThemeMode: (nextThemeMode: ThemeMode) => void } {
+//
+// `manageDocument` (default true) is the standalone/embedded switch. Standalone,
+// the explorer owns the page and writes `<html data-theme>` itself. Embedded,
+// the *host* owns that attribute — and the explorer's grove tokens ride the very
+// same `[data-theme]` selector (see index.css), so it simply inherits the host's
+// resolved scheme. Writing the attribute there would fight the host, so an
+// embedded mount passes `false`: no document write, no localStorage, no
+// matchMedia listener — the hook goes read-only.
+export function useTheme(
+  options: { manageDocument?: boolean } = {},
+): { themeMode: ThemeMode; setThemeMode: (nextThemeMode: ThemeMode) => void } {
+  const { manageDocument = true } = options
   const [themeMode, setThemeModeState] = useState<ThemeMode>(readStoredThemeMode)
 
   useEffect(() => {
+    if (!manageDocument) return
     applyResolvedTheme(resolveThemeMode(themeMode))
     if (themeMode !== 'system') return
 
@@ -50,12 +62,15 @@ export function useTheme(): { themeMode: ThemeMode; setThemeMode: (nextThemeMode
     }
     darkMediaQuery.addEventListener('change', handlePreferenceChange)
     return () => darkMediaQuery.removeEventListener('change', handlePreferenceChange)
-  }, [themeMode])
+  }, [themeMode, manageDocument])
 
-  const setThemeMode = useCallback((nextThemeMode: ThemeMode) => {
-    window.localStorage.setItem(THEME_STORAGE_KEY, nextThemeMode)
-    setThemeModeState(nextThemeMode)
-  }, [])
+  const setThemeMode = useCallback(
+    (nextThemeMode: ThemeMode) => {
+      if (manageDocument) window.localStorage.setItem(THEME_STORAGE_KEY, nextThemeMode)
+      setThemeModeState(nextThemeMode)
+    },
+    [manageDocument],
+  )
 
   return { themeMode, setThemeMode }
 }

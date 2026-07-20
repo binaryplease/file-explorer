@@ -31,6 +31,19 @@ const EnvironmentSchema = z.object({
     .string()
     .default('')
     .describe('Comma-separated extra Host header values to serve, beyond loopback names.'),
+  // Cross-origin read access for the deliberate embedding seam. Empty by
+  // default — the explorer ships no CORS headers, relying on the same-origin
+  // policy to guard its responses (see README security model). A host that
+  // mounts the explorer's frontend into its own page while running this server
+  // as a separate process on another port makes cross-origin requests the
+  // browser would otherwise refuse to read; naming that host's origin here
+  // returns CORS headers for it, and nothing else. This never widens the
+  // network surface — the loopback bind and Host-header guard are untouched; it
+  // only lets a named origin *read* a response it is already allowed to receive.
+  EXPLORER_ALLOWED_ORIGINS: z
+    .string()
+    .default('')
+    .describe('Comma-separated exact Origins granted cross-origin (CORS) read access.'),
 })
 
 export type Config = z.infer<typeof EnvironmentSchema>
@@ -44,11 +57,18 @@ export const config: Config = EnvironmentSchema.parse({
   EXPLORER_ROOT: process.argv[2] || process.env.EXPLORER_ROOT || undefined,
   EXPLORER_CONFINE: process.env.EXPLORER_CONFINE || undefined,
   EXPLORER_ALLOWED_HOSTS: process.env.EXPLORER_ALLOWED_HOSTS || undefined,
+  EXPLORER_ALLOWED_ORIGINS: process.env.EXPLORER_ALLOWED_ORIGINS || undefined,
 })
 
 // Parsed once here rather than re-split per request.
 export const additionalAllowedHosts = config.EXPLORER_ALLOWED_HOSTS.split(',')
   .map((allowedHost) => allowedHost.trim())
   .filter((allowedHost) => allowedHost !== '')
+
+// The exact Origins granted cross-origin read access. Empty (the default) means
+// no CORS at all — the historical, most-restrictive posture.
+export const allowedOrigins = config.EXPLORER_ALLOWED_ORIGINS.split(',')
+  .map((allowedOrigin) => allowedOrigin.trim())
+  .filter((allowedOrigin) => allowedOrigin !== '')
 
 export const isDev = config.NODE_ENV !== 'production'

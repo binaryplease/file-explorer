@@ -11,6 +11,7 @@ import {
 } from '@tabler/icons-react'
 import type { Preview, PreviewKind } from '../../shared/preview.schema'
 import { CONFINEMENT_BADGE_LABEL, confinementRefusalMessage } from '../lib/confinement'
+import { useApiBase, withApiBase } from '../lib/apiBase'
 import { formatBytes } from '../lib/format'
 
 // One descriptor per preview kind (ADR-0026): the icon and the label the header
@@ -135,6 +136,10 @@ export function PreviewPanel({
   isLoading,
   onFocusChange,
 }: PreviewPanelProps) {
+  // The image `<img src>` is a server-built path (`/api/fs/raw?...`); like every
+  // other request it resolves against the configured API base, so an embedded
+  // mount loads the bytes from the explorer server's origin, not the host page.
+  const apiBase = useApiBase()
   // The served root has no basename of its own; name it by the path it is.
   const headerName = preview !== null && preview.name !== '' ? preview.name : targetPath || '/'
   const descriptor = preview === null ? null : PREVIEW_KIND_DESCRIPTORS[preview.kind]
@@ -185,7 +190,7 @@ export function PreviewPanel({
         ) : preview.kind === 'image' && preview.imageUrlPath !== null ? (
           <div className="grid h-full place-items-center p-4">
             <img
-              src={preview.imageUrlPath}
+              src={withApiBase(apiBase, preview.imageUrlPath)}
               alt={preview.name}
               className="max-h-full max-w-full object-contain"
             />
