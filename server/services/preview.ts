@@ -1,6 +1,7 @@
 import { extname } from 'node:path'
 import type { DirectoryEntry } from '../../shared/filesystem.schema'
 import type { DirectorySummary, Preview } from '../../shared/preview.schema'
+import { languageForPath } from '../../shared/language'
 import type { FilesystemService, OpenReadableFileResult } from './filesystem'
 
 // The success half of what the filesystem service hands over: an opened file,
@@ -129,6 +130,7 @@ function emptyPreview(relativePath: string): Preview {
     kind: 'unsupported',
     sizeBytes: null,
     lines: [],
+    language: 'txt',
     isTruncated: false,
     totalLineCount: null,
     imageUrlPath: null,
@@ -203,7 +205,18 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
       decodedHead,
       sizeBytes > headBytes.length,
     )
-    return { ...preview, kind: 'text', lines, isTruncated, totalLineCount }
+    // A metadata hint only — a grammar name the client tokenizes with. The
+    // bounded-read design is untouched: no bytes beyond the head are read, and a
+    // path with no known grammar keeps the schema default (`'txt'`), which the
+    // client renders as plain text.
+    return {
+      ...preview,
+      kind: 'text',
+      lines,
+      language: languageForPath(relativePath),
+      isTruncated,
+      totalLineCount,
+    }
   }
 
   // Previews one entry. An entry that exists but has no content to show — a

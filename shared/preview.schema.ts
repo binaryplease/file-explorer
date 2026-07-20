@@ -80,6 +80,14 @@ export const PreviewSchema = z.object({
     .array(PreviewLineSchema)
     .default([])
     .describe('Head lines of a text file. Empty for every other kind.'),
+  language: z
+    .string()
+    .default('txt')
+    .describe(
+      'Shiki grammar hint for syntax-highlighting a text preview, derived from the path ' +
+        "(shared/language.ts). 'txt' — the default — for every non-text kind and for text " +
+        'whose extension has no known grammar; the client renders those as plain text.',
+    ),
   isTruncated: z
     .boolean()
     .default(false)

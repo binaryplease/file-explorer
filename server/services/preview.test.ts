@@ -131,9 +131,32 @@ describe('previewEntry', () => {
     expect(result.preview.lines.map((line) => line.text)).toEqual(['alpha', 'beta'])
     expect(result.preview.totalLineCount).toBe(2)
     expect(result.preview.sizeBytes).toBe(11)
+    // An unmapped extension keeps the plain-text default (the client renders it
+    // unhighlighted).
+    expect(result.preview.language).toBe('txt')
     // ADR-0024: the shape is complete whichever kind came back.
     expect(result.preview.directory).toBeNull()
     expect(result.preview.imageUrlPath).toBeNull()
+  })
+
+  test('stamps a syntax-highlighting language onto a recognised code file', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    await writeFile(join(rootPath, 'main.ts'), 'export const answer = 42\n')
+    const result = await previewService.previewEntry('main.ts')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.preview.kind).toBe('text')
+    expect(result.preview.language).toBe('typescript')
+  })
+
+  test('leaves the language at its default for non-text kinds', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    await writeFile(join(rootPath, 'blob.bin'), new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]))
+    const result = await previewService.previewEntry('blob.bin')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.preview.kind).toBe('binary')
+    expect(result.preview.language).toBe('txt')
   })
 
   test('marks a binary file instead of dumping its bytes', async () => {

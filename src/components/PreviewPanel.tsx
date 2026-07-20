@@ -1,4 +1,5 @@
-import type { RefObject } from 'react'
+import { useEffect, useState, type CSSProperties, type RefObject } from 'react'
+import type { ThemedToken } from 'shiki'
 import {
   IconAlertTriangle,
   IconBinary,
@@ -13,6 +14,7 @@ import type { Preview, PreviewKind } from '../../shared/preview.schema'
 import { CONFINEMENT_BADGE_LABEL, confinementRefusalMessage } from '../lib/confinement'
 import { useApiBase, withApiBase } from '../lib/apiBase'
 import { formatBytes } from '../lib/format'
+import { tokenizePreviewLines } from '../lib/highlighter'
 import { ToggleChip } from './ToggleChip'
 
 // One descriptor per preview kind (ADR-0026): the icon and the label the header
@@ -95,9 +97,32 @@ function DirectorySummaryView({ preview }: { preview: Preview }) {
 }
 
 function TextPreviewView({ preview, wrapText }: { preview: Preview; wrapText: boolean }) {
+  // Highlighting decorates the plain text that painted first (AGENTS.md
+  // responsiveness principle): tokens start null so the very first render is the
+  // plain string, and a `cancelled` flag drops a stale tokenization when the
+  // selection moves on before Shiki answers — the same supersede-on-move pattern
+  // the App-level preview fetch uses. Null stays null for `'txt'`, an unknown
+  // grammar, or a still-pending tokenization, so those render plain throughout.
+  const [tokenLines, setTokenLines] = useState<ThemedToken[][] | null>(null)
+  useEffect(() => {
+    setTokenLines(null)
+    let cancelled = false
+    const joinedWindow = preview.lines.map((line) => line.text).join('\n')
+    tokenizePreviewLines(joinedWindow, preview.language, preview.lines.length)
+      .then((tokens) => {
+        if (!cancelled) setTokenLines(tokens)
+      })
+      .catch(() => {
+        // Tokenization failed — leave the plain text that is already on screen.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [preview.path, preview.language, preview.lines])
+
   return (
     <div className="py-2">
-      {preview.lines.map((line) => (
+      {preview.lines.map((line, lineIndex) => (
         <div key={line.number} className="flex">
           <span className="w-12 flex-none px-2 text-right text-[11px] tabular-nums text-faint select-none">
             {line.number}
@@ -110,7 +135,17 @@ function TextPreviewView({ preview, wrapText }: { preview: Preview; wrapText: bo
               wrapText ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
             }`}
           >
-            {line.text}
+            {tokenLines === null
+              ? line.text
+              : tokenLines[lineIndex].map((token, tokenIndex) => (
+                  <span
+                    key={tokenIndex}
+                    className="shiki-token"
+                    style={token.htmlStyle as CSSProperties}
+                  >
+                    {token.content}
+                  </span>
+                ))}
           </span>
         </div>
       ))}

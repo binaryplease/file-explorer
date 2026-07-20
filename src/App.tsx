@@ -26,6 +26,7 @@ import { useViewSettings } from './lib/viewSettings'
 import { useApiBase } from './lib/apiBase'
 import { createUrlFocusNavigation, type FocusNavigation } from './lib/focusNavigation'
 import { useResizableSplit } from './lib/resizableSplit'
+import { warmHighlighter } from './lib/highlighter'
 
 function baseName(path: string): string {
   const lastSlashIndex = path.lastIndexOf('/')
@@ -127,6 +128,14 @@ export function App({
   useEffect(() => {
     void loadListing(focusPath)
   }, [focusPath, loadListing])
+
+  // Warm the syntax highlighter off the first paint (AGENTS.md responsiveness
+  // principle): the engine and common grammars load in the background so the
+  // first text preview a user selects does not pay for them. Fire-and-forget —
+  // a preview that arrives first simply awaits the same singleton promise.
+  useEffect(() => {
+    warmHighlighter()
+  }, [])
 
   // Opening straight onto a file (the embedded "preview this file" deep-open)
   // must show it, not just highlight it — so the preview column starts open. A

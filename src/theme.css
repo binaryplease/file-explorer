@@ -68,6 +68,20 @@
   }
 }
 
+/* Syntax highlighting (Shiki, dual-theme). Each token span carries its own
+   `--shiki-light` / `--shiki-dark` custom properties from the highlighter
+   (defaultColor false); the active one is chosen here per theme, mirroring the
+   dark-default / [data-theme="light"] override discipline the palette above
+   uses — and nightshift-ui's per-theme `--hl-*` tokens. Dark is the fallback,
+   so an unset or `dark` theme paints the dark grammar colors. */
+.shiki-token {
+  color: var(--shiki-dark);
+}
+
+[data-theme="light"] .shiki-token {
+  color: var(--shiki-light);
+}
+
 /* Light grove — same character (blue dirs, green exec, amber matches, the
    pink→violet size bars), retuned for legible contrast on a paper-light
    surface. Unlayered, so it wins over the @layer theme :root defaults. */
