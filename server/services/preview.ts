@@ -1,7 +1,11 @@
 import { extname } from 'node:path'
 import type { DirectoryEntry } from '../../shared/filesystem.schema'
 import type { DirectorySummary, Preview } from '../../shared/preview.schema'
-import type { FilesystemService } from './filesystem'
+import type { FilesystemService, OpenReadableFileResult } from './filesystem'
+
+// The success half of what the filesystem service hands over: an opened file,
+// carrying the verified descriptor when confinement is on.
+type OpenedFile = Extract<OpenReadableFileResult, { ok: true }>
 
 // Bounded-read preview of one entry (AGENTS.md responsiveness principle: the
 // panel is enrichment — it never blocks a listing, and it never reads more than
@@ -139,17 +143,33 @@ function emptyPreview(relativePath: string): Preview {
 export function createPreviewService(options: { filesystemService: FilesystemService }) {
   const { filesystemService } = options
 
-  async function previewFile(relativePath: string, absolutePath: string): Promise<Preview> {
-    const preview = emptyPreview(relativePath)
-    const file = Bun.file(absolutePath)
-    preview.sizeBytes = file.size
+  // The head read, bounded to `PREVIEW_HEAD_BYTES` whichever source it comes
+  // from. Confined, `handle` is the descriptor the filesystem service verified,
+  // and the bytes are read positionally from it — never by re-opening the path,
+  // which is what would reintroduce the check/use gap the raw endpoint closes.
+  // Unconfined there is no handle and nothing to confine, so the read stays the
+  // BunFile slice it has always been.
+  async function readBoundedHead(source: OpenedFile): Promise<Uint8Array> {
+    if (source.handle === null) {
+      const file = Bun.file(source.absolutePath)
+      return new Uint8Array(await file.slice(0, PREVIEW_HEAD_BYTES).arrayBuffer())
+    }
+    const headBuffer = new Uint8Array(Math.min(PREVIEW_HEAD_BYTES, source.sizeBytes))
+    const { bytesRead } = await source.handle.read(headBuffer, 0, headBuffer.length, 0)
+    return headBuffer.subarray(0, bytesRead)
+  }
 
-    if (file.size === 0) {
+  async function previewFile(relativePath: string, source: OpenedFile): Promise<Preview> {
+    const preview = emptyPreview(relativePath)
+    const sizeBytes = source.sizeBytes
+    preview.sizeBytes = sizeBytes
+
+    if (sizeBytes === 0) {
       return { ...preview, kind: 'empty', note: 'This file is empty.' }
     }
 
     if (IMAGE_EXTENSIONS.has(extname(relativePath).toLowerCase())) {
-      if (file.size > IMAGE_MAX_BYTES) {
+      if (sizeBytes > IMAGE_MAX_BYTES) {
         return {
           ...preview,
           kind: 'too-large',
@@ -165,7 +185,7 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
 
     let headBytes: Uint8Array
     try {
-      headBytes = new Uint8Array(await file.slice(0, PREVIEW_HEAD_BYTES).arrayBuffer())
+      headBytes = await readBoundedHead(source)
     } catch {
       return { ...preview, note: 'This file could not be read.' }
     }
@@ -181,7 +201,7 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
     const decodedHead = new TextDecoder('utf-8').decode(headBytes)
     const { lines, isTruncated, totalLineCount } = toPreviewLines(
       decodedHead,
-      file.size > headBytes.length,
+      sizeBytes > headBytes.length,
     )
     return { ...preview, kind: 'text', lines, isTruncated, totalLineCount }
   }
@@ -190,9 +210,15 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
   // socket, a broken link — is a successful preview carrying a marker, not an
   // error: the panel always has something honest to render.
   async function previewEntry(relativePath: string): Promise<PreviewServiceResult> {
-    const resolvedFile = await filesystemService.resolveFile(relativePath)
+    const resolvedFile = await filesystemService.openReadableFile(relativePath)
     if (resolvedFile.ok) {
-      return { ok: true, preview: await previewFile(relativePath, resolvedFile.absolutePath) }
+      try {
+        return { ok: true, preview: await previewFile(relativePath, resolvedFile) }
+      } finally {
+        // Confined, the service handed over an open descriptor; the preview is
+        // the only reader of it and owns closing it.
+        await resolvedFile.handle?.close()
+      }
     }
     if (resolvedFile.reason === 'outside-root') return { ok: false, reason: 'outside-root' }
     // A blocked entry is described, not refused. Reading *through* the symlink

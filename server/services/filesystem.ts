@@ -1,6 +1,7 @@
-import { realpathSync, statSync } from 'node:fs'
+import { constants as fileSystemConstants, realpathSync, statSync } from 'node:fs'
 import type { Dirent, Stats } from 'node:fs'
-import { lstat, readdir, realpath, stat } from 'node:fs/promises'
+import { lstat, open, readdir, realpath, stat } from 'node:fs/promises'
+import type { FileHandle } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { DirectoryEntry, DirectoryListing } from '../../shared/filesystem.schema'
 import type { SearchNode, SearchSubtreeResult } from '../../shared/search.schema'
@@ -32,8 +33,22 @@ export type ReadFileFailureReason =
   | 'not-readable'
 
 export type ResolveFileResult =
-  | { ok: true; absolutePath: string }
+  | { ok: true; absolutePath: string; sizeBytes: number }
   | { ok: false; reason: ReadFileFailureReason }
+
+// A file that has been *opened*, not merely resolved — see `openReadableFile`.
+// Confined, `handle` is an open descriptor whose containment has been verified
+// and which the caller must read the bytes from, then close. Unconfined there
+// is nothing to confine, so `handle` is null and the caller reads by path
+// exactly as before (ADR-0024: the property is emitted either way).
+export type OpenReadableFileResult =
+  | { ok: true; absolutePath: string; sizeBytes: number; handle: FileHandle | null }
+  | { ok: false; reason: ReadFileFailureReason }
+
+// `O_NONBLOCK` so that opening a FIFO or a device node cannot park the request
+// forever waiting for a writer: the kind verdict below rejects them anyway, but
+// only once the open has returned. Harmless for regular files.
+const READ_ONLY_OPEN_FLAGS = fileSystemConstants.O_RDONLY | fileSystemConstants.O_NONBLOCK
 
 // Opening reuses the file resolution failures and adds one for a launcher that
 // couldn't be spawned (e.g. no `xdg-open` on PATH).
@@ -309,8 +324,17 @@ export function createFilesystemService(options: {
     }
   }
 
-  // Resolves a relative path to an absolute file path for serving its bytes.
-  // Same confinement as listings: paths that escape the root are rejected.
+  // Resolves a relative path to an absolute file path. Same confinement as
+  // listings: paths that escape the root are rejected.
+  //
+  // This returns a *string*, so confined callers that go on to read bytes must
+  // not use it — between this check and their open, a path component can be
+  // swapped for a symlink leaving the root. `openReadableFile` below exists for
+  // exactly that case and hands back the checked descriptor instead. What is
+  // left here is `openFile`, which hands the path to the OS launcher: that
+  // gap is irreducible (the launcher takes a path, and re-resolves it in
+  // another process), and it opens the file as the user in their own session
+  // rather than serving its bytes over HTTP.
   async function resolveFile(requestedRelativePath: string): Promise<ResolveFileResult> {
     const absolutePath = resolveWithinRoot(requestedRelativePath)
     if (absolutePath === null) return { ok: false, reason: 'outside-root' }
@@ -329,7 +353,108 @@ export function createFilesystemService(options: {
     if (confine && !(await isRealPathWithinRoot(absolutePath)))
       return { ok: false, reason: 'symlink-escapes-root' }
     if (!entryInfo.isFile()) return { ok: false, reason: 'not-a-file' }
-    return { ok: true, absolutePath }
+    return { ok: true, absolutePath, sizeBytes: entryInfo.size }
+  }
+
+  // Containment for a file that is already *open*, asked of the descriptor
+  // rather than of the path that produced it — the difference that closes the
+  // check/use gap.
+  //
+  // Linux publishes the kernel's own name for an open file at
+  // `/proc/self/fd/<fd>`. Resolving that magic link asks the kernel where *this
+  // inode* lives; there is no user-space path walk in it, so there is no window
+  // in which a component can be swapped for a symlink. A `realpath()` of the
+  // requested path answers a different, weaker question — "where does this name
+  // point *right now*" — which is precisely what an attacker with write access
+  // to the tree can change between the answer and the read.
+  //
+  // Where `/proc` is absent (macOS, BSD) there is no such primitive in Node, so
+  // fall back to resolving the path and pinning the result to the descriptor by
+  // identity: the resolved path must be inside the root *and* name the very
+  // inode the handle holds. A swap is then still caught unless the attacker can
+  // also reproduce the device/inode pair, which is strictly harder than today's
+  // bare re-open by path.
+  async function isOpenHandleWithinRoot(
+    handle: FileHandle,
+    absolutePath: string,
+    handleInfo: Stats,
+  ): Promise<boolean> {
+    try {
+      const kernelNameForHandle = await realpath(`/proc/self/fd/${handle.fd}`)
+      return isPathWithin(rootRealPath!, kernelNameForHandle)
+    } catch {
+      // No /proc (or the entry is unnamed): fall back to path + identity.
+    }
+    try {
+      const resolvedPath = await realpath(absolutePath)
+      if (!isPathWithin(rootRealPath!, resolvedPath)) return false
+      const resolvedInfo = await stat(resolvedPath)
+      return resolvedInfo.dev === handleInfo.dev && resolvedInfo.ino === handleInfo.ino
+    } catch {
+      // Vanished mid-check. Deny: confinement must not depend on winning a race.
+      return false
+    }
+  }
+
+  // Resolves a file *and opens it*, so the caller can serve the bytes of the
+  // descriptor that passed the containment check instead of re-opening the path
+  // afterwards. `resolveFile` hands back a string, and a string has to be
+  // resolved again at the point of use — between the two, an attacker holding
+  // write access to the served tree can swap a path component for a symlink
+  // pointing out of the root and have the out-of-confinement bytes served. This
+  // returns the handle itself, so there is no second lookup to poison.
+  //
+  // Unconfined there is nothing to confine, and this must stay exactly as cheap
+  // as it was: no open, no descriptor, no extra syscall — the caller reads by
+  // path as before.
+  async function openReadableFile(
+    requestedRelativePath: string,
+  ): Promise<OpenReadableFileResult> {
+    if (!confine) {
+      const resolved = await resolveFile(requestedRelativePath)
+      if (!resolved.ok) return { ok: false, reason: resolved.reason }
+      return {
+        ok: true,
+        absolutePath: resolved.absolutePath,
+        sizeBytes: resolved.sizeBytes,
+        handle: null,
+      }
+    }
+
+    const absolutePath = resolveWithinRoot(requestedRelativePath)
+    if (absolutePath === null) return { ok: false, reason: 'outside-root' }
+
+    let handle: FileHandle
+    try {
+      handle = await open(absolutePath, READ_ONLY_OPEN_FLAGS)
+    } catch (openError) {
+      const errorCode = (openError as NodeJS.ErrnoException).code
+      if (errorCode === 'ENOENT' || errorCode === 'ENOTDIR') return { ok: false, reason: 'not-found' }
+      // A directory opened read-only succeeds on Linux and is rejected by the
+      // kind verdict below; where the platform refuses it outright, the same
+      // verdict has to be reached from the error.
+      if (errorCode === 'EISDIR') return { ok: false, reason: 'not-a-file' }
+      return { ok: false, reason: 'not-readable' }
+    }
+
+    try {
+      const handleInfo = await handle.stat()
+      // Confinement outranks the kind verdict and is answered first, exactly as
+      // in `resolveFile`: replying `not-a-file` for an escaping symlink would
+      // disclose that its target is a directory.
+      if (!(await isOpenHandleWithinRoot(handle, absolutePath, handleInfo))) {
+        await handle.close()
+        return { ok: false, reason: 'symlink-escapes-root' }
+      }
+      if (!handleInfo.isFile()) {
+        await handle.close()
+        return { ok: false, reason: 'not-a-file' }
+      }
+      return { ok: true, absolutePath, sizeBytes: handleInfo.size, handle }
+    } catch {
+      await handle.close().catch(() => {})
+      return { ok: false, reason: 'not-readable' }
+    }
   }
 
   // Opens a file with the OS default application on the host machine — the
@@ -744,7 +869,15 @@ export function createFilesystemService(options: {
     }
   }
 
-  return { rootAbsolutePath, confine, listDirectory, resolveFile, openFile, searchSubtree }
+  return {
+    rootAbsolutePath,
+    confine,
+    listDirectory,
+    resolveFile,
+    openReadableFile,
+    openFile,
+    searchSubtree,
+  }
 }
 
 export type FilesystemService = ReturnType<typeof createFilesystemService>

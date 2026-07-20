@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia'
 import { basename } from 'node:path'
+import { Readable } from 'node:stream'
 import type { FilesystemService } from '../services/filesystem'
 import { failureStatusAndMessage } from './failures'
 import {
@@ -158,26 +159,53 @@ export function createFilesystemRoutes(options: { filesystemService: FilesystemS
     .get(
       '/api/fs/raw',
       async ({ query, status }) => {
-        const result = await filesystemService.resolveFile(query.path)
+        const result = await filesystemService.openReadableFile(query.path)
         if (!result.ok) {
           const { statusCode, message } = failureStatusAndMessage(result.reason, query.path)
           return status(statusCode, { error: message })
         }
-        // Bun.file streams the bytes and infers the content type from the
-        // extension — a raw byte-serving endpoint (download/preview). The
-        // explorer's own "open" hands the file to the OS default application via
-        // POST /api/fs/open instead.
+        const rawResponseHeaders = {
+          ...RAW_RESPONSE_SECURITY_HEADERS,
+          'Content-Disposition': attachmentDispositionFor(basename(result.absolutePath)),
+        }
+        // Unconfined: unchanged. Bun.file streams the bytes and infers the
+        // content type from the extension — a raw byte-serving endpoint
+        // (download/preview). The explorer's own "open" hands the file to the OS
+        // default application via POST /api/fs/open instead.
         //
         // Wrapped in a Response only to attach the hardening headers above; the
         // BunFile is still the body, so the bytes stream and are never buffered.
         // The inferred Content-Type rides along with it untouched.
-        const fileHandle = Bun.file(result.absolutePath)
-        return new Response(fileHandle, {
-          headers: {
-            ...RAW_RESPONSE_SECURITY_HEADERS,
-            'Content-Disposition': attachmentDispositionFor(basename(result.absolutePath)),
+        if (result.handle === null) {
+          return new Response(Bun.file(result.absolutePath), { headers: rawResponseHeaders })
+        }
+        // Confined: the bytes come from the descriptor whose containment was
+        // verified, never from a fresh lookup of the path — so a path component
+        // swapped for an escaping symlink after the check cannot change what is
+        // served. `Bun.file(fd)` would stream from the descriptor too, but Bun
+        // never closes a descriptor it did not open, so it leaks one per
+        // request; `createReadStream({ autoClose: true })` closes on both normal
+        // end and client abort. Still a stream — no full-file buffering.
+        //
+        // Content-Type and Content-Length are set explicitly because a
+        // descriptor carries neither a name nor, to Bun, a length. The type is
+        // the same extension inference as above (`Bun.file(path).type` reads no
+        // bytes and never touches the disk), and the length is the fstat of the
+        // validated handle.
+        return new Response(
+          // `node:stream/web`'s ReadableStream and the global one are the same
+          // object at runtime but distinct nominal types to TypeScript.
+          Readable.toWeb(
+            result.handle.createReadStream({ autoClose: true }),
+          ) as unknown as ReadableStream<Uint8Array>,
+          {
+            headers: {
+              ...rawResponseHeaders,
+              'Content-Type': Bun.file(result.absolutePath).type,
+              'Content-Length': String(result.sizeBytes),
+            },
           },
-        })
+        )
       },
       {
         query: ReadFileQuerySchema,

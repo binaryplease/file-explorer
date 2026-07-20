@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { readdirSync } from 'node:fs'
 import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -232,4 +233,47 @@ describe('previewEntry', () => {
     if (result.ok) return
     expect(result.reason).toBe('not-found')
   })
+
+  // Confined, the head is read positionally from the descriptor the filesystem
+  // service verified, not by re-opening the path — the same check/use gap the
+  // raw endpoint closes. The bound must survive that change: a huge file still
+  // costs one 128 KiB read.
+  test('reads only the bounded head of a large file, from the verified descriptor', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    const oneLine = `${'x'.repeat(99)}\n`
+    const hugeFileBytes = oneLine.repeat(20_000) // ~2 MB, well past the 128 KiB head
+    await writeFile(join(rootPath, 'huge.log'), hugeFileBytes)
+
+    const result = await previewService.previewEntry('huge.log')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.preview.kind).toBe('text')
+    expect(result.preview.sizeBytes).toBe(hugeFileBytes.length)
+    // Truncated, line-capped, and starting at byte zero of the file — a
+    // descriptor read that forgot its position would start mid-file instead.
+    expect(result.preview.isTruncated).toBe(true)
+    expect(result.preview.totalLineCount).toBeNull()
+    expect(result.preview.lines.length).toBe(600)
+    expect(result.preview.lines[0]?.text).toBe('x'.repeat(99))
+  })
+
+  test('does not leak a descriptor per preview', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    await writeFile(join(rootPath, 'notes.txt'), 'alpha\nbeta\n')
+    const descriptorsBefore = openDescriptorCount()
+    for (let previewIndex = 0; previewIndex < 20; previewIndex++) {
+      await previewService.previewEntry('notes.txt')
+    }
+    expect(openDescriptorCount()).toBeLessThan(descriptorsBefore + 20)
+  })
 })
+
+// Descriptors this process holds open, used to catch a per-preview leak. Linux
+// only; elsewhere the check degrades to a no-op rather than a false failure.
+function openDescriptorCount(): number {
+  try {
+    return readdirSync('/proc/self/fd').length
+  } catch {
+    return 0
+  }
+}

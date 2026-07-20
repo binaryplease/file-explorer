@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises'
+import { readdirSync } from 'node:fs'
+import { mkdtemp, mkdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Elysia } from 'elysia'
@@ -96,6 +97,118 @@ describe('GET /api/fs/raw hardening', () => {
     expect(response.headers.get('Content-Disposition')).toContain('filename="evil.html"')
   })
 })
+
+// The confined-mode check/use gap: `resolveFile` verified containment and
+// handed back a *path string*, which the raw route then re-opened. An attacker
+// with write access to the served tree could swap a path component for a
+// symlink pointing out of the root in between, so the bytes served came from
+// the escaping target rather than from the entry that passed the check. The
+// endpoint now serves the descriptor it validated, so the swap has nothing left
+// to poison.
+describe('GET /api/fs/raw confined-mode check/use gap', () => {
+  let confinedRoot: string
+  let outsideRoot: string
+  let confinedApplication: ReturnType<typeof createHardenedApplication>
+
+  beforeAll(async () => {
+    const temporaryParent = await realpath(await mkdtemp(join(tmpdir(), 'binp-fex-toctou-')))
+    confinedRoot = join(temporaryParent, 'served')
+    outsideRoot = join(temporaryParent, 'outside')
+    await mkdir(join(confinedRoot, 'swappable'), { recursive: true })
+    await mkdir(outsideRoot, { recursive: true })
+    await writeFile(join(confinedRoot, 'swappable', 'note.txt'), 'INSIDE CONTENT')
+    await writeFile(join(outsideRoot, 'note.txt'), 'OUTSIDE SECRET')
+    await writeFile(join(outsideRoot, 'target.txt'), 'OUTSIDE SECRET')
+    await symlink(join(outsideRoot, 'target.txt'), join(confinedRoot, 'escaping-link.txt'))
+    confinedApplication = createHardenedApplication(confinedRoot)
+  })
+
+  afterAll(async () => {
+    await rm(join(confinedRoot, '..'), { recursive: true, force: true })
+  })
+
+  function requestConfinedRaw(relativePath: string): Promise<Response> {
+    return confinedApplication.handle(
+      new Request(`http://localhost/api/fs/raw?path=${encodeURIComponent(relativePath)}`),
+    )
+  }
+
+  test('serves the checked bytes when a path component is swapped after the check', async () => {
+    // The response resolves — the descriptor is open and verified — but its body
+    // has not been read yet. This is exactly the window the old code lost.
+    const response = await requestConfinedRaw('swappable/note.txt')
+    expect(response.status).toBe(200)
+
+    // The swap: the directory that was walked is replaced by a symlink out of
+    // the served root, so `swappable/note.txt` now names `outside/note.txt`.
+    await rename(join(confinedRoot, 'swappable'), join(confinedRoot, 'swappable.real'))
+    await symlink(outsideRoot, join(confinedRoot, 'swappable'))
+    try {
+      // Re-opening by path at this point would serve the out-of-confinement file.
+      expect(await realpath(join(confinedRoot, 'swappable', 'note.txt'))).toBe(
+        join(outsideRoot, 'note.txt'),
+      )
+      // The descriptor is what is streamed, so the bytes are still the ones that
+      // passed containment.
+      expect(await response.text()).toBe('INSIDE CONTENT')
+    } finally {
+      // Restore even on failure, so one broken assertion cannot cascade into
+      // every later test in this block.
+      await rm(join(confinedRoot, 'swappable'))
+      await rename(join(confinedRoot, 'swappable.real'), join(confinedRoot, 'swappable'))
+    }
+  })
+
+  test('refuses a symlink whose target leaves the root', async () => {
+    const response = await requestConfinedRaw('escaping-link.txt')
+
+    expect(response.status).toBe(403)
+    expect(await response.text()).not.toContain('OUTSIDE SECRET')
+  })
+
+  test('keeps the streamed body, inferred type and length of a contained file', async () => {
+    const response = await requestConfinedRaw('swappable/note.txt')
+
+    expect(response.headers.get('Content-Type')).toContain('text/plain')
+    expect(response.headers.get('Content-Length')).toBe(String('INSIDE CONTENT'.length))
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    expect(response.headers.get('Content-Disposition')).toContain('filename="note.txt"')
+    expect(response.body).not.toBeNull()
+    expect(await response.text()).toBe('INSIDE CONTENT')
+  })
+
+  test('reports a directory as not-a-file rather than opening it for bytes', async () => {
+    const response = await requestConfinedRaw('swappable')
+
+    expect(response.status).toBe(400)
+  })
+
+  test('reports a missing entry as not-found', async () => {
+    const response = await requestConfinedRaw('nope.txt')
+
+    expect(response.status).toBe(404)
+  })
+
+  test('does not leak a descriptor per served request', async () => {
+    const descriptorsBefore = openDescriptorCount()
+    for (let requestIndex = 0; requestIndex < 20; requestIndex++) {
+      await (await requestConfinedRaw('swappable/note.txt')).arrayBuffer()
+    }
+    // Bun never closes a descriptor it did not open, so streaming a raw
+    // `Bun.file(fd)` would leak one per request; the read stream closes it.
+    expect(openDescriptorCount()).toBeLessThan(descriptorsBefore + 20)
+  })
+})
+
+// Descriptors this process holds open, used to catch a per-request leak. Linux
+// only; elsewhere the check degrades to a no-op rather than a false failure.
+function openDescriptorCount(): number {
+  try {
+    return readdirSync('/proc/self/fd').length
+  } catch {
+    return 0
+  }
+}
 
 describe('attachmentDispositionFor', () => {
   test('escapes quotes and backslashes in the quoted form', () => {
