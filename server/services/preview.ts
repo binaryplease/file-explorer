@@ -7,7 +7,11 @@ import type { FilesystemService } from './filesystem'
 // panel is enrichment — it never blocks a listing, and it never reads more than
 // the bounds below no matter how large the file is).
 
-export type PreviewFailureReason = 'outside-root' | 'not-found' | 'not-readable'
+export type PreviewFailureReason =
+  | 'outside-root'
+  | 'symlink-escapes-root'
+  | 'not-found'
+  | 'not-readable'
 
 export type PreviewServiceResult =
   | { ok: true; preview: Preview }
@@ -191,6 +195,10 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
       return { ok: true, preview: await previewFile(relativePath, resolvedFile.absolutePath) }
     }
     if (resolvedFile.reason === 'outside-root') return { ok: false, reason: 'outside-root' }
+    // A confinement refusal is never softened into a directory summary below:
+    // the panel must say why, not quietly show something else.
+    if (resolvedFile.reason === 'symlink-escapes-root')
+      return { ok: false, reason: 'symlink-escapes-root' }
     if (resolvedFile.reason === 'not-found') return { ok: false, reason: 'not-found' }
     if (resolvedFile.reason === 'not-readable') return { ok: false, reason: 'not-readable' }
 
@@ -207,6 +215,8 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
       }
     }
     if (listing.reason === 'outside-root') return { ok: false, reason: 'outside-root' }
+    if (listing.reason === 'symlink-escapes-root')
+      return { ok: false, reason: 'symlink-escapes-root' }
     if (listing.reason === 'not-found') return { ok: false, reason: 'not-found' }
     if (listing.reason === 'not-readable') return { ok: false, reason: 'not-readable' }
     return {

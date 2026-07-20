@@ -38,12 +38,12 @@ afterAll(async () => {
 describe('symlink-escape confinement', () => {
   test('refuses to serve a file through a symlink leaving the root', async () => {
     const result = await filesystemService.resolveFile('escaping-file')
-    expect(result).toEqual({ ok: false, reason: 'outside-root' })
+    expect(result).toEqual({ ok: false, reason: 'symlink-escapes-root' })
   })
 
   test('refuses to list a directory through a symlink leaving the root', async () => {
     const result = await filesystemService.listDirectory('escaping-directory')
-    expect(result).toEqual({ ok: false, reason: 'outside-root' })
+    expect(result).toEqual({ ok: false, reason: 'symlink-escapes-root' })
   })
 
   test('refuses to search a subtree through a symlink leaving the root', async () => {
@@ -54,12 +54,12 @@ describe('symlink-escape confinement', () => {
       showGitignored: false,
       abortSignal: new AbortController().signal,
     })
-    expect(result).toEqual({ ok: false, reason: 'outside-root' })
+    expect(result).toEqual({ ok: false, reason: 'symlink-escapes-root' })
   })
 
   test('refuses to open a file through a symlink leaving the root', async () => {
     const result = await filesystemService.openFile('escaping-file')
-    expect(result).toEqual({ ok: false, reason: 'outside-root' })
+    expect(result).toEqual({ ok: false, reason: 'symlink-escapes-root' })
   })
 
   test('still serves a file reached through a symlink that stays inside the root', async () => {
@@ -85,5 +85,74 @@ describe('symlink-escape confinement', () => {
   test('serves the root itself', async () => {
     const result = await filesystemService.listDirectory('')
     expect(result.ok).toBe(true)
+  })
+})
+
+describe('escaping symlinks are listed loudly, without leaking their target', () => {
+  async function rootEntryNamed(entryName: string) {
+    const result = await filesystemService.listDirectory('')
+    if (!result.ok) throw new Error(`listing the root failed: ${result.reason}`)
+    const found = result.listing.entries.find((candidate) => candidate.name === entryName)
+    if (found === undefined) throw new Error(`no entry named ${entryName} in the root listing`)
+    return found
+  }
+
+  test('an escaping symlink stays visible in the listing rather than being hidden', async () => {
+    // ADR-0025: the row is shown and refused, not quietly dropped — a missing
+    // entry would read as "nothing is there", which is a different lie.
+    const result = await filesystemService.listDirectory('')
+    if (!result.ok) throw new Error(`listing the root failed: ${result.reason}`)
+    const entryNames = result.listing.entries.map((entry) => entry.name)
+    expect(entryNames).toContain('escaping-file')
+    expect(entryNames).toContain('escaping-directory')
+  })
+
+  test('withholds the child count of a directory outside the root', async () => {
+    const escapingDirectory = await rootEntryNamed('escaping-directory')
+    expect(escapingDirectory.escapesRoot).toBe(true)
+    expect(escapingDirectory.childCount).toBeNull()
+    // Not even the kind: reporting `directory` would confirm what the target is.
+    expect(escapingDirectory.kind).toBe('other')
+    expect(escapingDirectory.isSymlink).toBe(true)
+  })
+
+  test('withholds the size and executability of a file outside the root', async () => {
+    const escapingFile = await rootEntryNamed('escaping-file')
+    expect(escapingFile.escapesRoot).toBe(true)
+    expect(escapingFile.sizeBytes).toBeNull()
+    expect(escapingFile.isExecutable).toBe(false)
+    expect(escapingFile.kind).toBe('other')
+  })
+
+  test('a symlink that stays inside the root keeps its metadata', async () => {
+    const containedLink = await rootEntryNamed('contained-link')
+    expect(containedLink.escapesRoot).toBe(false)
+    expect(containedLink.kind).toBe('directory')
+    expect(containedLink.childCount).toBe(1)
+    expect(containedLink.isSymlink).toBe(true)
+  })
+
+  test('ordinary entries are marked as not escaping', async () => {
+    const inside = await rootEntryNamed('inside')
+    expect(inside.escapesRoot).toBe(false)
+    expect(inside.isSymlink).toBe(false)
+  })
+
+  test('search results withhold an escaping symlink target the same way', async () => {
+    const result = await filesystemService.searchSubtree('', {
+      pattern: 'escaping',
+      limit: 20,
+      showHidden: false,
+      showGitignored: false,
+      abortSignal: new AbortController().signal,
+    })
+    if (!result.ok) throw new Error(`search failed: ${result.reason}`)
+    const escapingNodes = result.result.nodes.filter((node) => node.entry.escapesRoot)
+    expect(escapingNodes.length).toBeGreaterThan(0)
+    for (const node of escapingNodes) {
+      expect(node.entry.kind).toBe('other')
+      expect(node.entry.sizeBytes).toBeNull()
+      expect(node.entry.childCount).toBeNull()
+    }
   })
 })

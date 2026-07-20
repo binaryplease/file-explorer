@@ -28,6 +28,15 @@ export const DirectoryEntrySchema = z.object({
   isExecutable: z.boolean().default(false).describe('True when any execute bit is set on a file.'),
   isHidden: z.boolean().default(false).describe('True for dot-files.'),
   isSymlink: z.boolean().default(false).describe('True when the entry itself is a symlink.'),
+  escapesRoot: z
+    .boolean()
+    .default(false)
+    .describe(
+      'True when the entry is a symlink whose target resolves outside the served root. Such ' +
+        'entries are listed rather than hidden, but everything about their target is withheld ' +
+        '(kind `other`, null size and child count) and every attempt to list, read, preview, or ' +
+        'open them is refused with 403.',
+    ),
   isGitignored: z
     .boolean()
     .default(false)

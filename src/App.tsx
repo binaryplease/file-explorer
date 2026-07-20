@@ -8,6 +8,7 @@ import {
   fetchSearchResult,
   openFileWithDefaultApplication,
 } from './lib/api'
+import { confinementRefusalMessage, isConfinementBlocked } from './lib/confinement'
 import {
   buildSearchRows,
   buildTreeRows,
@@ -301,23 +302,53 @@ export function App() {
     [matchPaths, selectedPath],
   )
 
+  // Acting on a symlink that leaves the served root is refused here, before any
+  // request: the server would refuse it too (403), but a blocked row must
+  // explain itself the instant it is acted on, not after a round trip. Returns
+  // true when it handled the interaction by refusing it.
+  const refuseIfBlocked = useCallback(
+    (entryPath: string): boolean => {
+      const row = entryRows.find((entryRow) => entryRow.path === entryPath)
+      if (row === undefined || !isConfinementBlocked(row.entry)) return false
+      setListingError(confinementRefusalMessage(row.entry.name))
+      return true
+    },
+    [entryRows],
+  )
+
+  // A refusal names the row it was raised for, so it must not outlive that
+  // row's selection — a notice about `escaping-directory` still on screen while
+  // `escaping-file` is selected reads as a statement about the wrong entry.
+  // Listing failures are unaffected in practice: a listing that failed has no
+  // rows to move between.
+  useEffect(() => {
+    setListingError(null)
+  }, [selectedPath])
+
   // "Open" hands the file to the OS default application on the host machine
   // (the desktop double-click gesture); a launcher failure surfaces in the same
   // error strip as listing errors.
-  const openFile = useCallback((filePath: string) => {
-    openFileWithDefaultApplication(filePath).catch((openError: unknown) => {
-      setListingError(openError instanceof Error ? openError.message : String(openError))
-    })
-  }, [])
+  const openFile = useCallback(
+    (filePath: string) => {
+      if (refuseIfBlocked(filePath)) return
+      openFileWithDefaultApplication(filePath).catch((openError: unknown) => {
+        setListingError(openError instanceof Error ? openError.message : String(openError))
+      })
+    },
+    [refuseIfBlocked],
+  )
 
   // broot's open_stay (Enter / →): the root line goes to the parent, a
   // directory becomes the new root, a file opens with the OS default app.
   const openSelection = useCallback(() => {
     if (selectedPath === ROOT_LINE_PATH) focusParentDirectory()
     else if (selectedRow === undefined) return
+    // Before the kind branches: a blocked entry is reported as `other`, which
+    // would otherwise fall off the end of this chain and do nothing at all.
+    else if (refuseIfBlocked(selectedRow.path)) return
     else if (selectedRow.entry.kind === 'directory') focusDirectory(selectedRow.path)
     else if (selectedRow.entry.kind === 'file') openFile(selectedRow.path)
-  }, [selectedPath, selectedRow, focusParentDirectory, focusDirectory, openFile])
+  }, [selectedPath, selectedRow, focusParentDirectory, focusDirectory, openFile, refuseIfBlocked])
 
   // broot's back verb: pop the most recent state change — an active filter
   // first, then the focus history (which lives in the browser history, so

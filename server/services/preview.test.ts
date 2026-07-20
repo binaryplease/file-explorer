@@ -19,6 +19,7 @@ function entry(overrides: Partial<DirectoryEntry> & { name: string }): Directory
     isHidden: false,
     isSymlink: false,
     isGitignored: false,
+    escapesRoot: false,
     ...overrides,
   }
 }
@@ -201,7 +202,7 @@ describe('previewEntry', () => {
     const result = await previewService.previewEntry('escape/secret.txt')
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.reason).toBe('outside-root')
+    expect(result.reason).toBe('symlink-escapes-root')
   })
 
   test('reports a missing entry as not-found', async () => {

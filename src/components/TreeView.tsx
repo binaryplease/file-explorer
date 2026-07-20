@@ -1,5 +1,11 @@
+import { IconLock } from '@tabler/icons-react'
 import { ROOT_LINE_PATH, type EntryRow, type TreeRowModel } from '../lib/tree'
 import { formatBytes, LARGE_FILE_THRESHOLD_BYTES } from '../lib/format'
+import {
+  CONFINEMENT_BADGE_LABEL,
+  confinementRefusalMessage,
+  isConfinementBlocked,
+} from '../lib/confinement'
 import { ViewChips } from './ViewChips'
 
 function entryNameColorClass(row: EntryRow): string {
@@ -33,16 +39,27 @@ function EntryRowView({
   const showChildCount = isDirectory && !row.isOpen && (row.entry.childCount ?? 0) > 0
   const isLargeFile =
     row.entry.sizeBytes !== null && row.entry.sizeBytes > LARGE_FILE_THRESHOLD_BYTES
+  // A symlink out of the served root. The row stays selectable — selecting it is
+  // how the user reads the explanation — but it never navigates or opens, and
+  // the badge below states the refusal on the row itself (ADR-0031) rather than
+  // leaving the user to discover it by clicking into nothing.
+  const isBlocked = isConfinementBlocked(row.entry)
+  const blockedExplanation = isBlocked ? confinementRefusalMessage(row.entry.name) : undefined
 
   return (
     <div
       data-row-path={row.path}
+      title={blockedExplanation}
+      aria-disabled={isBlocked}
       onClick={() => {
         onSelect(row.path)
-        if (isDirectory) onToggleDirectory(row.path)
+        if (isDirectory && !isBlocked) onToggleDirectory(row.path)
       }}
       onDoubleClick={() => {
-        if (isDirectory) onFocusDirectory(row.path)
+        // Still routed to the handlers when blocked: they own the refusal, so
+        // acting on the row explains itself instead of silently doing nothing.
+        if (isBlocked) onOpenFile(row.path)
+        else if (isDirectory) onFocusDirectory(row.path)
         else if (row.entry.kind === 'file') onOpenFile(row.path)
       }}
       className={`relative grid cursor-pointer grid-cols-[1fr_104px_66px] items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
@@ -83,6 +100,15 @@ function EntryRowView({
         {row.showUnlistedSuffix && <span className="text-faint"> …</span>}
         {showChildCount && (
           <span className="text-[11px] text-faint"> {row.entry.childCount}</span>
+        )}
+        {/* The refusal is stated on the row, not just in a tooltip: the size and
+            child-count columns are blank for these entries, and a reader owed an
+            explanation for the blanks should not have to hover to find one. */}
+        {isBlocked && (
+          <span className="ml-2 inline-flex items-center gap-1 rounded-[3px] bg-inset px-1.5 py-px align-middle text-[10.5px] text-dim">
+            <IconLock size={11} stroke={1.8} aria-hidden />
+            {CONFINEMENT_BADGE_LABEL}
+          </span>
         )}
       </span>
       {showSizes && row.barFraction !== null ? (

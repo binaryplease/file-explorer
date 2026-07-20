@@ -8,8 +8,14 @@ import { fuzzyScore } from '../../shared/fuzzy'
 import { isPathIgnored, loadIgnoreFile, type IgnoreFile } from './ignore'
 import { openPathWithDefaultApplication } from './open'
 
+// `outside-root` is the lexical escape (`../../etc/passwd`) — a malformed
+// request. `symlink-escapes-root` is a path that is lexically contained but
+// whose real path leaves the root: it names a real entry the user can see in
+// the tree, so it is refused separately and explicitly rather than being
+// folded into "bad path" (the user has to understand *why* it is not allowed).
 export type ListDirectoryFailureReason =
   | 'outside-root'
+  | 'symlink-escapes-root'
   | 'not-found'
   | 'not-a-directory'
   | 'not-readable'
@@ -18,7 +24,12 @@ export type ListDirectoryResult =
   | { ok: true; listing: DirectoryListing }
   | { ok: false; reason: ListDirectoryFailureReason }
 
-export type ReadFileFailureReason = 'outside-root' | 'not-found' | 'not-a-file' | 'not-readable'
+export type ReadFileFailureReason =
+  | 'outside-root'
+  | 'symlink-escapes-root'
+  | 'not-found'
+  | 'not-a-file'
+  | 'not-readable'
 
 export type ResolveFileResult =
   | { ok: true; absolutePath: string }
@@ -149,6 +160,28 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       // Entry vanished between readdir and lstat; fall through to `other`.
     }
 
+    // An escaping symlink is described loudly but blankly: the row stays in the
+    // listing (ADR-0025 — never hide a thing to say it is unavailable) while
+    // every fact about its target is withheld, including whether it is a file
+    // or a directory. Stat-ing it would follow the link and leak exactly the
+    // metadata the confinement exists to withhold, so this returns first.
+    //
+    // Costs one `realpath` per symlink, and none at all for ordinary entries:
+    // the `isSymlink` above is read from the `lstat` this function already did.
+    if (isSymlink && !(await isRealPathWithinRoot(absolutePath))) {
+      return {
+        name: entryName,
+        kind: 'other',
+        sizeBytes: null,
+        childCount: null,
+        isExecutable: false,
+        isHidden,
+        isSymlink: true,
+        isGitignored: false,
+        escapesRoot: true,
+      }
+    }
+
     try {
       const entryInfo = await stat(absolutePath)
       if (entryInfo.isDirectory()) {
@@ -167,6 +200,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
           isHidden,
           isSymlink,
           isGitignored: false,
+          escapesRoot: false,
         }
       }
       if (entryInfo.isFile()) {
@@ -179,6 +213,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
           isHidden,
           isSymlink,
           isGitignored: false,
+          escapesRoot: false,
         }
       }
     } catch {
@@ -193,6 +228,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       isHidden,
       isSymlink,
       isGitignored: false,
+      escapesRoot: false,
     }
   }
 
@@ -209,7 +245,8 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       if (errorCode === 'ENOTDIR') return { ok: false, reason: 'not-a-directory' }
       return { ok: false, reason: 'not-readable' }
     }
-    if (!(await isRealPathWithinRoot(absolutePath))) return { ok: false, reason: 'outside-root' }
+    if (!(await isRealPathWithinRoot(absolutePath)))
+      return { ok: false, reason: 'symlink-escapes-root' }
 
     const { ignoreChain, isWithinIgnoredDirectory } = await buildIgnoreContext(absolutePath)
     const entries = await Promise.all(
@@ -246,7 +283,8 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       if (errorCode === 'ENOENT' || errorCode === 'ENOTDIR') return { ok: false, reason: 'not-found' }
       return { ok: false, reason: 'not-readable' }
     }
-    if (!(await isRealPathWithinRoot(absolutePath))) return { ok: false, reason: 'outside-root' }
+    if (!(await isRealPathWithinRoot(absolutePath)))
+      return { ok: false, reason: 'symlink-escapes-root' }
     return { ok: true, absolutePath }
   }
 
@@ -365,7 +403,7 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       return { ok: false, reason: 'not-readable' }
     }
     if (!(await isRealPathWithinRoot(searchRootAbsolutePath)))
-      return { ok: false, reason: 'outside-root' }
+      return { ok: false, reason: 'symlink-escapes-root' }
 
     const startedAt = performance.now()
     const goodEnoughDeadline = startedAt + SEARCH_TIME_BUDGET_MILLISECONDS
@@ -601,6 +639,10 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
       if (line.kind === 'directory' && line.childIndexes === null) await loadChildren(lineIndex)
       const unlisted =
         line.kind === 'directory' ? line.childIndexes!.length - line.nextChildIndex : 0
+      // Search results resolve symlinks to show what they point at, so they
+      // need the same withholding as a listing: check before the stat below,
+      // never after.
+      const escapesRoot = line.isSymlink && !(await isRealPathWithinRoot(line.absolutePath))
       let entry: DirectoryEntry = {
         name: line.name,
         kind: line.kind === 'directory' ? 'directory' : 'other',
@@ -610,8 +652,9 @@ export function createFilesystemService(options: { rootAbsolutePath: string }) {
         isSymlink: line.isSymlink,
         isHidden: line.isHidden,
         isGitignored: line.isGitignored,
+        escapesRoot,
       }
-      if (line.kind === 'file' || (line.kind === 'other' && line.isSymlink)) {
+      if (!escapesRoot && (line.kind === 'file' || (line.kind === 'other' && line.isSymlink))) {
         try {
           const entryInfo = await stat(line.absolutePath)
           if (entryInfo.isDirectory()) {
