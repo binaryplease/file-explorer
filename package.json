@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "bunx concurrently -k -n server,client \"bun --watch server/index.ts\" \"bunx vite\"",
+    "dev": "bun scripts/dev.ts",
+    "dev:ports": "bun scripts/dev-ports.ts",
     "dev:server": "bun --watch server/index.ts",
     "dev:client": "bunx vite",
     "build": "bunx vite build && NODE_ENV=production bun build server/index.ts --outdir dist/server --target bun --sourcemap=linked --production",

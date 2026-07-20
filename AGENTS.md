@@ -58,12 +58,20 @@ Via mise (`.mise.toml`):
 
 | Command | Description |
 |---|---|
-| `mise run dev` | Start Elysia (:3000) + Vite (:5173) concurrently. Open http://localhost:5173. |
+| `mise run dev` | Resolve free ports, then start Elysia (:3000) + Vite (:5173) concurrently. Open http://localhost:5173. |
+| `mise run dev:ports` | Probe the canonical dev ports and print the assignment (no servers started). |
 | `mise run dev:server` | Elysia only. |
 | `mise run dev:client` | Vite only. |
 | `mise run build` | Build client (Vite → `dist/client/`) + server (Bun → `dist/server/`). |
 | `mise run start` | Production server. |
 | `mise run typecheck` | `tsc --noEmit`. |
+
+Ports are resolved before either process binds (`scripts/dev-ports.ts`): if 3000
+or 5173 is taken, the next free port is chosen, announced on stdout, and pinned
+into both processes via `PORT` / `VITE_PORT` / `VITE_API_TARGET`. This is not an
+ADR-0018 exception — reassignment happens *before* startup and is never silent;
+both binds stay strict (`strictPort: true`, no `reusePort`), so a port stolen
+after the probe is still a fatal error.
 
 In dev, Vite proxies `/api/*` to Elysia on :3000. In production Elysia serves
 `dist/client/` directly (single binary).

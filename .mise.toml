@@ -10,8 +10,12 @@ NODE_ENV = "development"
 # EXPLORER_ROOT = "/path/to/serve"
 
 [tasks.dev]
-description = "Start dev servers (Elysia + Vite) concurrently"
-run = 'bunx concurrently -k -n server,client "bun --watch server/index.ts" "bunx vite"'
+description = "Resolve free ports, then start dev servers (Elysia + Vite)"
+run = "bun scripts/dev.ts"
+
+[tasks."dev:ports"]
+description = "Probe the canonical dev ports and report the assignment"
+run = "bun scripts/dev-ports.ts"
 
 [tasks."dev:server"]
 description = "Start Elysia server in watch mode"
