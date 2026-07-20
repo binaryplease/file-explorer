@@ -126,3 +126,17 @@ Not yet wired. When the app is real, follow **ADR-0002** (Deploy Coordinator:
 Nix flake package + NixOS module or GHCR Docker image, Caddy vhost) and
 **ADR-0008** (GHCR package name = repo name, no suffix). Add `flake.nix`,
 `.github/workflows/`, and a `Caddyfile` then.
+
+**Binding a non-loopback `HOST` fails closed (binding).** The Host-header guard
+is a DNS-rebinding defence against *browsers*; it is not access control, because
+any non-browser peer can send `Host: localhost` and pass it. The loopback bind
+is what keeps this unauthenticated filesystem API off the network — so
+`server/services/bind-exposure.ts` refuses to start (fatal, ADR-0018) when
+`HOST` is non-loopback and `EXPLORER_ALLOWED_HOSTS` is empty. The documented
+`HOST=0.0.0.0`-behind-Caddy deployment therefore requires the operator to
+(a) front the port with an **authenticating** reverse proxy and (b) name the
+served host(s) in `EXPLORER_ALLOWED_HOSTS` as the acknowledgement. Non-loopback
+plus `EXPLORER_CONFINE=false` still starts, but warns loudly: unconfined mode
+resolves absolute paths, so the whole filesystem — not just `EXPLORER_ROOT` — is
+reachable. `HOST=127.0.0.1` (the default) is unaffected and starts silently.
+The decision is made once at startup, never per request.

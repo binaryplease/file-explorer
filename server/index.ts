@@ -4,6 +4,7 @@ import { openapi } from '@elysiajs/openapi'
 import { z } from 'zod/v4'
 import { additionalAllowedHosts, config, isDev } from './config'
 import { createTrustedHostGuard } from './services/trusted-host'
+import { createBindExposurePolicy } from './services/bind-exposure'
 import { DiscoveryDocSchema, HealthResponseSchema } from './routes/discovery.schema'
 import { createFilesystemRoutes } from './routes/filesystem'
 import { createPreviewRoutes } from './routes/preview'
@@ -118,6 +119,15 @@ if (!isDev) {
     return Bun.file(join(clientDirectory, 'index.html'))
   })
 }
+
+// ADR-0018: binding a non-loopback address publishes an unauthenticated
+// filesystem API, so it is a fatal startup error unless the operator named the
+// served hosts. Decided once, here, before we ever bind — never per request.
+createBindExposurePolicy().enforce({
+  bindHost: config.HOST,
+  additionalAllowedHosts,
+  isConfined: config.EXPLORER_CONFINE,
+})
 
 // ADR-0018: a port conflict is a fatal startup error. Elysia's listen surfaces
 // EADDRINUSE by default — do not swallow it.

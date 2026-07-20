@@ -54,6 +54,17 @@ the same-origin policy stops protecting the responses. `EXPLORER_ALLOWED_HOSTS`
 (comma-separated) is the deliberate opt-out for a `HOST=0.0.0.0`-behind-Caddy
 deployment; anything not loopback and not named there gets a 421.
 
+The Host check only works against **browsers**, which cannot forge a Host
+header — it is not access control, since any other client can send
+`Host: localhost` and pass it. What keeps the network out is the loopback bind,
+so removing it is treated as a deliberate act: with a non-loopback `HOST` and an
+empty `EXPLORER_ALLOWED_HOSTS`, the server **refuses to start**. To deploy that
+way, front the port with an *authenticating* reverse proxy and name the host(s)
+it serves in `EXPLORER_ALLOWED_HOSTS`. Doing so while `EXPLORER_CONFINE` is off
+starts with a warning: unconfined mode resolves absolute paths, so the whole
+filesystem readable by the server's user is reachable, not just
+`EXPLORER_ROOT`.
+
 `EXPLORER_CONFINE` is **not** that control, which is why it defaults to off:
 `EXPLORER_ROOT` defaults to the user's home directory, so a confined server
 still exposes `~/.ssh` and `~/.gnupg` to anything that gets past the origin

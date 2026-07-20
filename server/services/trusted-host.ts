@@ -35,8 +35,10 @@ export function hostnameFromHostHeader(hostHeader: string): string {
   return colonIndex === -1 ? trimmedHostHeader : trimmedHostHeader.slice(0, colonIndex)
 }
 
-// The whole 127.0.0.0/8 block is loopback, not just 127.0.0.1.
-function isLoopbackAddress(hostname: string): boolean {
+// The whole 127.0.0.0/8 block is loopback, not just 127.0.0.1. Exported because
+// the startup exposure policy (services/bind-exposure.ts) asks the same question
+// of the *bind* address that this file asks of the Host header.
+export function isLoopbackAddress(hostname: string): boolean {
   if (LOOPBACK_HOSTNAMES.has(hostname)) return true
   const octets = hostname.split('.')
   if (octets.length !== 4) return false

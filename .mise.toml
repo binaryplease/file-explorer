@@ -18,7 +18,9 @@ NODE_ENV = "development"
 
 # Extra Host header values to answer for, beyond loopback names. Empty means
 # loopback only, which is what closes DNS rebinding — see the security model in
-# README.md. Only needed for a HOST=0.0.0.0-behind-Caddy deployment.
+# README.md. Only needed for a HOST=0.0.0.0-behind-Caddy deployment — and there
+# it is mandatory: a non-loopback HOST with this unset is a fatal startup error,
+# because binding off loopback publishes an unauthenticated filesystem API.
 # EXPLORER_ALLOWED_HOSTS = "files.example.com"
 
 [tasks.dev]
