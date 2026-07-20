@@ -3,8 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 
 const KEY_HINTS: Array<{ keyLabel: string; action: string }> = [
   { keyLabel: '↑↓', action: 'move' },
-  { keyLabel: '↵ →', action: 'open' },
-  { keyLabel: '← esc', action: 'back' },
+  { keyLabel: '↵', action: 'open' },
+  { keyLabel: 'esc', action: 'back' },
   { keyLabel: 'tab', action: 'next match' },
   { keyLabel: '^d ^u', action: 'page' },
   { keyLabel: '^← ^→', action: 'preview' },

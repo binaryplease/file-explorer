@@ -334,7 +334,7 @@ export function App() {
     [refuseIfBlocked],
   )
 
-  // broot's open_stay (Enter / →): the root line goes to the parent, a
+  // broot's open_stay (Enter): the root line goes to the parent, a
   // directory becomes the new root, a file opens with the OS default app.
   const openSelection = useCallback(() => {
     if (selectedPath === ROOT_LINE_PATH) focusParentDirectory()
@@ -432,8 +432,6 @@ export function App() {
   useEffect(() => {
     function handleKeyDown(keyboardEvent: KeyboardEvent) {
       const { key } = keyboardEvent
-      const inputTarget =
-        keyboardEvent.target instanceof HTMLInputElement ? keyboardEvent.target : null
 
       const searchInputElement = searchInputRef.current
       const isSearchInputFocused =
@@ -516,16 +514,6 @@ export function App() {
       } else if (key === 'Enter') {
         keyboardEvent.preventDefault()
         openSelection()
-      } else if (key === 'ArrowRight') {
-        // Inside a typed pattern the caret moves; at its end, → opens.
-        if (inputTarget !== null && inputTarget.selectionStart !== inputTarget.value.length) return
-        keyboardEvent.preventDefault()
-        openSelection()
-      } else if (key === 'ArrowLeft') {
-        // Inside a typed pattern the caret moves; at its start, ← goes back.
-        if (inputTarget !== null && (inputTarget.selectionStart ?? 0) > 0) return
-        keyboardEvent.preventDefault()
-        goBack()
       } else if (key === 'Escape') {
         // broot-style: Esc first pulls the selection back up to the tree's
         // first line (the current-directory line); only once that line is
