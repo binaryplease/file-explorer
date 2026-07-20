@@ -5,6 +5,7 @@ import {
   type DirectoryListing,
   type OpenFileResult,
 } from '../../shared/filesystem.schema'
+import { PreviewSchema, type Preview } from '../../shared/preview.schema'
 import { SearchSubtreeResultSchema, type SearchSubtreeResult } from '../../shared/search.schema'
 
 // The client-side seam to the server: fetch and parse through the same Zod
@@ -39,6 +40,19 @@ export async function fetchDirectoryListing(relativePath: string): Promise<Direc
   const response = await fetch(`/api/fs/list?path=${encodeURIComponent(relativePath)}`)
   if (!response.ok) return parseErrorResponse(response, 'listing')
   return DirectoryListingSchema.parse(await response.json())
+}
+
+// Preview is enrichment, not navigation: the caller fires it after the tree has
+// painted and aborts it the moment the selection moves on.
+export async function fetchPreview(
+  relativePath: string,
+  abortSignal: AbortSignal,
+): Promise<Preview> {
+  const response = await fetch(`/api/fs/preview?path=${encodeURIComponent(relativePath)}`, {
+    signal: abortSignal,
+  })
+  if (!response.ok) return parseErrorResponse(response, 'preview')
+  return PreviewSchema.parse(await response.json())
 }
 
 export type SearchRequestOptions = {

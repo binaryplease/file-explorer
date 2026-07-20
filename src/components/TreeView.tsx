@@ -112,6 +112,7 @@ type TreeViewProps = {
   showSizes: boolean
   showHidden: boolean
   showGitignored: boolean
+  showPreview: boolean
   selectedPath: string | null
   listingError: string | null
   onSelect: (path: string) => void
@@ -122,6 +123,7 @@ type TreeViewProps = {
   onToggleSizes: () => void
   onToggleHidden: () => void
   onToggleGitignored: () => void
+  onTogglePreview: () => void
 }
 
 export function TreeView({
@@ -132,6 +134,7 @@ export function TreeView({
   showSizes,
   showHidden,
   showGitignored,
+  showPreview,
   selectedPath,
   listingError,
   onSelect,
@@ -142,9 +145,10 @@ export function TreeView({
   onToggleSizes,
   onToggleHidden,
   onToggleGitignored,
+  onTogglePreview,
 }: TreeViewProps) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* View-mode chips ride a slim strip on the tree panel's header, above
           the rows they reconfigure (ADR-0031) — off the tree lines themselves,
           so the root line reads as an ordinary line. */}
@@ -153,9 +157,11 @@ export function TreeView({
           showSizes={showSizes}
           showHidden={showHidden}
           showGitignored={showGitignored}
+          showPreview={showPreview}
           onToggleSizes={onToggleSizes}
           onToggleHidden={onToggleHidden}
           onToggleGitignored={onToggleGitignored}
+          onTogglePreview={onTogglePreview}
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-2.5">

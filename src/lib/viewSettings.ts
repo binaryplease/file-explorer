@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { z } from 'zod/v4'
 
-// Persisted-client-state schema (ADR-0013/0029): the three view-mode toggles
-// that reconfigure the tree. Every field declares a default so a stale
+// Persisted-client-state schema (ADR-0013/0029): the view-mode toggles that
+// reconfigure the tree and its side panels. Every field declares a default so a stale
 // localStorage blob written before the schema grew still parses, filling any
 // newly-added toggle with its default rather than throwing. All three default
 // off — the tree opens as a clean name-only listing until the user opts in.
@@ -10,6 +10,9 @@ export const ViewSettingsSchema = z.object({
   showSizes: z.boolean().default(false),
   showHidden: z.boolean().default(false),
   showGitignored: z.boolean().default(false),
+  // The preview column. Off by default like the rest: the core browse loop
+  // paints alone until the user asks for enrichment.
+  showPreview: z.boolean().default(false),
 })
 export type ViewSettings = z.infer<typeof ViewSettingsSchema>
 

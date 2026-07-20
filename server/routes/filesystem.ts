@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia'
-import { config } from '../config'
-import { createFilesystemService } from '../services/filesystem'
+import { filesystemService } from '../services/instances'
+import { failureStatusAndMessage } from './failures'
 import {
   DirectoryListingSchema,
   FilesystemErrorSchema,
@@ -10,28 +10,6 @@ import {
   ReadFileQuerySchema,
 } from '../../shared/filesystem.schema'
 import { SearchSubtreeQuerySchema, SearchSubtreeResultSchema } from '../../shared/search.schema'
-import type { ListDirectoryFailureReason, ReadFileFailureReason } from '../services/filesystem'
-
-// Created at startup so a bad EXPLORER_ROOT crashes the boot, not a request.
-const filesystemService = createFilesystemService({ rootAbsolutePath: config.EXPLORER_ROOT })
-
-function failureStatusAndMessage(
-  reason: ListDirectoryFailureReason | ReadFileFailureReason,
-  requestedPath: string,
-): { statusCode: 400 | 403 | 404; message: string } {
-  switch (reason) {
-    case 'outside-root':
-      return { statusCode: 400, message: `path escapes the served root: ${requestedPath}` }
-    case 'not-a-directory':
-      return { statusCode: 400, message: `not a directory: ${requestedPath}` }
-    case 'not-a-file':
-      return { statusCode: 400, message: `not a file: ${requestedPath}` }
-    case 'not-found':
-      return { statusCode: 404, message: `no such entry: ${requestedPath}` }
-    case 'not-readable':
-      return { statusCode: 403, message: `entry is not readable: ${requestedPath}` }
-  }
-}
 
 export const filesystemRoutes = new Elysia().get(
   '/api/fs/list',

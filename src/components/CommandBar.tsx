@@ -7,6 +7,7 @@ const KEY_HINTS: Array<{ keyLabel: string; action: string }> = [
   { keyLabel: '← esc', action: 'back' },
   { keyLabel: 'tab', action: 'next match' },
   { keyLabel: '^d ^u', action: 'page' },
+  { keyLabel: '^← ^→', action: 'preview' },
 ]
 
 // A monospace sample whose width, divided by its length, is one glyph's advance.

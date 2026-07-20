@@ -5,6 +5,7 @@ import { z } from 'zod/v4'
 import { config, isDev } from './config'
 import { DiscoveryDocSchema, HealthResponseSchema } from './routes/discovery.schema'
 import { filesystemRoutes } from './routes/filesystem'
+import { previewRoutes } from './routes/preview'
 
 const SERVICE_NAME = 'binp-file-explorer'
 const SERVICE_VERSION = '0.1.0'
@@ -80,6 +81,7 @@ const app = new Elysia()
     },
   })
   .use(filesystemRoutes)
+  .use(previewRoutes)
 
 // In production the built client is served from dist/client (this file runs as
 // dist/server/index.js, so the client sits one directory over). In dev, Vite

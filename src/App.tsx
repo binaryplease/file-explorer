@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DirectoryEntry } from '../shared/filesystem.schema'
+import type { Preview } from '../shared/preview.schema'
 import type { SearchSubtreeResult } from '../shared/search.schema'
 import {
   fetchDirectoryListing,
+  fetchPreview,
   fetchSearchResult,
   openFileWithDefaultApplication,
 } from './lib/api'
@@ -14,6 +16,7 @@ import {
   ROOT_LINE_PATH,
   type EntryRow,
 } from './lib/tree'
+import { PreviewPanel } from './components/PreviewPanel'
 import { TitleBar } from './components/TitleBar'
 import { TreeView } from './components/TreeView'
 import { CommandBar } from './components/CommandBar'
@@ -47,6 +50,12 @@ function measurePageRowCount(): number {
   return Math.max(1, Math.floor(scrollContainer.clientHeight / rowElement.offsetHeight) - 1)
 }
 
+// Holding an arrow key walks the tree faster than any request can answer. The
+// preview request is deferred by this much and the pending one is aborted on
+// every move, so a run of keystrokes costs one preview — the tree paints each
+// row immediately regardless (AGENTS.md responsiveness principle).
+const PREVIEW_SETTLE_MILLISECONDS = 90
+
 export function App() {
   const [rootPath, setRootPath] = useState<string | null>(null)
   const [focusPath, setFocusPath] = useState<string>(readFocusPathFromUrl)
@@ -55,10 +64,15 @@ export function App() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [pattern, setPattern] = useState('')
   const { viewSettings, setViewSettings } = useViewSettings()
-  const { showSizes, showHidden, showGitignored } = viewSettings
+  const { showSizes, showHidden, showGitignored, showPreview } = viewSettings
   const [searchResult, setSearchResult] = useState<SearchSubtreeResult | null>(null)
   const [listingError, setListingError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<Preview | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  const [isPreviewFocused, setIsPreviewFocused] = useState(false)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const { themeMode, setThemeMode } = useTheme()
 
   const loadListing = useCallback(async (relativePath: string) => {
@@ -119,6 +133,48 @@ export function App() {
       })
     return () => abortController.abort()
   }, [pattern, focusPath, showHidden, showGitignored])
+
+  // The preview always describes the selected row; the tree's first line (the
+  // current directory itself) previews that directory.
+  const previewTargetPath =
+    selectedPath === null || selectedPath === ROOT_LINE_PATH ? focusPath : selectedPath
+
+  // Preview is enrichment, never part of the navigation path: the request is
+  // deferred past the paint, aborted the moment the selection moves on, and its
+  // failure degrades to a message in the panel — it never touches the tree.
+  useEffect(() => {
+    if (!showPreview) {
+      setPreview(null)
+      setPreviewError(null)
+      setIsPreviewLoading(false)
+      return
+    }
+    const abortController = new AbortController()
+    setIsPreviewLoading(true)
+    const settleTimer = window.setTimeout(() => {
+      fetchPreview(previewTargetPath, abortController.signal)
+        .then((loadedPreview) => {
+          if (abortController.signal.aborted) return
+          setPreview(loadedPreview)
+          setPreviewError(null)
+          setIsPreviewLoading(false)
+        })
+        .catch((previewFetchError: unknown) => {
+          if (abortController.signal.aborted) return
+          setPreview(null)
+          setPreviewError(
+            previewFetchError instanceof Error
+              ? previewFetchError.message
+              : String(previewFetchError),
+          )
+          setIsPreviewLoading(false)
+        })
+    }, PREVIEW_SETTLE_MILLISECONDS)
+    return () => {
+      window.clearTimeout(settleTimer)
+      abortController.abort()
+    }
+  }, [showPreview, previewTargetPath])
 
   // Browser back/forward walks the focus history naturally.
   useEffect(() => {
@@ -292,6 +348,45 @@ export function App() {
     }))
   }, [setViewSettings])
 
+  // broot's preview column, and its focus model: the panel is a second place
+  // the keyboard can live, so opening it and focusing it are two distinct
+  // steps in each direction.
+  const setPreviewVisible = useCallback(
+    (shouldShowPreview: boolean) => {
+      setViewSettings((previousViewSettings) => ({
+        ...previousViewSettings,
+        showPreview: shouldShowPreview,
+      }))
+    },
+    [setViewSettings],
+  )
+
+  const togglePreview = useCallback(() => {
+    setViewSettings((previousViewSettings) => ({
+      ...previousViewSettings,
+      showPreview: !previousViewSettings.showPreview,
+    }))
+  }, [setViewSettings])
+
+  const focusPreviewPanel = useCallback(() => {
+    previewScrollRef.current?.focus()
+  }, [])
+
+  // Handing the keyboard back to the tree means handing it to the always-active
+  // search input, which is where tree-mode typing belongs.
+  const focusTreeNavigation = useCallback(() => {
+    previewScrollRef.current?.blur()
+    searchInputRef.current?.focus()
+  }, [])
+
+  // Closing the panel while it holds the keyboard would strand focus on a
+  // removed element; pull it back to the tree first.
+  useEffect(() => {
+    if (showPreview || !isPreviewFocused) return
+    setIsPreviewFocused(false)
+    searchInputRef.current?.focus()
+  }, [showPreview, isPreviewFocused])
+
   // Reveal-everything toggle: flip both the hidden and gitignored views in a
   // single stroke. If either is currently off we turn both on; only once both
   // are on does it clear both back off — so the shortcut always lands on a
@@ -316,6 +411,33 @@ export function App() {
       const searchInputElement = searchInputRef.current
       const isSearchInputFocused =
         searchInputElement !== null && document.activeElement === searchInputElement
+
+      // broot's preview chords, one modifier + one arrow, four states:
+      //   closed              + ctrl/cmd-→  open it, keyboard stays in the tree
+      //   open, tree focused  + ctrl/cmd-→  hand the keyboard to the preview
+      //   open, preview focused + ctrl/cmd-←  hand it back to the tree
+      //   open, tree focused  + ctrl/cmd-←  close it
+      // Each direction is two presses end to end, and neither ever skips a step.
+      if (keyboardEvent.ctrlKey || keyboardEvent.metaKey) {
+        if (key === 'ArrowRight') {
+          keyboardEvent.preventDefault()
+          if (!showPreview) setPreviewVisible(true)
+          else focusPreviewPanel()
+          return
+        }
+        if (key === 'ArrowLeft') {
+          keyboardEvent.preventDefault()
+          if (!showPreview) return
+          if (isPreviewFocused) focusTreeNavigation()
+          else setPreviewVisible(false)
+          return
+        }
+      }
+
+      // While the preview holds the keyboard, every other key is the preview's:
+      // arrows scroll it natively, and typing must not be siphoned into the
+      // search field behind it.
+      if (isPreviewFocused) return
 
       // broot's always-active input: a character (or Backspace) typed while the
       // search field isn't focused is redirected into it, so filtering can start
@@ -404,6 +526,11 @@ export function App() {
     isSearching,
     matchPaths,
     selectedPath,
+    showPreview,
+    isPreviewFocused,
+    setPreviewVisible,
+    focusPreviewPanel,
+    focusTreeNavigation,
   ])
 
   const rootName = rootPath === null ? '…' : baseName(rootPath) || rootPath
@@ -415,25 +542,42 @@ export function App() {
     <div className="grid min-h-screen place-items-center bg-void bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(111,183,255,0.08),transparent_55%),radial-gradient(90%_70%_at_80%_120%,rgba(255,110,199,0.06),transparent_60%)] p-[clamp(14px,3vw,40px)] font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
       <div className="flex h-[min(720px,92vh)] w-full max-w-[1080px] flex-col overflow-hidden rounded-[14px] border border-line bg-term shadow-[0_40px_120px_-30px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.05)_inset]">
         <TitleBar rootPath={rootPath} themeMode={themeMode} onSelectThemeMode={setThemeMode} />
-        <TreeView
-          rootFullPath={focusFullPath}
-          isRootLineSelected={selectedPath === ROOT_LINE_PATH}
-          focusEntryCount={focusEntryCount}
-          rows={rows}
-          showSizes={showSizes}
-          showHidden={showHidden}
-          showGitignored={showGitignored}
-          selectedPath={selectedPath}
-          listingError={listingError}
-          onSelect={setSelectedPath}
-          onFocusParent={focusParentDirectory}
-          onToggleDirectory={toggleDirectory}
-          onFocusDirectory={focusDirectory}
-          onOpenFile={openFile}
-          onToggleSizes={toggleSizes}
-          onToggleHidden={toggleHidden}
-          onToggleGitignored={toggleGitignored}
-        />
+        {/* Tree and preview share one row; the preview is a column beside the
+            rows it describes (ADR-0031), never a modal over them. */}
+        <div className="flex min-h-0 flex-1">
+          <TreeView
+            rootFullPath={focusFullPath}
+            isRootLineSelected={selectedPath === ROOT_LINE_PATH}
+            focusEntryCount={focusEntryCount}
+            rows={rows}
+            showSizes={showSizes}
+            showHidden={showHidden}
+            showGitignored={showGitignored}
+            showPreview={showPreview}
+            selectedPath={selectedPath}
+            listingError={listingError}
+            onSelect={setSelectedPath}
+            onFocusParent={focusParentDirectory}
+            onToggleDirectory={toggleDirectory}
+            onFocusDirectory={focusDirectory}
+            onOpenFile={openFile}
+            onToggleSizes={toggleSizes}
+            onToggleHidden={toggleHidden}
+            onToggleGitignored={toggleGitignored}
+            onTogglePreview={togglePreview}
+          />
+          {showPreview && (
+            <PreviewPanel
+              scrollRef={previewScrollRef}
+              isFocused={isPreviewFocused}
+              targetPath={previewTargetPath}
+              preview={preview}
+              previewError={previewError}
+              isLoading={isPreviewLoading}
+              onFocusChange={setIsPreviewFocused}
+            />
+          )}
+        </div>
         <CommandBar
           inputRef={searchInputRef}
           focusLabel={focusLabel}

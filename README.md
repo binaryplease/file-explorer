@@ -50,9 +50,19 @@ server-side with broot's scored-match algorithms re-engineered in TypeScript
 with the best match pre-selected). Pressing `↵`/`→` on a file opens it with the
 operating system's default application on the host machine (via
 `POST /api/fs/open` — this is a local-only, loopback tool, so that's your own
-machine); `/api/fs/raw` still serves raw bytes for download/preview. Not yet built:
-directory sizing, broot's computed screen-fit openness (R8 — manual
-expand/collapse kept for now as a deliberate departure).
+machine); `/api/fs/raw` still serves raw bytes for download/preview. A **preview
+panel** (`GET /api/fs/preview`, `ctrl/cmd-→` to open) shows the head of the
+selected text file, renders small images, summarizes directories, and marks
+binary / too-large / empty / unpreviewable entries rather than dumping bytes —
+reads are bounded, so a 40 GB log previews as cheaply as a 4 KB one, and the
+request is deferred past the paint and aborted the moment the selection moves.
+Not yet built: git status, directory sizing, broot's computed screen-fit
+openness (R8 — manual expand/collapse kept for now as a deliberate departure).
+
+Preview focus follows broot's two-step model: `ctrl/cmd-→` opens the panel
+(keyboard stays in the tree), a second `ctrl/cmd-→` hands the keyboard to the
+panel so the arrows scroll it; `ctrl/cmd-←` hands it back, and a second
+`ctrl/cmd-←` closes the panel.
 
 Deviation from broot's keyboard shortcuts: broot reveals hidden and gitignored
 files through two independent toggles (`:toggle_hidden` / `:toggle_git_ignore`,
