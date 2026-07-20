@@ -1,4 +1,5 @@
 import { Elysia } from 'elysia'
+import { basename } from 'node:path'
 import type { FilesystemService } from '../services/filesystem'
 import { failureStatusAndMessage } from './failures'
 import {
@@ -19,6 +20,63 @@ const CONFINEMENT_NOTE =
   'lexically, or through a symlink pointing outside it — are rejected with 400/403. ' +
   'Unconfined (the default for local-machine use) the root is only the starting anchor: ' +
   'absolute paths outside it resolve, and `path` may itself be absolute.'
+
+// --- Raw-response hardening ---
+//
+// `GET /api/fs/raw` serves arbitrary bytes from the filesystem with a
+// content type inferred from the extension. Left alone, an `.html` or `.svg`
+// file inside the served tree becomes a *document in the explorer's own
+// origin* when navigated to directly, and its script can then call the rest of
+// the read API same-origin (no CORS to stop it) and exfiltrate anything the
+// server can read — the whole filesystem in the default unconfined mode.
+//
+// Three headers close that, and all three are kept because they fail
+// independently:
+//
+//   - `X-Content-Type-Options: nosniff` — the extension-derived type is the
+//     final word; a text file whose bytes look like markup cannot be
+//     re-classified into something renderable.
+//   - `Content-Disposition: attachment` — the decisive one. Disposition is
+//     consulted only for *navigation* responses (Fetch's "process response end
+//     of body" / the download check), so it turns direct navigation into a
+//     download while leaving subresource loads untouched: `<img src>` never
+//     looks at this header, which is why the preview panel keeps rendering.
+//     That asymmetry is exactly the split we want — the preview path is a
+//     subresource, the attack path is a navigation.
+//   - `Content-Security-Policy: sandbox; default-src 'none'` — defence in
+//     depth for any context that renders the bytes anyway (a browser ignoring
+//     disposition, an iframe embed added later). `sandbox` with no
+//     `allow-scripts`/`allow-same-origin` drops the document into an opaque
+//     origin with scripting off, so even a rendered HTML/SVG file has no
+//     origin to attack from. A resource's own CSP does not govern the page
+//     embedding it, so this cannot affect `<img>` rendering either.
+const RAW_RESPONSE_SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "sandbox; default-src 'none'",
+} as const
+
+// `filename="..."` carries the basename for the download. Quotes, backslashes
+// and control characters (a newline would let a crafted name inject a header)
+// are stripped or escaped; the RFC 5987 `filename*` form carries the exact
+// name for non-ASCII basenames, which the bare `filename` cannot express.
+export function attachmentDispositionFor(entryBasename: string): string {
+  const isControlCharacter = (character: string) => {
+    const characterCode = character.charCodeAt(0)
+    return characterCode < 32 || characterCode === 127
+  }
+  const withoutControlCharacters = Array.from(entryBasename).filter(
+    (character) => !isControlCharacter(character),
+  )
+  const quotedAsciiFallback = withoutControlCharacters
+    .map((character) => {
+      if (character.charCodeAt(0) > 126) return '_'
+      if (character === '"' || character === '\\') return `\\${character}`
+      return character
+    })
+    .join('')
+  const exactName = withoutControlCharacters.join('')
+  return `attachment; filename="${quotedAsciiFallback}"; filename*=UTF-8''${encodeURIComponent(exactName)}`
+}
 
 // Factory per ADR-0007, and the seam a host app mounts: the routes take their
 // filesystem service as an argument instead of importing the process-wide
@@ -109,7 +167,17 @@ export function createFilesystemRoutes(options: { filesystemService: FilesystemS
         // extension — a raw byte-serving endpoint (download/preview). The
         // explorer's own "open" hands the file to the OS default application via
         // POST /api/fs/open instead.
-        return Bun.file(result.absolutePath)
+        //
+        // Wrapped in a Response only to attach the hardening headers above; the
+        // BunFile is still the body, so the bytes stream and are never buffered.
+        // The inferred Content-Type rides along with it untouched.
+        const fileHandle = Bun.file(result.absolutePath)
+        return new Response(fileHandle, {
+          headers: {
+            ...RAW_RESPONSE_SECURITY_HEADERS,
+            'Content-Disposition': attachmentDispositionFor(basename(result.absolutePath)),
+          },
+        })
       },
       {
         query: ReadFileQuerySchema,
@@ -118,8 +186,12 @@ export function createFilesystemRoutes(options: { filesystemService: FilesystemS
           summary: 'Serve a file',
           description:
             'Streams one file of the served filesystem, relative to the served root, with a ' +
-            'content type inferred from the extension, for download or preview. ' +
-            CONFINEMENT_NOTE,
+            'content type inferred from the extension, for download or preview. Served with ' +
+            '`X-Content-Type-Options: nosniff`, `Content-Disposition: attachment` and a ' +
+            "`Content-Security-Policy: sandbox; default-src 'none'` so that browser-executable " +
+            'content (HTML, SVG) downloads instead of rendering as a document in the ' +
+            'explorer origin. Subresource loads such as `<img src>` ignore the disposition, ' +
+            `so inline image preview is unaffected. ${CONFINEMENT_NOTE}`,
         },
       },
     )
