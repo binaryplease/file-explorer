@@ -13,6 +13,7 @@ import type { Preview, PreviewKind } from '../../shared/preview.schema'
 import { CONFINEMENT_BADGE_LABEL, confinementRefusalMessage } from '../lib/confinement'
 import { useApiBase, withApiBase } from '../lib/apiBase'
 import { formatBytes } from '../lib/format'
+import { ToggleChip } from './ToggleChip'
 
 // One descriptor per preview kind (ADR-0026): the icon and the label the header
 // badge and the marker block both read from, so they can never disagree.
@@ -93,15 +94,24 @@ function DirectorySummaryView({ preview }: { preview: Preview }) {
   )
 }
 
-function TextPreviewView({ preview }: { preview: Preview }) {
+function TextPreviewView({ preview, wrapText }: { preview: Preview; wrapText: boolean }) {
   return (
     <div className="py-2">
       {preview.lines.map((line) => (
-        <div key={line.number} className="flex whitespace-pre">
+        <div key={line.number} className="flex">
           <span className="w-12 flex-none px-2 text-right text-[11px] tabular-nums text-faint select-none">
             {line.number}
           </span>
-          <span className="pr-4 text-[12px] text-file">{line.text}</span>
+          {/* Soft wrap by default: continuation lines hang under the text,
+              past the fixed number gutter. Off restores exact columns and the
+              panel's horizontal scrollbar for code readers. */}
+          <span
+            className={`min-w-0 pr-4 text-[12px] text-file ${
+              wrapText ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
+            }`}
+          >
+            {line.text}
+          </span>
         </div>
       ))}
       {preview.isTruncated && (
@@ -120,6 +130,12 @@ type PreviewPanelProps = {
   preview: Preview | null
   previewError: string | null
   isLoading: boolean
+  // The column's resolved pixel width — the divider beside it owns the drag; the
+  // panel just fills whatever width it is handed.
+  width: number
+  // Soft-wrap the text preview, and the header toggle that flips it.
+  wrapText: boolean
+  onToggleWrap: () => void
   onFocusChange: (isFocused: boolean) => void
 }
 
@@ -134,6 +150,9 @@ export function PreviewPanel({
   preview,
   previewError,
   isLoading,
+  width,
+  wrapText,
+  onToggleWrap,
   onFocusChange,
 }: PreviewPanelProps) {
   // The image `<img src>` is a server-built path (`/api/fs/raw?...`); like every
@@ -146,12 +165,12 @@ export function PreviewPanel({
 
   return (
     <div
-      // Which side holds the keyboard has to be legible at a glance: the panel
-      // takes the same accent bar the selected tree row wears (ADR-0028's
-      // shared interaction token), on the edge it faces the tree across.
-      className={`flex min-h-0 w-[42%] flex-none flex-col border-l-2 ${
-        isFocused ? 'border-sel-bar bg-term-2' : 'border-line'
-      }`}
+      // The width comes from the divider beside it (the drag lives there); the
+      // panel just fills it. The focus accent lives on the divider's edge now
+      // (ADR-0028's shared interaction token), so the panel only tints its
+      // surface to echo which side holds the keyboard.
+      style={{ width }}
+      className={`flex min-h-0 flex-none flex-col ${isFocused ? 'bg-term-2' : ''}`}
     >
       <div className="flex flex-none items-center gap-2 border-b border-line-2 px-3 py-1.5">
         {descriptor !== null && (
@@ -161,6 +180,18 @@ export function PreviewPanel({
           {headerName}
         </span>
         <span className="flex-1" />
+        {/* The wrap control sits on the region it governs (ADR-0031) — the
+            preview itself — beside the size/kind badges. It only means anything
+            for text, so it rides with the text preview rather than every kind. */}
+        {preview?.kind === 'text' && (
+          <ToggleChip
+            label="wrap"
+            isOn={wrapText}
+            compact
+            title="Soft-wrap long lines. Off shows exact columns with a horizontal scrollbar."
+            onToggle={onToggleWrap}
+          />
+        )}
         {preview?.sizeBytes != null && preview.sizeBytes > 0 && (
           <span className="flex-none text-[11px] tabular-nums text-dim">
             {formatBytes(preview.sizeBytes)}
@@ -184,7 +215,7 @@ export function PreviewPanel({
         ) : preview === null ? (
           <div className="px-4 py-3 text-xs text-faint">{isLoading ? 'reading…' : 'no selection'}</div>
         ) : preview.kind === 'text' ? (
-          <TextPreviewView preview={preview} />
+          <TextPreviewView preview={preview} wrapText={wrapText} />
         ) : preview.kind === 'directory' ? (
           <DirectorySummaryView preview={preview} />
         ) : preview.kind === 'image' && preview.imageUrlPath !== null ? (

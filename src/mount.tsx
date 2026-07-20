@@ -31,12 +31,19 @@ export type FileExplorerProps = {
   // A file to open selected and previewed, relative to the served root. `null`
   // opens the directory with nothing pre-selected.
   initialSelectedPath?: string | null
+  // Called when the explorer's own layered Escape is exhausted — no filter to
+  // clear, the selection already on the root line, and the in-memory focus
+  // history empty. The host wires its modal's close here so the explorer owns
+  // Escape end to end (and can advertise `esc close` truthfully). Omitted, the
+  // final Escape is simply a no-op, as it was before.
+  onRequestClose?: () => void
 }
 
 export function FileExplorer({
   apiBaseUrl = '',
   initialFocusPath = '',
   initialSelectedPath = null,
+  onRequestClose,
 }: FileExplorerProps) {
   const navigation = useMemo(
     () => createInternalFocusNavigation(initialFocusPath),
@@ -44,7 +51,12 @@ export function FileExplorer({
   )
   return (
     <ApiBaseContext.Provider value={apiBaseUrl}>
-      <App navigation={navigation} initialSelectedPath={initialSelectedPath} embedded />
+      <App
+        navigation={navigation}
+        initialSelectedPath={initialSelectedPath}
+        onRequestClose={onRequestClose}
+        embedded
+      />
     </ApiBaseContext.Provider>
   )
 }

@@ -21,6 +21,10 @@ export type FocusNavigation = {
   // change through the subscribed callback, exactly as an external
   // back/forward would — so App has one code path for "focus changed under me".
   back(): void
+  // Whether `back()` has somewhere to go. The embedded Esc seam reads this to
+  // decide between popping focus history and handing an exhausted Escape to the
+  // host's `onRequestClose`, and to keep the command-bar hint honest.
+  canGoBack(): boolean
   // Subscribe to focus changes that originate outside App (browser
   // back/forward, or `back()`). Returns an unsubscribe.
   subscribe(onExternalFocus: (focusPath: string) => void): () => void
@@ -47,6 +51,13 @@ export function createUrlFocusNavigation(): FocusNavigation {
       // Round-trips through the browser: history.back() fires popstate, which
       // the subscribed handler turns into a focus change.
       window.history.back()
+    },
+    canGoBack() {
+      // The browser owns this history and does not expose whether a prior
+      // in-app entry exists. The standalone app never wires `onRequestClose`,
+      // so this answer only ever gates a browser `back()` that is itself a
+      // no-op at the first entry — reporting "yes" keeps today's behaviour.
+      return true
     },
     subscribe(onExternalFocus) {
       function handlePopState() {
@@ -77,6 +88,9 @@ export function createInternalFocusNavigation(initialFocusPath: string): FocusNa
       if (focusStack.length <= 1) return
       focusStack.pop()
       notifyExternalFocus?.(focusStack[focusStack.length - 1]!)
+    },
+    canGoBack() {
+      return focusStack.length > 1
     },
     subscribe(onExternalFocus) {
       notifyExternalFocus = onExternalFocus

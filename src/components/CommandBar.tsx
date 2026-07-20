@@ -1,14 +1,21 @@
 import { IconChevronRight } from '@tabler/icons-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 
-const KEY_HINTS: Array<{ keyLabel: string; action: string }> = [
-  { keyLabel: '↑↓', action: 'move' },
-  { keyLabel: '↵', action: 'open' },
-  { keyLabel: 'esc', action: 'back' },
-  { keyLabel: 'tab', action: 'next match' },
-  { keyLabel: '^d ^u', action: 'page' },
-  { keyLabel: '^← ^→', action: 'preview' },
-]
+// `esc`'s action is derived per render (`back` while Escape still has something
+// to pop, `close` once it would hand off to the host's close verb), so the hint
+// never lies about what the next Escape does. Enter says `open in app`, not a
+// bare `open`, because it hands the file to the OS default application — a
+// surprise inside an embedding host mid-preview otherwise.
+function buildKeyHints(escapeHintAction: string): Array<{ keyLabel: string; action: string }> {
+  return [
+    { keyLabel: '↑↓', action: 'move' },
+    { keyLabel: '↵', action: 'open in app' },
+    { keyLabel: 'esc', action: escapeHintAction },
+    { keyLabel: 'tab', action: 'next match' },
+    { keyLabel: '^d ^u', action: 'page' },
+    { keyLabel: '^← ^→', action: 'preview' },
+  ]
+}
 
 // A monospace sample whose width, divided by its length, is one glyph's advance.
 const CARET_MEASURE_SAMPLE = '0000000000'
@@ -26,6 +33,9 @@ type CommandBarProps = {
   matchCountIsLowerBound: boolean
   entryRowCount: number
   focusEntryCount: number | null
+  // The word shown beside `esc`: `back` while Escape still pops app state,
+  // `close` once the next Escape would ask the embedding host to close.
+  escapeHintAction: string
   onPatternChange: (nextPattern: string) => void
 }
 
@@ -38,6 +48,7 @@ export function CommandBar({
   matchCountIsLowerBound,
   entryRowCount,
   focusEntryCount,
+  escapeHintAction,
   onPatternChange,
 }: CommandBarProps) {
   const measureRef = useRef<HTMLSpanElement | null>(null)
@@ -140,7 +151,7 @@ export function CommandBar({
         </span>
         <span className="flex-1" />
         <div className="hidden flex-wrap gap-3.5 sm:flex">
-          {KEY_HINTS.map((keyHint) => (
+          {buildKeyHints(escapeHintAction).map((keyHint) => (
             <span key={keyHint.action}>
               <b className="mr-1 rounded-sm border border-line bg-inset px-[5px] font-semibold text-dim">
                 {keyHint.keyLabel}

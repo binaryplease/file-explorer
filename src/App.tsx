@@ -25,6 +25,7 @@ import { useTheme } from './lib/theme'
 import { useViewSettings } from './lib/viewSettings'
 import { useApiBase } from './lib/apiBase'
 import { createUrlFocusNavigation, type FocusNavigation } from './lib/focusNavigation'
+import { useResizableSplit } from './lib/resizableSplit'
 
 function baseName(path: string): string {
   const lastSlashIndex = path.lastIndexOf('/')
@@ -59,9 +60,20 @@ export type AppProps = {
   // the theme hook goes read-only (it inherits the host's `[data-theme]`) and
   // the title-bar theme toggle is omitted.
   embedded?: boolean
+  // The host's close verb, wired by an embedding mount. When the explorer's own
+  // layered Escape is exhausted (no filter, selection on the root line, focus
+  // history empty), the final Escape calls this instead of dead-ending — and the
+  // command-bar hint switches to `esc close`. Absent standalone: Escape keeps
+  // today's wording and behaviour.
+  onRequestClose?: () => void
 }
 
-export function App({ navigation, initialSelectedPath = null, embedded = false }: AppProps = {}) {
+export function App({
+  navigation,
+  initialSelectedPath = null,
+  embedded = false,
+  onRequestClose,
+}: AppProps = {}) {
   // The navigation seam is created once (URL-backed by default). Threading it
   // through a stable memo keeps its subscription/effect identity stable.
   const focusNavigation = useMemo<FocusNavigation>(
@@ -78,7 +90,8 @@ export function App({ navigation, initialSelectedPath = null, embedded = false }
   const [selectedPath, setSelectedPath] = useState<string | null>(initialSelectedPath)
   const [pattern, setPattern] = useState('')
   const { viewSettings, setViewSettings } = useViewSettings()
-  const { showSizes, showHidden, showGitignored, showPreview } = viewSettings
+  const { showSizes, showHidden, showGitignored, showPreview, wrapPreview, previewRatio } =
+    viewSettings
   const [searchResult, setSearchResult] = useState<SearchSubtreeResult | null>(null)
   // Listing-scoped: the tree could not be loaded. Kept strictly separate from
   // row-scoped refusals, which the rows render themselves.
@@ -386,8 +399,11 @@ export function App({ navigation, initialSelectedPath = null, embedded = false }
   // own history standalone, an in-memory stack when embedded).
   const goBack = useCallback(() => {
     if (pattern !== '') setPattern('')
-    else focusNavigation.back()
-  }, [pattern, focusNavigation])
+    else if (focusNavigation.canGoBack()) focusNavigation.back()
+    // Nothing left to pop: hand an exhausted Escape to the host's close verb.
+    // Standalone (no `onRequestClose`) this is the historical no-op.
+    else onRequestClose?.()
+  }, [pattern, focusNavigation, onRequestClose])
 
   const toggleSizes = useCallback(() => {
     setViewSettings((previousViewSettings) => ({
@@ -429,6 +445,33 @@ export function App({ navigation, initialSelectedPath = null, embedded = false }
       showPreview: !previousViewSettings.showPreview,
     }))
   }, [setViewSettings])
+
+  const toggleWrapPreview = useCallback(() => {
+    setViewSettings((previousViewSettings) => ({
+      ...previousViewSettings,
+      wrapPreview: !previousViewSettings.wrapPreview,
+    }))
+  }, [setViewSettings])
+
+  const setPreviewRatio = useCallback(
+    (nextPreviewRatio: number) => {
+      setViewSettings((previousViewSettings) => ({
+        ...previousViewSettings,
+        previewRatio: nextPreviewRatio,
+      }))
+    },
+    [setViewSettings],
+  )
+
+  // Opening straight onto a file makes the file the point: the split starts
+  // preview-dominant (until the user drags it). Fixed for the mount's life, like
+  // the deep-open selection itself.
+  const isFileIntent = initialSelectedPath !== null
+  const { containerRef, previewWidth, onDividerPointerDown } = useResizableSplit({
+    previewRatio,
+    isFileIntent,
+    onPreviewRatioChange: setPreviewRatio,
+  })
 
   const focusPreviewPanel = useCallback(() => {
     previewScrollRef.current?.focus()
@@ -585,8 +628,24 @@ export function App({ navigation, initialSelectedPath = null, embedded = false }
 
   const rootName = rootPath === null ? '…' : baseName(rootPath) || rootPath
   const focusLabel = focusPath === '' ? rootName : baseName(focusPath)
+  // Join the served root and the focused subpath with exactly one slash: when
+  // the served root is the filesystem root (`/`), a naive `${rootPath}/…` would
+  // double it into `//home/…`.
   const focusFullPath =
-    rootPath === null ? '…' : focusPath === '' ? rootPath : `${rootPath}/${focusPath}`
+    rootPath === null
+      ? '…'
+      : focusPath === ''
+        ? rootPath
+        : `${rootPath === '/' ? '' : rootPath}/${focusPath}`
+
+  // The next Escape hands off to the host's close verb only once the layering is
+  // spent: no filter, the selection already on the root line, and no focus
+  // history left to pop. Drives the honest `esc close` vs `esc back` hint.
+  const escapeWouldClose =
+    onRequestClose !== undefined &&
+    pattern === '' &&
+    selectedPath === ROOT_LINE_PATH &&
+    !focusNavigation.canGoBack()
 
   // The tree/preview/command-bar body is identical in both mounts; only the
   // outer chrome differs — a centred, full-screen card standalone, or a plain
@@ -598,8 +657,9 @@ export function App({ navigation, initialSelectedPath = null, embedded = false }
         <TitleBar rootPath={rootPath} themeMode={themeMode} onSelectThemeMode={setThemeMode} />
       )}
       {/* Tree and preview share one row; the preview is a column beside the
-          rows it describes (ADR-0031), never a modal over them. */}
-      <div className="flex min-h-0 flex-1">
+          rows it describes (ADR-0031), never a modal over them. A draggable
+          divider between them sizes the split — measured against this row. */}
+      <div ref={containerRef} className="flex min-h-0 flex-1">
         <TreeView
           rootFullPath={focusFullPath}
           isRootLineSelected={selectedPath === ROOT_LINE_PATH}
@@ -623,15 +683,33 @@ export function App({ navigation, initialSelectedPath = null, embedded = false }
           onTogglePreview={togglePreview}
         />
         {showPreview && (
-          <PreviewPanel
-            scrollRef={previewScrollRef}
-            isFocused={isPreviewFocused}
-            targetPath={previewTargetPath}
-            preview={preview}
-            previewError={previewError}
-            isLoading={isPreviewLoading}
-            onFocusChange={setIsPreviewFocused}
-          />
+          <>
+            {/* The resize handle owns the split. It also carries the focus
+                accent on the edge it occupies between the two panes (ADR-0028's
+                shared interaction token), lighting up when the preview holds the
+                keyboard. */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize the preview panel"
+              onPointerDown={onDividerPointerDown}
+              className={`w-1 flex-none cursor-col-resize transition-colors ${
+                isPreviewFocused ? 'bg-sel-bar' : 'bg-line hover:bg-accent'
+              }`}
+            />
+            <PreviewPanel
+              scrollRef={previewScrollRef}
+              isFocused={isPreviewFocused}
+              targetPath={previewTargetPath}
+              preview={preview}
+              previewError={previewError}
+              isLoading={isPreviewLoading}
+              width={previewWidth}
+              wrapText={wrapPreview}
+              onToggleWrap={toggleWrapPreview}
+              onFocusChange={setIsPreviewFocused}
+            />
+          </>
         )}
       </div>
       <CommandBar
@@ -643,6 +721,7 @@ export function App({ navigation, initialSelectedPath = null, embedded = false }
         matchCountIsLowerBound={searchResult?.stats.truncated ?? false}
         entryRowCount={entryRowCount}
         focusEntryCount={focusEntryCount}
+        escapeHintAction={escapeWouldClose ? 'close' : 'back'}
         onPatternChange={setPattern}
       />
     </>
@@ -650,7 +729,7 @@ export function App({ navigation, initialSelectedPath = null, embedded = false }
 
   if (embedded) {
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-term font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
+      <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-term font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
         {explorerBody}
       </div>
     )

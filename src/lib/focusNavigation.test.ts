@@ -35,6 +35,17 @@ describe('createInternalFocusNavigation', () => {
     expect(focusChanges).toEqual([])
   })
 
+  it('reports whether back has somewhere to go', () => {
+    const navigation = createInternalFocusNavigation('root')
+    expect(navigation.canGoBack()).toBe(false)
+
+    navigation.push('root/a')
+    expect(navigation.canGoBack()).toBe(true)
+
+    navigation.back()
+    expect(navigation.canGoBack()).toBe(false)
+  })
+
   it('stops notifying a subscriber once it unsubscribes', () => {
     const navigation = createInternalFocusNavigation('root')
     const focusChanges: string[] = []

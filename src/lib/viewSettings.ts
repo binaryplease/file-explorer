@@ -4,8 +4,9 @@ import { z } from 'zod'
 // Persisted-client-state schema (ADR-0013/0029): the view-mode toggles that
 // reconfigure the tree and its side panels. Every field declares a default so a stale
 // localStorage blob written before the schema grew still parses, filling any
-// newly-added toggle with its default rather than throwing. All three default
-// off — the tree opens as a clean name-only listing until the user opts in.
+// newly-added toggle with its default rather than throwing. The tree-listing
+// toggles default off — the tree opens as a clean name-only listing until the
+// user opts in.
 export const ViewSettingsSchema = z.object({
   showSizes: z.boolean().default(false),
   showHidden: z.boolean().default(false),
@@ -13,6 +14,16 @@ export const ViewSettingsSchema = z.object({
   // The preview column. Off by default like the rest: the core browse loop
   // paints alone until the user asks for enrichment.
   showPreview: z.boolean().default(false),
+  // Soft-wrap long lines in the text preview. On by default so a reader sees
+  // the whole line without the panel's horizontal scrollbar; a code reader who
+  // wants exact columns turns it off (restoring `whitespace-pre` + h-scroll).
+  wrapPreview: z.boolean().default(true),
+  // The tree/preview split, as the fraction of the row's width the preview
+  // column takes. `null` means "no dragged preference yet" — the split falls
+  // back to the entry-intent default (preview-dominant when opened on a file,
+  // tree-dominant when opened on a directory). Once the user drags the divider
+  // the stored ratio wins, here and across reloads.
+  previewRatio: z.number().nullable().default(null),
 })
 export type ViewSettings = z.infer<typeof ViewSettingsSchema>
 
