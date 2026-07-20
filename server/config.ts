@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import { z } from 'zod/v4'
+import { z } from 'zod'
 
 // Boundary validation of the process environment (ADR-0013). Parsed once at
 // startup; a malformed env fails loud here rather than deep in a request path.

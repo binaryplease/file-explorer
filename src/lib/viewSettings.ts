@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { z } from 'zod/v4'
+import { z } from 'zod'
 
 // Persisted-client-state schema (ADR-0013/0029): the view-mode toggles that
 // reconfigure the tree and its side panels. Every field declares a default so a stale

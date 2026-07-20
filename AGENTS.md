@@ -27,7 +27,7 @@ layout.
 |---|---|---|
 | Runtime | Bun | Primary runtime. Speed is a first-class requirement — prefer Bun-native FS APIs and streaming. |
 | Server | Elysia | Per ADR-0003. |
-| Validation | Zod (v4 API via `zod/v4`) | Boundary + config validation (ADR-0013). Route schemas use Zod, never TypeBox (ADR-0014). Schemas double as the OpenAPI spec via `z.toJSONSchema`. |
+| Validation | Zod v4 (import from `zod`) | Boundary + config validation (ADR-0013). Depend on `zod@^4` — not `zod@3` plus the `zod/v4` compat entrypoint. Route schemas use Zod, never TypeBox (ADR-0014). Schemas double as the OpenAPI spec via `z.toJSONSchema`. |
 | API docs | `@elysiajs/openapi` | ADR-0020: discovery at `GET /api`, Scalar UI at `GET /api/docs`, spec at `GET /api/openapi.json`. |
 | Frontend | React 19 | |
 | Styling | Tailwind CSS v4 | `@tailwindcss/vite` plugin. |
