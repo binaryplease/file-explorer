@@ -25,7 +25,7 @@ inherits the context. See `.nightshift/README.md` for the full layout.
 |---|---|---|
 | Runtime | Bun | Primary runtime. Speed is a first-class requirement — prefer Bun-native FS APIs and streaming. |
 | Server | Elysia | Per ADR-0003. |
-| Validation | Zod v4 (import from `zod`) | Boundary + config validation (ADR-0013). Depend on `zod@^4` — not `zod@3` plus the `zod/v4` compat entrypoint. Route schemas use Zod, never TypeBox (ADR-0014). Schemas double as the OpenAPI spec via `z.toJSONSchema`. |
+| Validation | Zod v4 (import from `zod/v4`) | Boundary + config validation (ADR-0013). Depend on `zod@^4` (see package.json). **Import the explicit `import { z } from 'zod/v4'` subpath, never bare `'zod'`** — nightshift-ui source-aliases this app into its Vite dev server, where bare `'zod'` resolves to the *host's* zod (pinned v3) and v4-only APIs (`z.stringbool`, …) blank every route at import time. Both installs ship the `./v4` subpath, so `zod/v4` resolves to a v4 surface in standalone and embedded builds alike (matches binp-git-graph). Route schemas use Zod, never TypeBox (ADR-0014). Schemas double as the OpenAPI spec via `z.toJSONSchema`. |
 | API docs | `@elysiajs/openapi` | ADR-0020: discovery at `GET /api`, Scalar UI at `GET /api/docs`, spec at `GET /api/openapi.json`. |
 | Frontend | React 19 | |
 | Styling | Tailwind CSS v4 | `@tailwindcss/vite` plugin. |

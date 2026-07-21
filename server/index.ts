@@ -1,7 +1,7 @@
 import { join, resolve } from 'node:path'
 import { Elysia } from 'elysia'
 import { openapi } from '@elysiajs/openapi'
-import { z } from 'zod'
+import { z } from 'zod/v4'
 import { additionalAllowedHosts, allowedOrigins, config, isDev } from './config'
 import { createTrustedHostGuard } from './services/trusted-host'
 import { createCorsPolicy } from './services/cors'

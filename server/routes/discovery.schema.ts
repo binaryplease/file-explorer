@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod/v4'
 
 // ADR-0020: GET /api returns this discovery document with absolute URLs.
 export const DiscoveryDocSchema = z.object({

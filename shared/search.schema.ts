@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod/v4'
 import { DirectoryEntrySchema } from './filesystem.schema'
 
 // Shared seam schema (ADR-0013) for the recursive fuzzy search endpoint. The

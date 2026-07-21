@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { z } from 'zod'
+import { z } from 'zod/v4'
 
 // Persisted-client-state schema (ADR-0013/0029): the mode the user picked,
 // validated on read so a stale/garbage localStorage value falls back cleanly

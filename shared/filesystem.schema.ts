@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod/v4'
 
 // Shared seam schema (ADR-0013): the Elysia route validates responses with
 // these, and the client parses fetched payloads through the very same objects.
