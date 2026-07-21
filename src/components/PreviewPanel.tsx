@@ -122,33 +122,43 @@ function TextPreviewView({ preview, wrapText }: { preview: Preview; wrapText: bo
 
   return (
     <div className="py-2">
-      {preview.lines.map((line, lineIndex) => (
-        <div key={line.number} className="flex">
-          <span className="w-12 flex-none px-2 text-right text-[11px] tabular-nums text-faint select-none">
-            {line.number}
-          </span>
-          {/* Soft wrap by default: continuation lines hang under the text,
-              past the fixed number gutter. Off restores exact columns and the
-              panel's horizontal scrollbar for code readers. */}
-          <span
-            className={`min-w-0 pr-4 text-[12px] text-file ${
-              wrapText ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
-            }`}
-          >
-            {tokenLines === null
-              ? line.text
-              : tokenLines[lineIndex].map((token, tokenIndex) => (
-                  <span
-                    key={tokenIndex}
-                    className="shiki-token"
-                    style={token.htmlStyle as CSSProperties}
-                  >
-                    {token.content}
-                  </span>
-                ))}
-          </span>
-        </div>
-      ))}
+      {preview.lines.map((line, lineIndex) => {
+        // Look the tokens up per line rather than trusting `tokenLines` to match
+        // `preview.lines` wholesale. When the selection moves to a new file the
+        // render sees the new `preview.lines` for one paint while `tokenLines`
+        // still holds the *previous* file's tokens (its reset effect runs after
+        // this render), so a longer new file would index past the stale array —
+        // a crash that unmounts the whole tree. A missing token line just falls
+        // back to plain text, which is what the very first paint shows anyway.
+        const lineTokens = tokenLines?.[lineIndex] ?? null
+        return (
+          <div key={line.number} className="flex">
+            <span className="w-12 flex-none px-2 text-right text-[11px] tabular-nums text-faint select-none">
+              {line.number}
+            </span>
+            {/* Soft wrap by default: continuation lines hang under the text,
+                past the fixed number gutter. Off restores exact columns and the
+                panel's horizontal scrollbar for code readers. */}
+            <span
+              className={`min-w-0 pr-4 text-[12px] text-file ${
+                wrapText ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
+              }`}
+            >
+              {lineTokens === null
+                ? line.text
+                : lineTokens.map((token, tokenIndex) => (
+                    <span
+                      key={tokenIndex}
+                      className="shiki-token"
+                      style={token.htmlStyle as CSSProperties}
+                    >
+                      {token.content}
+                    </span>
+                  ))}
+            </span>
+          </div>
+        )
+      })}
       {preview.isTruncated && (
         <div className="px-4 py-2 text-[11px] text-faint">
           … preview bounded — the file continues past what was read
