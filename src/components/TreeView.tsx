@@ -9,6 +9,15 @@ import {
 } from '../lib/confinement'
 import { ViewChips } from './ViewChips'
 
+// The row grid is a single shared invariant: the root line and every entry row
+// must keep their columns aligned. When the size bars are hidden, the 104px bar
+// track is dropped entirely rather than reserved-and-emptied, so the filename
+// reclaims that width instead of truncating early. Both class strings are
+// spelled out as literals so Tailwind's JIT emits them.
+function rowGridColumnsClass(showSizes: boolean): string {
+  return showSizes ? 'grid-cols-[1fr_104px_66px]' : 'grid-cols-[1fr_66px]'
+}
+
 function entryNameColorClass(row: EntryRow): string {
   // Gitignored entries render dimmed wherever they are shown.
   const ignoredClass = row.entry.isGitignored ? ' opacity-55' : ''
@@ -74,7 +83,7 @@ function EntryRowView({
         else if (isDirectory) onFocusDirectory(row.path)
         else if (row.entry.kind === 'file') onOpenFile(row.path)
       }}
-      className={`relative grid cursor-pointer grid-cols-[1fr_104px_66px] items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
+      className={`relative grid cursor-pointer ${rowGridColumnsClass(showSizes)} items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
         isSelected ? 'bg-sel' : 'hover:bg-hover'
       }`}
     >
@@ -123,16 +132,20 @@ function EntryRowView({
           </span>
         )}
       </span>
-      {showSizes && row.barFraction !== null ? (
-        <span className="mr-3 h-2 justify-self-stretch overflow-hidden rounded-[3px] bg-inset">
-          <span
-            className="block h-full rounded-[3px] bg-linear-to-r from-bar-b to-bar-a"
-            style={{ width: `${row.barFraction * 100}%` }}
-          />
-        </span>
-      ) : (
-        <span />
-      )}
+      {/* The bar track only exists in the grid when sizes are shown; otherwise
+          the column is gone and the name reclaims its width. A shown-but-null
+          bar still needs the empty spacer to hold the 104px column open. */}
+      {showSizes &&
+        (row.barFraction !== null ? (
+          <span className="mr-3 h-2 justify-self-stretch overflow-hidden rounded-[3px] bg-inset">
+            <span
+              className="block h-full rounded-[3px] bg-linear-to-r from-bar-b to-bar-a"
+              style={{ width: `${row.barFraction * 100}%` }}
+            />
+          </span>
+        ) : (
+          <span />
+        ))}
       <span
         className={`text-right text-xs tabular-nums ${isLargeFile ? 'text-bar-a' : 'text-dim'}`}
       >
@@ -232,7 +245,7 @@ export function TreeView({
           data-row-path={ROOT_LINE_PATH}
           onClick={() => onSelect(ROOT_LINE_PATH)}
           onDoubleClick={onFocusParent}
-          className={`relative grid cursor-pointer grid-cols-[1fr_104px_66px] items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
+          className={`relative grid cursor-pointer ${rowGridColumnsClass(showSizes)} items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
             isRootLineSelected ? 'bg-sel' : 'hover:bg-hover'
           }`}
         >
@@ -240,7 +253,9 @@ export function TreeView({
           <span className="overflow-hidden font-semibold text-ellipsis text-dir">
             {rootFullPath}
           </span>
-          <span />
+          {/* Spacers for the size columns the root line leaves blank: the bar
+              track only exists when sizes are shown, the size-text track always. */}
+          {showSizes && <span />}
           <span />
         </div>
         {listingError !== null && (
