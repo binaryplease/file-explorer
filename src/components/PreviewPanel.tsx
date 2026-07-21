@@ -8,6 +8,8 @@ import {
   IconFileUnknown,
   IconFolder,
   IconLock,
+  IconMovie,
+  IconMusic,
   IconPhoto,
 } from '@tabler/icons-react'
 import type { Preview, PreviewKind } from '../../shared/preview.schema'
@@ -22,6 +24,8 @@ import { ToggleChip } from './ToggleChip'
 const PREVIEW_KIND_DESCRIPTORS: Record<PreviewKind, { label: string; Icon: typeof IconFileText }> = {
   text: { label: 'text', Icon: IconFileText },
   image: { label: 'image', Icon: IconPhoto },
+  audio: { label: 'audio', Icon: IconMusic },
+  video: { label: 'video', Icon: IconMovie },
   binary: { label: 'binary', Icon: IconBinary },
   empty: { label: 'empty', Icon: IconFileOff },
   'too-large': { label: 'too large', Icon: IconAlertTriangle },
@@ -92,6 +96,56 @@ function DirectorySummaryView({ preview }: { preview: Preview }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// Inline playback for audio/video: the browser streams the bytes from the raw
+// endpoint into a native element (Range-seekable and progressive, so nothing is
+// buffered into the panel) — enrichment, exactly like the image preview. A
+// format the browser cannot decode fires `onError`; we then fall back to a
+// marker that explains why instead of leaving a dead player on screen (ADR-0025:
+// the affordance stays, its unavailable state explained rather than hidden).
+function MediaPreviewView({ preview, src }: { preview: Preview; src: string }) {
+  const [playbackFailed, setPlaybackFailed] = useState(false)
+  // Reset when the selection moves to another media file — otherwise a prior
+  // failure would suppress the next file's player before it even tries to load.
+  useEffect(() => setPlaybackFailed(false), [src])
+
+  if (playbackFailed) {
+    return (
+      <PreviewMarker
+        preview={{
+          ...preview,
+          note: `This ${preview.kind} format can't be played in the browser — open it to play it.`,
+        }}
+      />
+    )
+  }
+
+  if (preview.kind === 'audio') {
+    return (
+      <div className="grid h-full place-items-center p-4">
+        <audio
+          src={src}
+          controls
+          aria-label={preview.name}
+          className="w-full max-w-md"
+          onError={() => setPlaybackFailed(true)}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid h-full place-items-center p-4">
+      <video
+        src={src}
+        controls
+        aria-label={preview.name}
+        className="max-h-full max-w-full"
+        onError={() => setPlaybackFailed(true)}
+      />
     </div>
   )
 }
@@ -263,14 +317,17 @@ export function PreviewPanel({
           <TextPreviewView preview={preview} wrapText={wrapText} />
         ) : preview.kind === 'directory' ? (
           <DirectorySummaryView preview={preview} />
-        ) : preview.kind === 'image' && preview.imageUrlPath !== null ? (
+        ) : preview.kind === 'image' && preview.mediaUrlPath !== null ? (
           <div className="grid h-full place-items-center p-4">
             <img
-              src={withApiBase(apiBase, preview.imageUrlPath)}
+              src={withApiBase(apiBase, preview.mediaUrlPath)}
               alt={preview.name}
               className="max-h-full max-w-full object-contain"
             />
           </div>
+        ) : (preview.kind === 'audio' || preview.kind === 'video') &&
+          preview.mediaUrlPath !== null ? (
+          <MediaPreviewView preview={preview} src={withApiBase(apiBase, preview.mediaUrlPath)} />
         ) : (
           <PreviewMarker preview={preview} />
         )}

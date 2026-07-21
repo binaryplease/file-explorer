@@ -8,6 +8,11 @@ import { DirectoryEntrySchema } from './filesystem.schema'
 export const PreviewKindSchema = z.enum([
   'text',
   'image',
+  // Time-based media the browser plays inline off `/api/fs/raw` — an `<audio>`
+  // or `<video>` element, not bytes dumped into the panel. Like `image`, the
+  // whole file is fetched (progressively, via Range) rather than head-read.
+  'audio',
+  'video',
   'binary',
   'empty',
   'too-large',
@@ -99,11 +104,14 @@ export const PreviewSchema = z.object({
     .nullable()
     .default(null)
     .describe('Total lines in the file, known only when the whole file fit in the bounded read.'),
-  imageUrlPath: z
+  mediaUrlPath: z
     .string()
     .nullable()
     .default(null)
-    .describe('URL the client should load the image bytes from. Null for every other kind.'),
+    .describe(
+      'URL the client should load the raw media bytes from, for the image, audio and video ' +
+        'kinds. Null for every other kind.',
+    ),
   directory: DirectorySummarySchema.nullable()
     .default(null)
     .describe('Directory summary. Null for files.'),

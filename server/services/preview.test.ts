@@ -136,7 +136,7 @@ describe('previewEntry', () => {
     expect(result.preview.language).toBe('txt')
     // ADR-0024: the shape is complete whichever kind came back.
     expect(result.preview.directory).toBeNull()
-    expect(result.preview.imageUrlPath).toBeNull()
+    expect(result.preview.mediaUrlPath).toBeNull()
   })
 
   test('stamps a syntax-highlighting language onto a recognised code file', async () => {
@@ -187,8 +187,30 @@ describe('previewEntry', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.preview.kind).toBe('image')
-    expect(result.preview.imageUrlPath).toBe('/api/fs/raw?path=shot%20one.png')
+    expect(result.preview.mediaUrlPath).toBe('/api/fs/raw?path=shot%20one.png')
     expect(result.preview.lines).toEqual([])
+  })
+
+  test('points audio and video at the raw endpoint instead of reading them as text', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    // Bytes that would trip the binary classifier if they were ever head-read;
+    // classification is by extension, so they never are.
+    await writeFile(join(rootPath, 'track.mp3'), new Uint8Array([0x49, 0x44, 0x33, 0x00]))
+    await writeFile(join(rootPath, 'clip.mp4'), new Uint8Array([0x00, 0x00, 0x00, 0x18]))
+
+    const audioResult = await previewService.previewEntry('track.mp3')
+    expect(audioResult.ok).toBe(true)
+    if (!audioResult.ok) return
+    expect(audioResult.preview.kind).toBe('audio')
+    expect(audioResult.preview.mediaUrlPath).toBe('/api/fs/raw?path=track.mp3')
+    expect(audioResult.preview.lines).toEqual([])
+
+    const videoResult = await previewService.previewEntry('clip.mp4')
+    expect(videoResult.ok).toBe(true)
+    if (!videoResult.ok) return
+    expect(videoResult.preview.kind).toBe('video')
+    expect(videoResult.preview.mediaUrlPath).toBe('/api/fs/raw?path=clip.mp4')
+    expect(videoResult.preview.lines).toEqual([])
   })
 
   test('summarizes a directory from its own listing', async () => {

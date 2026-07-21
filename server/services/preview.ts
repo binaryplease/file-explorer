@@ -49,6 +49,40 @@ const IMAGE_EXTENSIONS = new Set([
   '.svg',
 ])
 
+// Audio and video are never head-read: the client fetches them from the raw
+// endpoint into an `<audio>`/`<video>` element, which streams progressively via
+// Range and seeks without downloading the whole file — so unlike images they
+// carry no size ceiling. Extension-classified because their bytes are binary and
+// would otherwise fall through to the `binary` marker. Formats a browser cannot
+// decode still classify here and surface a play error in the panel (honest, and
+// more useful than "binary") rather than being withheld.
+const AUDIO_EXTENSIONS = new Set([
+  '.mp3',
+  '.wav',
+  '.ogg',
+  '.oga',
+  '.opus',
+  '.m4a',
+  '.aac',
+  '.flac',
+  '.weba',
+])
+
+const VIDEO_EXTENSIONS = new Set([
+  '.mp4',
+  '.m4v',
+  '.webm',
+  '.ogv',
+  '.mov',
+  '.mkv',
+])
+
+// The raw byte-serving URL an image/audio/video preview points its element at.
+// The whole file is fetched (progressively for media), never head-read.
+function rawUrlPath(relativePath: string): string {
+  return `/api/fs/raw?path=${encodeURIComponent(relativePath)}`
+}
+
 // A byte that no plain-text file uses: control codes other than tab, newline,
 // carriage return and form feed.
 function isControlByte(byteValue: number): boolean {
@@ -133,7 +167,7 @@ function emptyPreview(relativePath: string): Preview {
     language: 'txt',
     isTruncated: false,
     totalLineCount: null,
-    imageUrlPath: null,
+    mediaUrlPath: null,
     directory: null,
     note: null,
   }
@@ -170,7 +204,9 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
       return { ...preview, kind: 'empty', note: 'This file is empty.' }
     }
 
-    if (IMAGE_EXTENSIONS.has(extname(relativePath).toLowerCase())) {
+    const extension = extname(relativePath).toLowerCase()
+
+    if (IMAGE_EXTENSIONS.has(extension)) {
       if (sizeBytes > IMAGE_MAX_BYTES) {
         return {
           ...preview,
@@ -178,11 +214,15 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
           note: 'Image too large to render in the panel — open it to view it.',
         }
       }
-      return {
-        ...preview,
-        kind: 'image',
-        imageUrlPath: `/api/fs/raw?path=${encodeURIComponent(relativePath)}`,
-      }
+      return { ...preview, kind: 'image', mediaUrlPath: rawUrlPath(relativePath) }
+    }
+
+    if (AUDIO_EXTENSIONS.has(extension)) {
+      return { ...preview, kind: 'audio', mediaUrlPath: rawUrlPath(relativePath) }
+    }
+
+    if (VIDEO_EXTENSIONS.has(extension)) {
+      return { ...preview, kind: 'video', mediaUrlPath: rawUrlPath(relativePath) }
     }
 
     let headBytes: Uint8Array
