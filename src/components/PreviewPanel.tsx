@@ -1,4 +1,11 @@
-import { useEffect, useState, type CSSProperties, type RefObject } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
+} from 'react'
 import type { ThemedToken } from 'shiki'
 import {
   IconAlertTriangle,
@@ -11,14 +18,28 @@ import {
   IconMovie,
   IconMusic,
   IconPhoto,
+  IconSearch,
+  IconX,
 } from '@tabler/icons-react'
 import type { Preview, PreviewKind } from '../../shared/preview.schema'
 import { CONFINEMENT_BADGE_LABEL, confinementRefusalMessage } from '../lib/confinement'
 import { useApiBase, withApiBase } from '../lib/apiBase'
+import {
+  searchDocument,
+  splitRunByMatch,
+  type DocumentLineMatch,
+  type DocumentSearchResult,
+} from '../lib/documentSearch'
 import { formatBytes } from '../lib/format'
 import { tokenizePreviewLines } from '../lib/highlighter'
+import { MATCH_HIGHLIGHT_CLASS } from './FuzzyMatch'
 import { MarkdownPreview } from './MarkdownPreview'
 import { ToggleChip } from './ToggleChip'
+
+// A stable empty result for previews that carry no searchable lines, so the
+// document-search memo never re-runs on identity churn for non-text kinds.
+const NO_DOCUMENT_LINES: Preview['lines'] = []
+const EMPTY_MATCHED_INDEXES: ReadonlySet<number> = new Set()
 
 // One descriptor per preview kind (ADR-0026): the icon and the label the header
 // badge and the marker block both read from, so they can never disagree.
@@ -161,7 +182,74 @@ function TruncationNote() {
   )
 }
 
-function TextPreviewView({ preview, wrapText }: { preview: Preview; wrapText: boolean }) {
+// Renders one line's content, overlaying the document-search highlight on top
+// of whatever the line already shows — plain text, or Shiki tokens. Matched
+// character runs get the shared highlight token (ADR-0028); on syntax-coloured
+// lines the unmatched runs keep their token colour, so highlighting a match
+// never strips the surrounding code of its colours. When nothing on the line
+// matched, the untouched fast paths render exactly as before.
+function renderLineContent(
+  lineText: string,
+  lineTokens: ThemedToken[] | null,
+  matchedIndexes: ReadonlySet<number>,
+) {
+  const hasMatches = matchedIndexes.size > 0
+
+  if (lineTokens === null) {
+    if (!hasMatches) return lineText
+    return splitRunByMatch(Array.from(lineText), 0, matchedIndexes).map((piece, pieceIndex) =>
+      piece.matched ? (
+        <mark key={pieceIndex} className={MATCH_HIGHLIGHT_CLASS}>
+          {piece.text}
+        </mark>
+      ) : (
+        <span key={pieceIndex}>{piece.text}</span>
+      ),
+    )
+  }
+
+  let codePointCursor = 0
+  return lineTokens.map((token, tokenIndex) => {
+    const tokenCharacters = Array.from(token.content)
+    const tokenStartIndex = codePointCursor
+    codePointCursor += tokenCharacters.length
+    if (!hasMatches) {
+      return (
+        <span key={tokenIndex} className="shiki-token" style={token.htmlStyle as CSSProperties}>
+          {token.content}
+        </span>
+      )
+    }
+    return splitRunByMatch(tokenCharacters, tokenStartIndex, matchedIndexes).map(
+      (piece, pieceIndex) =>
+        piece.matched ? (
+          <mark key={`${tokenIndex}:${pieceIndex}`} className={MATCH_HIGHLIGHT_CLASS}>
+            {piece.text}
+          </mark>
+        ) : (
+          <span
+            key={`${tokenIndex}:${pieceIndex}`}
+            className="shiki-token"
+            style={token.htmlStyle as CSSProperties}
+          >
+            {piece.text}
+          </span>
+        ),
+    )
+  })
+}
+
+function TextPreviewView({
+  preview,
+  wrapText,
+  lineMatches,
+}: {
+  preview: Preview
+  wrapText: boolean
+  // 1:1 with `preview.lines`: which characters the in-document search matched on
+  // each line. All-empty (an inactive search) takes the untouched render paths.
+  lineMatches: DocumentLineMatch[]
+}) {
   // Highlighting decorates the plain text that painted first (AGENTS.md
   // responsiveness principle): tokens start null so the very first render is the
   // plain string, and a `cancelled` flag drops a stale tokenization when the
@@ -196,8 +284,9 @@ function TextPreviewView({ preview, wrapText }: { preview: Preview; wrapText: bo
         // a crash that unmounts the whole tree. A missing token line just falls
         // back to plain text, which is what the very first paint shows anyway.
         const lineTokens = tokenLines?.[lineIndex] ?? null
+        const matchedIndexes = lineMatches[lineIndex]?.matchedIndexes ?? EMPTY_MATCHED_INDEXES
         return (
-          <div key={line.number} className="flex">
+          <div key={line.number} data-doc-line={lineIndex} className="flex">
             <span className="w-12 flex-none px-2 text-right text-[11px] tabular-nums text-faint select-none">
               {line.number}
             </span>
@@ -209,17 +298,7 @@ function TextPreviewView({ preview, wrapText }: { preview: Preview; wrapText: bo
                 wrapText ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
               }`}
             >
-              {lineTokens === null
-                ? line.text
-                : lineTokens.map((token, tokenIndex) => (
-                    <span
-                      key={tokenIndex}
-                      className="shiki-token"
-                      style={token.htmlStyle as CSSProperties}
-                    >
-                      {token.content}
-                    </span>
-                  ))}
+              {renderLineContent(line.text, lineTokens, matchedIndexes)}
             </span>
           </div>
         )
@@ -257,6 +336,58 @@ function isMarkdownPreview(preview: Preview | null): boolean {
   return preview !== null && preview.kind === 'text' && preview.language === 'markdown'
 }
 
+// The in-document find affordance, on the preview header beside the toggles it
+// keeps company with (ADR-0031 — it governs the document shown right below it).
+// Always present for a searchable text preview so the capability is discoverable
+// (ADR-0025); the search icon hands focus to the document so typing can start,
+// and the match count / clear appear once a query exists.
+function DocumentSearchIndicator({
+  query,
+  matchCount,
+  onFocusDocument,
+  onClear,
+}: {
+  query: string
+  matchCount: number
+  onFocusDocument: () => void
+  onClear: () => void
+}) {
+  const hasQuery = query !== ''
+  return (
+    <div className="flex flex-none items-center gap-1">
+      <button
+        type="button"
+        onClick={onFocusDocument}
+        aria-label="Search within this document"
+        title="Focus the document and type to fuzzy-search its words. Enter jumps between matches; Esc clears."
+        className="flex items-center gap-1 rounded-[3px] px-1 py-px text-[11px] text-dim outline-none hover:bg-hover focus-visible:ring-1 focus-visible:ring-accent"
+      >
+        <IconSearch size={13} stroke={1.6} className="flex-none" />
+        {hasQuery ? (
+          <span className="max-w-[9rem] truncate font-mono text-match">{query}</span>
+        ) : (
+          <span className="text-faint">find</span>
+        )}
+      </button>
+      {hasQuery && (
+        <span aria-live="polite" className="flex-none text-[11px] tabular-nums text-faint">
+          {matchCount === 0 ? 'no matches' : `${matchCount} match${matchCount === 1 ? '' : 'es'}`}
+        </span>
+      )}
+      {hasQuery && (
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label="Clear document search"
+          className="flex-none rounded-[3px] p-px text-faint outline-none hover:text-fg focus-visible:ring-1 focus-visible:ring-accent"
+        >
+          <IconX size={13} stroke={1.6} />
+        </button>
+      )}
+    </div>
+  )
+}
+
 // The right column: a bounded look at whatever the tree has selected. It is
 // enrichment by the AGENTS.md responsiveness principle — it loads after the
 // tree has painted, is aborted when the selection moves on, and degrades to a
@@ -288,6 +419,90 @@ export function PreviewPanel({
   // governs — so `wrap` only belongs in the header when source is what's shown.
   const showingRenderedMarkdown = isMarkdown && renderMarkdown
 
+  // In-document fuzzy search: typing while the preview holds the keyboard filters
+  // the source text's words and highlights the matches (ADR-0019). It is offered
+  // only for the source text view — the one surface whose characters this can
+  // decorate — never the rendered-markdown or media kinds.
+  const isSearchableText = preview?.kind === 'text' && !showingRenderedMarkdown
+  const [documentQuery, setDocumentQuery] = useState('')
+  const [activeMatchOrdinal, setActiveMatchOrdinal] = useState(0)
+
+  // A new file is a fresh document: drop any query so the last file's search
+  // never lingers over the next one's text.
+  useEffect(() => {
+    setDocumentQuery('')
+    setActiveMatchOrdinal(0)
+  }, [preview?.path])
+
+  const documentLines = preview?.kind === 'text' ? preview.lines : NO_DOCUMENT_LINES
+  const documentSearch: DocumentSearchResult = useMemo(
+    () => searchDocument(documentLines, isSearchableText ? documentQuery : ''),
+    [documentLines, documentQuery, isSearchableText],
+  )
+
+  // Bring a match into view by its ordinal among the matching lines, and record
+  // that ordinal so Enter/Shift-Enter can walk on from it.
+  const revealMatch = (matchOrdinal: number) => {
+    const lineIndex = documentSearch.matchedLineIndexes[matchOrdinal]
+    if (lineIndex === undefined) return
+    setActiveMatchOrdinal(matchOrdinal)
+    scrollRef.current
+      ?.querySelector(`[data-doc-line="${lineIndex}"]`)
+      ?.scrollIntoView({ block: 'center' })
+  }
+
+  // Find-as-you-type: each query change resets to and scrolls the first match
+  // into view, so the highlight the user is chasing is never left off-screen.
+  useEffect(() => {
+    setActiveMatchOrdinal(0)
+    const firstMatchLine = documentSearch.matchedLineIndexes[0]
+    if (firstMatchLine === undefined) return
+    scrollRef.current
+      ?.querySelector(`[data-doc-line="${firstMatchLine}"]`)
+      ?.scrollIntoView({ block: 'center' })
+    // Re-run when the match set changes (which subsumes every query change).
+  }, [documentSearch, scrollRef])
+
+  // Typing into the focused document drives the find query — the same
+  // "type-anywhere" gesture the tree uses, scoped to the preview (App leaves
+  // every non-chord key to the preview while it holds the keyboard). Space keeps
+  // scrolling the panel: it can never be part of a word, so it is useless here.
+  const handleDocumentKeyDown = (keyboardEvent: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!isSearchableText) return
+    if (keyboardEvent.ctrlKey || keyboardEvent.metaKey || keyboardEvent.altKey) return
+    const { key } = keyboardEvent
+    if (key === 'Enter') {
+      if (documentSearch.matchedLineIndexes.length === 0) return
+      keyboardEvent.preventDefault()
+      const matchCount = documentSearch.matchedLineIndexes.length
+      const step = keyboardEvent.shiftKey ? -1 : 1
+      revealMatch((activeMatchOrdinal + step + matchCount) % matchCount)
+      return
+    }
+    if (key === 'Escape') {
+      if (documentQuery === '') return
+      keyboardEvent.preventDefault()
+      setDocumentQuery('')
+      return
+    }
+    if (key === 'Backspace') {
+      if (documentQuery === '') return
+      keyboardEvent.preventDefault()
+      setDocumentQuery((previous) => Array.from(previous).slice(0, -1).join(''))
+      return
+    }
+    if (key === ' ') return
+    if (key.length === 1) {
+      keyboardEvent.preventDefault()
+      setDocumentQuery((previous) => previous + key)
+    }
+  }
+
+  const clearDocumentSearch = () => {
+    setDocumentQuery('')
+    scrollRef.current?.focus()
+  }
+
   return (
     <div
       // The width comes from the divider beside it (the drag lives there); the
@@ -305,6 +520,14 @@ export function PreviewPanel({
           {headerName}
         </span>
         <span className="flex-1" />
+        {isSearchableText && (
+          <DocumentSearchIndicator
+            query={documentQuery}
+            matchCount={documentSearch.totalMatchCount}
+            onFocusDocument={() => scrollRef.current?.focus()}
+            onClear={clearDocumentSearch}
+          />
+        )}
         {/* Both preview toggles sit on the region they govern (ADR-0031) — the
             preview itself — beside the size/kind badges, and each rides with the
             renderer it controls. The markdown render/source switch shows for a
@@ -338,12 +561,19 @@ export function PreviewPanel({
         )}
       </div>
       {/* Focusable so ctrl/cmd-→ can hand it the keyboard and the arrow keys
-          scroll the content natively instead of moving the tree selection. */}
+          scroll the content natively instead of moving the tree selection. For a
+          text document, typing here drives the in-document fuzzy search. */}
       <div
         ref={scrollRef}
         tabIndex={0}
         onFocus={() => onFocusChange(true)}
         onBlur={() => onFocusChange(false)}
+        onKeyDown={handleDocumentKeyDown}
+        aria-label={
+          isSearchableText
+            ? 'File preview. Type to fuzzy-search this document; Enter jumps between matches.'
+            : 'File preview'
+        }
         className="min-h-0 flex-1 overflow-auto outline-none"
       >
         {previewError !== null ? (
@@ -356,7 +586,11 @@ export function PreviewPanel({
             {preview.isTruncated && <TruncationNote />}
           </>
         ) : preview.kind === 'text' ? (
-          <TextPreviewView preview={preview} wrapText={wrapText} />
+          <TextPreviewView
+            preview={preview}
+            wrapText={wrapText}
+            lineMatches={documentSearch.lineMatches}
+          />
         ) : preview.kind === 'directory' ? (
           <DirectorySummaryView preview={preview} />
         ) : preview.kind === 'image' && preview.mediaUrlPath !== null ? (

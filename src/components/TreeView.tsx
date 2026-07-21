@@ -8,6 +8,7 @@ import {
   isConfinementBlocked,
 } from '../lib/confinement'
 import { ViewChips } from './ViewChips'
+import { HighlightedSegments } from './FuzzyMatch'
 
 // The row grid is a single shared invariant: the root line and every entry row
 // must keep their columns aligned. When the size bars are hidden, the 104px bar
@@ -94,27 +95,11 @@ function EntryRowView({
             rides ahead of the name, dimmed, matches still highlighted. */}
         {row.pathPrefixSegments.length > 0 && (
           <span className="text-dim">
-            {row.pathPrefixSegments.map((segment, segmentIndex) =>
-              segment.matched ? (
-                <span key={segmentIndex} className="rounded-[2px] bg-match-bg text-match">
-                  {segment.text}
-                </span>
-              ) : (
-                <span key={segmentIndex}>{segment.text}</span>
-              ),
-            )}
+            <HighlightedSegments segments={row.pathPrefixSegments} />
           </span>
         )}
         <span className={entryNameColorClass(row)}>
-          {row.nameSegments.map((segment, segmentIndex) =>
-            segment.matched ? (
-              <span key={segmentIndex} className="rounded-[2px] bg-match-bg text-match">
-                {segment.text}
-              </span>
-            ) : (
-              <span key={segmentIndex}>{segment.text}</span>
-            ),
-          )}
+          <HighlightedSegments segments={row.nameSegments} />
         </span>
         {isDirectory && <span className="font-normal text-faint">/</span>}
         {/* broot's " …": matches hide inside this directory, unlisted. */}
