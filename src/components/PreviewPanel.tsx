@@ -17,6 +17,7 @@ import { CONFINEMENT_BADGE_LABEL, confinementRefusalMessage } from '../lib/confi
 import { useApiBase, withApiBase } from '../lib/apiBase'
 import { formatBytes } from '../lib/format'
 import { tokenizePreviewLines } from '../lib/highlighter'
+import { MarkdownPreview } from './MarkdownPreview'
 import { ToggleChip } from './ToggleChip'
 
 // One descriptor per preview kind (ADR-0026): the icon and the label the header
@@ -150,6 +151,16 @@ function MediaPreviewView({ preview, src }: { preview: Preview; src: string }) {
   )
 }
 
+// One wording for the bounded-read caveat, shared by the source and the
+// rendered-markdown views so they can never describe the boundary differently.
+function TruncationNote() {
+  return (
+    <div className="px-4 py-2 text-[11px] text-faint">
+      … preview bounded — the file continues past what was read
+    </div>
+  )
+}
+
 function TextPreviewView({ preview, wrapText }: { preview: Preview; wrapText: boolean }) {
   // Highlighting decorates the plain text that painted first (AGENTS.md
   // responsiveness principle): tokens start null so the very first render is the
@@ -213,11 +224,7 @@ function TextPreviewView({ preview, wrapText }: { preview: Preview; wrapText: bo
           </div>
         )
       })}
-      {preview.isTruncated && (
-        <div className="px-4 py-2 text-[11px] text-faint">
-          … preview bounded — the file continues past what was read
-        </div>
-      )}
+      {preview.isTruncated && <TruncationNote />}
     </div>
   )
 }
@@ -235,7 +242,19 @@ type PreviewPanelProps = {
   // Soft-wrap the text preview, and the header toggle that flips it.
   wrapText: boolean
   onToggleWrap: () => void
+  // Render a markdown file as formatted markdown (on) or as raw highlighted
+  // source (off), and the header toggle that flips it. Meaningful only for a
+  // markdown text preview; ignored for every other kind.
+  renderMarkdown: boolean
+  onToggleRenderMarkdown: () => void
   onFocusChange: (isFocused: boolean) => void
+}
+
+// A markdown text preview is the one text kind that can render two ways. The
+// server tags it via the shared language detector (shared/language.ts), so the
+// panel reads that single hint rather than re-sniffing the extension.
+function isMarkdownPreview(preview: Preview | null): boolean {
+  return preview !== null && preview.kind === 'text' && preview.language === 'markdown'
 }
 
 // The right column: a bounded look at whatever the tree has selected. It is
@@ -252,6 +271,8 @@ export function PreviewPanel({
   width,
   wrapText,
   onToggleWrap,
+  renderMarkdown,
+  onToggleRenderMarkdown,
   onFocusChange,
 }: PreviewPanelProps) {
   // The image `<img src>` is a server-built path (`/api/fs/raw?...`); like every
@@ -261,6 +282,11 @@ export function PreviewPanel({
   // The served root has no basename of its own; name it by the path it is.
   const headerName = preview !== null && preview.name !== '' ? preview.name : targetPath || '/'
   const descriptor = preview === null ? null : PREVIEW_KIND_DESCRIPTORS[preview.kind]
+  const isMarkdown = isMarkdownPreview(preview)
+  // Rendered markdown mounts the document renderer; raw source (toggle off, or a
+  // non-markdown text file) mounts the line-gutter text renderer that `wrap`
+  // governs — so `wrap` only belongs in the header when source is what's shown.
+  const showingRenderedMarkdown = isMarkdown && renderMarkdown
 
   return (
     <div
@@ -279,10 +305,21 @@ export function PreviewPanel({
           {headerName}
         </span>
         <span className="flex-1" />
-        {/* The wrap control sits on the region it governs (ADR-0031) — the
-            preview itself — beside the size/kind badges. It only means anything
-            for text, so it rides with the text preview rather than every kind. */}
-        {preview?.kind === 'text' && (
+        {/* Both preview toggles sit on the region they govern (ADR-0031) — the
+            preview itself — beside the size/kind badges, and each rides with the
+            renderer it controls. The markdown render/source switch shows for a
+            markdown file; the wrap switch governs the source-text renderer, so
+            it drops out while rendered markdown is on. */}
+        {isMarkdown && (
+          <ToggleChip
+            label="rendered"
+            isOn={renderMarkdown}
+            compact
+            title="Render this markdown file as formatted document. Off shows the raw source with syntax highlighting."
+            onToggle={onToggleRenderMarkdown}
+          />
+        )}
+        {preview?.kind === 'text' && !showingRenderedMarkdown && (
           <ToggleChip
             label="wrap"
             isOn={wrapText}
@@ -313,6 +350,11 @@ export function PreviewPanel({
           <div className="px-4 py-3 text-xs text-bar-a">{previewError}</div>
         ) : preview === null ? (
           <div className="px-4 py-3 text-xs text-faint">{isLoading ? 'reading…' : 'no selection'}</div>
+        ) : preview.kind === 'text' && showingRenderedMarkdown ? (
+          <>
+            <MarkdownPreview source={preview.lines.map((line) => line.text).join('\n')} />
+            {preview.isTruncated && <TruncationNote />}
+          </>
         ) : preview.kind === 'text' ? (
           <TextPreviewView preview={preview} wrapText={wrapText} />
         ) : preview.kind === 'directory' ? (

@@ -136,8 +136,15 @@ export function App({
   const [selectedPath, setSelectedPath] = useState<string | null>(initialSelectedPath)
   const [pattern, setPattern] = useState('')
   const { viewSettings, setViewSettings } = useViewSettings()
-  const { showSizes, showHidden, showGitignored, showPreview, wrapPreview, previewRatio } =
-    viewSettings
+  const {
+    showSizes,
+    showHidden,
+    showGitignored,
+    showPreview,
+    wrapPreview,
+    renderMarkdown,
+    previewRatio,
+  } = viewSettings
   const [searchResult, setSearchResult] = useState<SearchSubtreeResult | null>(null)
   // Listing-scoped: the tree could not be loaded. Kept strictly separate from
   // row-scoped refusals, which the rows render themselves.
@@ -596,6 +603,13 @@ export function App({
     }))
   }, [setViewSettings])
 
+  const toggleRenderMarkdown = useCallback(() => {
+    setViewSettings((previousViewSettings) => ({
+      ...previousViewSettings,
+      renderMarkdown: !previousViewSettings.renderMarkdown,
+    }))
+  }, [setViewSettings])
+
   const setPreviewRatio = useCallback(
     (nextPreviewRatio: number) => {
       setViewSettings((previousViewSettings) => ({
@@ -850,6 +864,8 @@ export function App({
               width={previewWidth}
               wrapText={wrapPreview}
               onToggleWrap={toggleWrapPreview}
+              renderMarkdown={renderMarkdown}
+              onToggleRenderMarkdown={toggleRenderMarkdown}
               onFocusChange={setIsPreviewFocused}
             />
           </>

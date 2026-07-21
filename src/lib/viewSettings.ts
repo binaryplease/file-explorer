@@ -18,6 +18,11 @@ export const ViewSettingsSchema = z.object({
   // the whole line without the panel's horizontal scrollbar; a code reader who
   // wants exact columns turns it off (restoring `whitespace-pre` + h-scroll).
   wrapPreview: z.boolean().default(true),
+  // Render a markdown file's preview as formatted markdown rather than its raw
+  // source. On by default — a `.md` reads as the document it is; a reader who
+  // wants the raw source (and its syntax highlighting) turns it off, restoring
+  // the plain text-preview renderer that every other text file uses.
+  renderMarkdown: z.boolean().default(true),
   // The tree/preview split, as the fraction of the row's width the preview
   // column takes. `null` means "no dragged preference yet" — the split falls
   // back to the entry-intent default (preview-dominant when opened on a file,
