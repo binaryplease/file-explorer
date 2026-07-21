@@ -237,27 +237,30 @@ export function TreeView({
           onTogglePreview={onTogglePreview}
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-2.5">
-        {/* The tree's first line is the current directory itself — a normal
-            tree row, selected by default. Enter (or double-click) on it walks
-            up one level, broot-style. */}
-        <div
-          data-row-path={ROOT_LINE_PATH}
-          onClick={() => onSelect(ROOT_LINE_PATH)}
-          onDoubleClick={onFocusParent}
-          className={`relative grid cursor-pointer ${rowGridColumnsClass(showSizes)} items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
-            isRootLineSelected ? 'bg-sel' : 'hover:bg-hover'
-          }`}
-        >
-          {isRootLineSelected && <span className="absolute inset-y-0 left-0 w-[3px] bg-sel-bar" />}
-          <span className="overflow-hidden font-semibold text-ellipsis text-dir">
-            {rootFullPath}
-          </span>
-          {/* Spacers for the size columns the root line leaves blank: the bar
-              track only exists when sizes are shown, the size-text track always. */}
-          {showSizes && <span />}
-          <span />
-        </div>
+      {/* The current directory is a separate signal, not one of the entries:
+          it is the anchor the whole view hangs from. So it lives on its own
+          chrome band — pinned above the scroll, divided from the rows by a
+          border — rather than scrolling away as the first tree line. It stays a
+          selectable row: Enter (or double-click) on it walks up one level,
+          broot-style. */}
+      <div
+        data-row-path={ROOT_LINE_PATH}
+        onClick={() => onSelect(ROOT_LINE_PATH)}
+        onDoubleClick={onFocusParent}
+        className={`relative grid flex-none cursor-pointer border-b border-line bg-chrome ${rowGridColumnsClass(showSizes)} items-center px-4 py-[3px] whitespace-pre transition-colors ${
+          isRootLineSelected ? 'bg-sel' : 'hover:bg-hover'
+        }`}
+      >
+        {isRootLineSelected && <span className="absolute inset-y-0 left-0 w-[3px] bg-sel-bar" />}
+        <span className="overflow-hidden font-semibold text-ellipsis text-dir">
+          {rootFullPath}
+        </span>
+        {/* Spacers for the size columns the root line leaves blank: the bar
+            track only exists when sizes are shown, the size-text track always. */}
+        {showSizes && <span />}
+        <span />
+      </div>
+      <div data-tree-scroll className="min-h-0 flex-1 overflow-y-auto pb-2.5">
         {listingError !== null && (
           <div className="px-4 py-2 text-xs text-bar-a">{listingError}</div>
         )}

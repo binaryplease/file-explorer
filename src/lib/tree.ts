@@ -69,19 +69,28 @@ export function parentTreePath(path: string): string {
   return lastSlashIndex === -1 ? '' : path.slice(0, lastSlashIndex)
 }
 
-function compareEntries(
-  firstEntry: DirectoryEntry,
-  secondEntry: DirectoryEntry,
-  showSizes: boolean,
-): number {
-  const firstIsDirectory = firstEntry.kind === 'directory'
-  const secondIsDirectory = secondEntry.kind === 'directory'
-  if (firstIsDirectory !== secondIsDirectory) return firstIsDirectory ? -1 : 1
-  if (showSizes && !firstIsDirectory) {
-    const sizeDifference = (secondEntry.sizeBytes ?? 0) - (firstEntry.sizeBytes ?? 0)
-    if (sizeDifference !== 0) return sizeDifference
-  }
-  return firstEntry.name.localeCompare(secondEntry.name)
+// broot's natural order (Sort::None): files and directories interleaved, sorted
+// case-insensitively by name — no dirs-first grouping, no size ordering. One
+// comparator drives both the browse tree and the search tree so their row order
+// is a single invariant.
+export function compareEntryNames(firstName: string, secondName: string): number {
+  return firstName.localeCompare(secondName, undefined, { sensitivity: 'base', numeric: true })
+}
+
+function compareEntries(firstEntry: DirectoryEntry, secondEntry: DirectoryEntry): number {
+  return compareEntryNames(firstEntry.name, secondEntry.name)
+}
+
+// A child survives the current view filters (dotfiles / gitignored). Shared by
+// the row builder and the auto-open planner so both agree on what is visible.
+function isVisibleChild(
+  child: DirectoryEntry,
+  showHidden: boolean,
+  showGitignored: boolean,
+): boolean {
+  if (!showHidden && child.isHidden) return false
+  if (!showGitignored && child.isGitignored) return false
+  return true
 }
 
 function unmatchedSegments(name: string): FuzzySegment[] {
@@ -120,7 +129,7 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
         }
         return true
       })
-      .sort((firstChild, secondChild) => compareEntries(firstChild, secondChild, showSizes))
+      .sort(compareEntries)
 
     const unlistedCount = hiddenCount + ignoredCount
     const largestFileSize = Math.max(...visibleChildren.map((child) => child.sizeBytes ?? 0), 0)
@@ -162,6 +171,109 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
   walk(focusPath, [])
   const entryRowCount = rows.filter((row) => row.type === 'entry').length
   return { rows, entryRowCount, matchCount: 0, bestMatchPath: null }
+}
+
+export type AutoOpenPlanOptions = {
+  focusPath: string
+  listings: Record<string, DirectoryEntry[] | undefined>
+  // Directories the user opened by hand. Their children always show and always
+  // count against the viewport budget, whether or not the fill would have opened
+  // them; the planner never closes them.
+  manuallyOpenPaths: ReadonlySet<string>
+  // Directories the user collapsed by hand. The planner never re-opens these,
+  // so a deliberate collapse sticks even when there is room to fill.
+  closedPaths: ReadonlySet<string>
+  showHidden: boolean
+  showGitignored: boolean
+  // How many entry rows fit the tree viewport. The planner opens directories
+  // until roughly this many rows are reserved.
+  rowCapacity: number
+}
+
+export type AutoOpenPlan = {
+  // Directories the fill decided to open, beyond the user's manual opens.
+  autoOpenPaths: Set<string>
+  // Directories whose listings must be fetched before the fill can descend into
+  // them. Row counts here fall back to `childCount` until the listing arrives.
+  pendingListingPaths: string[]
+}
+
+// broot's screen-fit openness, adapted to our lazy, scrolling tree: when a
+// directory holds little content, open the next depth of sub-directories —
+// breadth-first, shallowest and alphabetically-first wins — until the viewport
+// is filled, so the empty space below a short listing is used rather than left
+// blank. Whole directories are opened (no partial per-directory truncation);
+// overshoot simply scrolls, since unlike broot's fixed TUI our panel scrolls.
+//
+// It is a pure function of the currently-loaded listings: directories it wants
+// to descend into but has not fetched yet come back in `pendingListingPaths`,
+// and the caller re-runs the plan once those listings load, walking one level
+// deeper each pass until the budget is met or the tree runs out.
+export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
+  const {
+    focusPath,
+    listings,
+    manuallyOpenPaths,
+    closedPaths,
+    showHidden,
+    showGitignored,
+    rowCapacity,
+  } = options
+  const autoOpenPaths = new Set<string>()
+  const pendingListingPaths: string[] = []
+
+  const focusChildren = listings[focusPath]
+  if (focusChildren === undefined) return { autoOpenPaths, pendingListingPaths }
+
+  // The focus directory is always open; its own children are the baseline the
+  // fill adds onto.
+  let reservedRowCount = focusChildren.filter((child) =>
+    isVisibleChild(child, showHidden, showGitignored),
+  ).length
+
+  // Breadth-first over the open directories: a directory enters the queue only
+  // once it is known to be open (manually or by the fill), so shallower levels
+  // are always considered before deeper ones.
+  const openDirectoryQueue: string[] = [focusPath]
+  while (openDirectoryQueue.length > 0) {
+    const directoryPath = openDirectoryQueue.shift()!
+    const directoryListing = listings[directoryPath]
+    if (directoryListing === undefined) continue
+
+    const childDirectories = directoryListing
+      .filter(
+        (child) =>
+          child.kind === 'directory' && isVisibleChild(child, showHidden, showGitignored),
+      )
+      .sort(compareEntries)
+
+    for (const childDirectory of childDirectories) {
+      const childPath = joinTreePath(directoryPath, childDirectory.name)
+      if (closedPaths.has(childPath)) continue
+      const estimatedChildRows = childDirectory.childCount ?? 0
+
+      const descend = () => {
+        // The listing may filter some children out, so `childCount` is an
+        // estimate; it is only used to pace the fill, never rendered.
+        reservedRowCount += estimatedChildRows
+        if (listings[childPath] === undefined) pendingListingPaths.push(childPath)
+        else openDirectoryQueue.push(childPath)
+      }
+
+      if (manuallyOpenPaths.has(childPath)) {
+        descend()
+        continue
+      }
+      // Auto-open candidate: keep opening while the viewport has room. Empty or
+      // unreadable directories add no rows, so opening them would not help fill.
+      if (reservedRowCount >= rowCapacity) continue
+      if (estimatedChildRows <= 0) continue
+      autoOpenPaths.add(childPath)
+      descend()
+    }
+  }
+
+  return { autoOpenPaths, pendingListingPaths }
 }
 
 export type SearchViewOptions = {
@@ -219,11 +331,9 @@ export function buildSearchRows(options: SearchViewOptions): TreeRowsResult {
     ancestorWasLastFlags: boolean[],
     trailingUnlistedCount: number,
   ): void {
-    const children = (childrenByParent.get(parentNodePath) ?? []).sort((firstNode, secondNode) => {
-      const firstName = firstNode.entry.name.toLowerCase()
-      const secondName = secondNode.entry.name.toLowerCase()
-      return firstName < secondName ? -1 : firstName > secondName ? 1 : 0
-    })
+    const children = (childrenByParent.get(parentNodePath) ?? []).sort((firstNode, secondNode) =>
+      compareEntryNames(firstNode.entry.name, secondNode.entry.name),
+    )
     const largestFileSize = Math.max(...children.map((child) => child.entry.sizeBytes ?? 0), 0)
     const leadPrefix = connectorLead(ancestorWasLastFlags)
 

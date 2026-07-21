@@ -14,6 +14,7 @@ import {
   buildTreeRows,
   joinTreePath,
   parentTreePath,
+  planAutoOpen,
   ROOT_LINE_PATH,
   type EntryRow,
 } from './lib/tree'
@@ -33,13 +34,46 @@ function baseName(path: string): string {
   return lastSlashIndex === -1 ? path : path.slice(lastSlashIndex + 1)
 }
 
-// One "page" of rows for PageDown/ctrl-d, measured from the rendered tree —
-// rows are fixed-height direct children of the scroll container.
+// Fallback row height (px) used only before any entry row has rendered, so the
+// first auto-open pass has a sane viewport estimate to work from.
+const FALLBACK_TREE_ROW_HEIGHT = 27
+
+// The tree's scroll viewport and its first entry row. The root line is pinned
+// outside this container (a separate signal), so it is never mistaken for a
+// scrolling row when measuring.
+function measureTreeViewport(): { container: HTMLElement; rowHeight: number } | null {
+  const container = document.querySelector<HTMLElement>('[data-tree-scroll]')
+  if (container === null) return null
+  const rowElement = container.querySelector<HTMLElement>('[data-row-path]')
+  const rowHeight =
+    rowElement !== null && rowElement.offsetHeight > 0
+      ? rowElement.offsetHeight
+      : FALLBACK_TREE_ROW_HEIGHT
+  return { container, rowHeight }
+}
+
+// One "page" of rows for PageDown/ctrl-d, measured from the rendered tree.
 function measurePageRowCount(): number {
-  const rowElement = document.querySelector<HTMLElement>('[data-row-path]')
-  const scrollContainer = rowElement?.parentElement ?? null
-  if (rowElement === null || scrollContainer === null || rowElement.offsetHeight === 0) return 10
-  return Math.max(1, Math.floor(scrollContainer.clientHeight / rowElement.offsetHeight) - 1)
+  const viewport = measureTreeViewport()
+  if (viewport === null) return 10
+  return Math.max(1, Math.floor(viewport.container.clientHeight / viewport.rowHeight) - 1)
+}
+
+// How many entry rows fit the tree viewport — the auto-open budget (broot's
+// targeted_size). Rounded up so a partially-visible last row still counts as
+// space worth filling.
+function measureTreeRowCapacity(): number {
+  const viewport = measureTreeViewport()
+  if (viewport === null) return 0
+  return Math.ceil(viewport.container.clientHeight / viewport.rowHeight)
+}
+
+// Set equality by membership — the auto-open effect uses it to hold a stable
+// reference when a re-plan lands on the same directories, so it does not loop.
+function pathSetsEqual(first: ReadonlySet<string>, second: ReadonlySet<string>): boolean {
+  if (first.size !== second.size) return false
+  for (const value of first) if (!second.has(value)) return false
+  return true
 }
 
 // Holding an arrow key walks the tree faster than any request can answer. The
@@ -87,7 +121,18 @@ export function App({
   const [rootPath, setRootPath] = useState<string | null>(null)
   const [focusPath, setFocusPath] = useState<string>(() => focusNavigation.initialFocusPath())
   const [listings, setListings] = useState<Record<string, DirectoryEntry[] | undefined>>({})
+  // Three layers compose the effective open set. `openPaths` and `closedPaths`
+  // are the user's manual overrides; `autoOpenPaths` is broot's screen-fit fill,
+  // computed to use the empty space below a short listing. Effective open =
+  // (manual-open ∪ auto-open) \ manual-closed.
   const [openPaths, setOpenPaths] = useState<ReadonlySet<string>>(new Set())
+  const [closedPaths, setClosedPaths] = useState<ReadonlySet<string>>(new Set())
+  const [autoOpenPaths, setAutoOpenPaths] = useState<ReadonlySet<string>>(new Set())
+  // Directories the fill has already asked the server for, so a directory that
+  // fails to load (or is slow) is not re-fetched on every re-plan.
+  const autoOpenRequestedRef = useRef<Set<string>>(new Set())
+  // Bumped on viewport resize to re-run the fill against the new height.
+  const [viewportResizeTick, setViewportResizeTick] = useState(0)
   const [selectedPath, setSelectedPath] = useState<string | null>(initialSelectedPath)
   const [pattern, setPattern] = useState('')
   const { viewSettings, setViewSettings } = useViewSettings()
@@ -264,24 +309,113 @@ export function App({
 
   const isSearching = pattern !== ''
 
+  // The tree the user actually sees: the fill's auto-opens plus the user's
+  // manual opens, minus anything the user deliberately collapsed.
+  const effectiveOpenPaths = useMemo(() => {
+    const effective = new Set(autoOpenPaths)
+    for (const manuallyOpenPath of openPaths) effective.add(manuallyOpenPath)
+    for (const closedPath of closedPaths) effective.delete(closedPath)
+    return effective
+  }, [autoOpenPaths, openPaths, closedPaths])
+
+  // Once the user has expanded or collapsed anything by hand, the tree is
+  // theirs: the fill freezes at its current shape rather than second-guessing a
+  // deliberate collapse by opening a sibling to reclaim the space.
+  const userHasAdjustedTree = openPaths.size > 0 || closedPaths.size > 0
+
   const toggleDirectory = useCallback(
     (directoryPath: string) => {
       // Search rows are a server-pruned view; expand/collapse is browse-only.
       if (isSearching) return
-      setOpenPaths((previousOpenPaths) => {
-        const nextOpenPaths = new Set(previousOpenPaths)
-        if (nextOpenPaths.has(directoryPath)) nextOpenPaths.delete(directoryPath)
-        else nextOpenPaths.add(directoryPath)
-        return nextOpenPaths
-      })
-      if (listings[directoryPath] === undefined) void loadListing(directoryPath)
+      const isCurrentlyOpen = effectiveOpenPaths.has(directoryPath)
+      if (isCurrentlyOpen) {
+        setClosedPaths((previous) => new Set(previous).add(directoryPath))
+        setOpenPaths((previous) => {
+          const next = new Set(previous)
+          next.delete(directoryPath)
+          return next
+        })
+      } else {
+        setOpenPaths((previous) => new Set(previous).add(directoryPath))
+        setClosedPaths((previous) => {
+          const next = new Set(previous)
+          next.delete(directoryPath)
+          return next
+        })
+        if (listings[directoryPath] === undefined) void loadListing(directoryPath)
+      }
     },
-    [listings, loadListing, isSearching],
+    [listings, loadListing, isSearching, effectiveOpenPaths],
   )
 
+  // Each focus is a fresh view: clear the manual overrides and the fill so the
+  // new directory is auto-filled from scratch, broot-style (focus = new root).
+  useEffect(() => {
+    setOpenPaths(new Set())
+    setClosedPaths(new Set())
+    setAutoOpenPaths(new Set())
+    autoOpenRequestedRef.current = new Set()
+  }, [focusPath])
+
+  // broot's screen-fit fill: open the next depth of directories until the
+  // viewport is full, so a short listing does not leave the panel half empty.
+  // Enrichment, not navigation — it runs after paint, descends one level per
+  // pass as listings arrive, and never blocks the core listing from showing.
+  useEffect(() => {
+    if (isSearching || userHasAdjustedTree) return
+    if (listings[focusPath] === undefined) return
+    const rowCapacity = measureTreeRowCapacity()
+    if (rowCapacity <= 0) return
+    const plan = planAutoOpen({
+      focusPath,
+      listings,
+      manuallyOpenPaths: openPaths,
+      closedPaths,
+      showHidden,
+      showGitignored,
+      rowCapacity,
+    })
+    setAutoOpenPaths((previous) =>
+      pathSetsEqual(previous, plan.autoOpenPaths) ? previous : plan.autoOpenPaths,
+    )
+    for (const pendingPath of plan.pendingListingPaths) {
+      if (autoOpenRequestedRef.current.has(pendingPath)) continue
+      autoOpenRequestedRef.current.add(pendingPath)
+      void loadListing(pendingPath)
+    }
+  }, [
+    isSearching,
+    userHasAdjustedTree,
+    focusPath,
+    listings,
+    openPaths,
+    closedPaths,
+    showHidden,
+    showGitignored,
+    viewportResizeTick,
+    loadListing,
+  ])
+
+  // A taller viewport has more space to fill; re-plan the fill on resize.
+  useEffect(() => {
+    function handleViewportResize() {
+      setViewportResizeTick((tick) => tick + 1)
+    }
+    window.addEventListener('resize', handleViewportResize)
+    return () => window.removeEventListener('resize', handleViewportResize)
+  }, [])
+
   const browseView = useMemo(
-    () => buildTreeRows({ focusPath, listings, openPaths, showHidden, showGitignored, showSizes }),
-    [focusPath, listings, openPaths, showHidden, showGitignored, showSizes],
+    () =>
+      buildTreeRows({
+        focusPath,
+        listings,
+        openPaths: effectiveOpenPaths,
+        showHidden,
+        showGitignored,
+        showSizes,
+      }),
+    [focusPath, listings, effectiveOpenPaths, showHidden, showGitignored, showSizes],
   )
   const searchView = useMemo(
     () => (searchResult === null ? null : buildSearchRows({ result: searchResult, showSizes })),
