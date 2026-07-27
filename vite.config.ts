@@ -12,6 +12,13 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    // Bind the exact host scripts/dev-ports.ts probed (HOST, pinned into the env
+    // alongside VITE_PORT). Without this Vite defaults to `localhost`, which on a
+    // dual-stack box resolves to IPv6 `::1` — a different address family than the
+    // probe's `127.0.0.1`. A stale listener on `::1:5173` is then invisible to
+    // the probe (which reports 5173 free and never reassigns) yet still collides
+    // when Vite binds it. Binding the probed host keeps verdict and bind coherent.
+    host: process.env.HOST || "127.0.0.1",
     // Ports are resolved before startup by scripts/dev-ports.ts, which pins the
     // result into VITE_PORT / VITE_API_TARGET. Absent that, the canonical ports
     // apply.
