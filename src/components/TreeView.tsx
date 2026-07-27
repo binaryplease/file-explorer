@@ -34,6 +34,7 @@ type EntryRowViewProps = {
   showSizes: boolean
   onSelect: (path: string) => void
   onFocusDirectory: (path: string) => void
+  onPreviewFile: (path: string) => void
   onOpenFile: (path: string) => void
 }
 
@@ -44,6 +45,7 @@ function EntryRowView({
   showSizes,
   onSelect,
   onFocusDirectory,
+  onPreviewFile,
   onOpenFile,
 }: EntryRowViewProps) {
   const isDirectory = row.entry.kind === 'directory'
@@ -73,12 +75,20 @@ function EntryRowView({
       aria-describedby={showReasonLine ? reasonLineId : undefined}
       onClick={() => {
         onSelect(row.path)
-        // A single click acts like Enter (broot open_stay): a directory becomes
-        // the new root, a file opens. Still routed to the handlers when blocked:
-        // they own the refusal, so acting on the row explains itself instead of
-        // silently doing nothing.
+        // A single click acts like Enter (broot open_stay) for directories — the
+        // directory becomes the new root — but a file reveals itself in the
+        // preview panel rather than launching; the OS open is the double-click.
+        // Still routed to the handlers when blocked: they own the refusal, so
+        // acting on the row explains itself instead of silently doing nothing.
         if (isBlocked) onOpenFile(row.path)
         else if (isDirectory) onFocusDirectory(row.path)
+        else if (row.entry.kind === 'file') onPreviewFile(row.path)
+      }}
+      onDoubleClick={() => {
+        // A file's double-click hands it to the OS default app; the single
+        // clicks that led here only opened the preview. Directories already
+        // navigated on the first click, so there is nothing left to do for them.
+        if (isBlocked) onOpenFile(row.path)
         else if (row.entry.kind === 'file') onOpenFile(row.path)
       }}
       className={`relative grid cursor-pointer ${rowGridColumnsClass(showSizes)} items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
@@ -172,6 +182,7 @@ type TreeViewProps = {
   onSelect: (path: string) => void
   onFocusParent: () => void
   onFocusDirectory: (path: string) => void
+  onPreviewFile: (path: string) => void
   onOpenFile: (path: string) => void
   onToggleSizes: () => void
   onToggleHidden: () => void
@@ -194,6 +205,7 @@ export function TreeView({
   onSelect,
   onFocusParent,
   onFocusDirectory,
+  onPreviewFile,
   onOpenFile,
   onToggleSizes,
   onToggleHidden,
@@ -260,6 +272,7 @@ export function TreeView({
               showSizes={showSizes}
               onSelect={onSelect}
               onFocusDirectory={onFocusDirectory}
+              onPreviewFile={onPreviewFile}
               onOpenFile={onOpenFile}
             />
           ) : row.type === 'pruned' ? (

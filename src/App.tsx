@@ -607,6 +607,18 @@ export function App({
     }))
   }, [setViewSettings])
 
+  // A file's single click reveals it in the preview panel — enrichment, not the
+  // OS launch (that's the double-click's job). Selection already aims the
+  // preview at this file; this only makes the panel visible. A blocked entry
+  // refuses here instead, surfacing the reason line rather than previewing.
+  const previewFile = useCallback(
+    (filePath: string) => {
+      if (refuseIfBlocked(filePath)) return
+      setPreviewVisible(true)
+    },
+    [refuseIfBlocked, setPreviewVisible],
+  )
+
   const toggleWrapPreview = useCallback(() => {
     setViewSettings((previousViewSettings) => ({
       ...previousViewSettings,
@@ -843,6 +855,7 @@ export function App({
           onSelect={setSelectedPath}
           onFocusParent={focusParentDirectory}
           onFocusDirectory={focusDirectory}
+          onPreviewFile={previewFile}
           onOpenFile={openFile}
           onToggleSizes={toggleSizes}
           onToggleHidden={toggleHidden}
