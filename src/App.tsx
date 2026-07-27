@@ -60,12 +60,14 @@ function measurePageRowCount(): number {
 }
 
 // How many entry rows fit the tree viewport — the auto-open budget (broot's
-// targeted_size). Rounded up so a partially-visible last row still counts as
-// space worth filling.
+// targeted_size). Rounded down, padding excluded: the fill must never plan
+// more rows than the height can show (broot's screen-fit), so a partially
+// visible last row does not count as space worth filling.
 function measureTreeRowCapacity(): number {
   const viewport = measureTreeViewport()
   if (viewport === null) return 0
-  return Math.ceil(viewport.container.clientHeight / viewport.rowHeight)
+  const paddingBottom = Number.parseFloat(getComputedStyle(viewport.container).paddingBottom) || 0
+  return Math.max(0, Math.floor((viewport.container.clientHeight - paddingBottom) / viewport.rowHeight))
 }
 
 // Set equality by membership — the auto-open effect uses it to hold a stable
@@ -73,6 +75,18 @@ function measureTreeRowCapacity(): number {
 function pathSetsEqual(first: ReadonlySet<string>, second: ReadonlySet<string>): boolean {
   if (first.size !== second.size) return false
   for (const value of first) if (!second.has(value)) return false
+  return true
+}
+
+// Map equality by entries — same purpose as `pathSetsEqual`, for the fill's
+// per-directory child limits.
+function childLimitMapsEqual(
+  first: ReadonlyMap<string, number>,
+  second: ReadonlyMap<string, number>,
+): boolean {
+  if (first.size !== second.size) return false
+  for (const [directoryPath, childLimit] of first)
+    if (second.get(directoryPath) !== childLimit) return false
   return true
 }
 
@@ -122,12 +136,17 @@ export function App({
   const [focusPath, setFocusPath] = useState<string>(() => focusNavigation.initialFocusPath())
   const [listings, setListings] = useState<Record<string, DirectoryEntry[] | undefined>>({})
   // Three layers compose the effective open set. `openPaths` and `closedPaths`
-  // are the user's manual overrides; `autoOpenPaths` is broot's screen-fit fill,
-  // computed to use the empty space below a short listing. Effective open =
+  // are the user's manual overrides; `autoOpenFill` is broot's screen-fit fill,
+  // computed to use the empty space below a short listing — its `paths` are the
+  // directories the fill opened, its `childRowLimits` the per-directory
+  // truncation for those it could only open partway. Effective open =
   // (manual-open ∪ auto-open) \ manual-closed.
   const [openPaths, setOpenPaths] = useState<ReadonlySet<string>>(new Set())
   const [closedPaths, setClosedPaths] = useState<ReadonlySet<string>>(new Set())
-  const [autoOpenPaths, setAutoOpenPaths] = useState<ReadonlySet<string>>(new Set())
+  const [autoOpenFill, setAutoOpenFill] = useState<{
+    paths: ReadonlySet<string>
+    childRowLimits: ReadonlyMap<string, number>
+  }>({ paths: new Set(), childRowLimits: new Map() })
   // Directories the fill has already asked the server for, so a directory that
   // fails to load (or is slow) is not re-fetched on every re-plan.
   const autoOpenRequestedRef = useRef<Set<string>>(new Set())
@@ -319,11 +338,22 @@ export function App({
   // The tree the user actually sees: the fill's auto-opens plus the user's
   // manual opens, minus anything the user deliberately collapsed.
   const effectiveOpenPaths = useMemo(() => {
-    const effective = new Set(autoOpenPaths)
+    const effective = new Set(autoOpenFill.paths)
     for (const manuallyOpenPath of openPaths) effective.add(manuallyOpenPath)
     for (const closedPath of closedPaths) effective.delete(closedPath)
     return effective
-  }, [autoOpenPaths, openPaths, closedPaths])
+  }, [autoOpenFill, openPaths, closedPaths])
+
+  // The fill's truncation caps, minus any directory the user has since opened
+  // by hand — a manual open means "show me everything in here", so it always
+  // renders in full.
+  const autoOpenChildLimits = useMemo(() => {
+    if (autoOpenFill.childRowLimits.size === 0 || openPaths.size === 0)
+      return autoOpenFill.childRowLimits
+    const limits = new Map(autoOpenFill.childRowLimits)
+    for (const manuallyOpenPath of openPaths) limits.delete(manuallyOpenPath)
+    return limits
+  }, [autoOpenFill, openPaths])
 
   // Once the user has expanded or collapsed anything by hand, the tree is
   // theirs: the fill freezes at its current shape rather than second-guessing a
@@ -335,6 +365,13 @@ export function App({
       // Search rows are a server-pruned view; expand/collapse is browse-only.
       if (isSearching) return
       const isCurrentlyOpen = effectiveOpenPaths.has(directoryPath)
+      // A directory the fill opened only partway ("N unlisted") is showing an
+      // excerpt, not its contents: the first toggle completes the open — a
+      // manual open, which lifts the truncation — rather than collapsing it.
+      if (isCurrentlyOpen && autoOpenChildLimits.has(directoryPath)) {
+        setOpenPaths((previous) => new Set(previous).add(directoryPath))
+        return
+      }
       if (isCurrentlyOpen) {
         setClosedPaths((previous) => new Set(previous).add(directoryPath))
         setOpenPaths((previous) => {
@@ -352,7 +389,7 @@ export function App({
         if (listings[directoryPath] === undefined) void loadListing(directoryPath)
       }
     },
-    [listings, loadListing, isSearching, effectiveOpenPaths],
+    [listings, loadListing, isSearching, effectiveOpenPaths, autoOpenChildLimits],
   )
 
   // Each focus is a fresh view: clear the manual overrides and the fill so the
@@ -360,14 +397,16 @@ export function App({
   useEffect(() => {
     setOpenPaths(new Set())
     setClosedPaths(new Set())
-    setAutoOpenPaths(new Set())
+    setAutoOpenFill({ paths: new Set(), childRowLimits: new Map() })
     autoOpenRequestedRef.current = new Set()
   }, [focusPath])
 
   // broot's screen-fit fill: open the next depth of directories until the
-  // viewport is full, so a short listing does not leave the panel half empty.
-  // Enrichment, not navigation — it runs after paint, descends one level per
-  // pass as listings arrive, and never blocks the core listing from showing.
+  // viewport is full, so a short listing does not leave the panel half empty —
+  // and no further: a directory that does not fit is truncated to a
+  // "N unlisted" excerpt rather than overflowing the height. Enrichment, not
+  // navigation — it runs after paint, descends one level per pass as listings
+  // arrive, and never blocks the core listing from showing.
   useEffect(() => {
     if (isSearching || userHasAdjustedTree) return
     if (listings[focusPath] === undefined) return
@@ -382,8 +421,11 @@ export function App({
       showGitignored,
       rowCapacity,
     })
-    setAutoOpenPaths((previous) =>
-      pathSetsEqual(previous, plan.autoOpenPaths) ? previous : plan.autoOpenPaths,
+    setAutoOpenFill((previous) =>
+      pathSetsEqual(previous.paths, plan.autoOpenPaths) &&
+      childLimitMapsEqual(previous.childRowLimits, plan.childRowLimits)
+        ? previous
+        : { paths: plan.autoOpenPaths, childRowLimits: plan.childRowLimits },
     )
     for (const pendingPath of plan.pendingListingPaths) {
       if (autoOpenRequestedRef.current.has(pendingPath)) continue
@@ -418,11 +460,12 @@ export function App({
         focusPath,
         listings,
         openPaths: effectiveOpenPaths,
+        autoOpenChildLimits,
         showHidden,
         showGitignored,
         showSizes,
       }),
-    [focusPath, listings, effectiveOpenPaths, showHidden, showGitignored, showSizes],
+    [focusPath, listings, effectiveOpenPaths, autoOpenChildLimits, showHidden, showGitignored, showSizes],
   )
   const searchView = useMemo(
     () => (searchResult === null ? null : buildSearchRows({ result: searchResult, showSizes })),

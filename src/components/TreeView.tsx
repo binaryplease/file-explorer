@@ -265,8 +265,9 @@ export function TreeView({
               onFocusDirectory={onFocusDirectory}
               onOpenFile={onOpenFile}
             />
-          ) : row.type === 'search-unlisted' ? (
-            // broot's pruning line: matches trimmed from this directory's view.
+          ) : row.type === 'pruned' ? (
+            // broot's pruning line: children trimmed from this directory's view
+            // (the search's best-scoring cut, or the auto-open screen-fit).
             <div
               key={row.path}
               className="px-4 py-px text-[11.5px] whitespace-pre text-faint"

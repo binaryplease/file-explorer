@@ -27,21 +27,27 @@ export type UnlistedRow = {
   ignoredCount: number
 }
 
-// broot's "N unlisted" pruning line: trailing marker under a search-result
-// directory whose matching children were trimmed from the view.
-export type SearchUnlistedRow = {
-  type: 'search-unlisted'
+// broot's "N unlisted" pruning line: a directory's trailing marker when some
+// of its children were trimmed from the view — by the server's best-scoring
+// search cut, or by the auto-open fill's screen-fit truncation.
+export type PrunedRow = {
+  type: 'pruned'
   path: string
   connectorPrefix: string
   unlistedCount: number
 }
 
-export type TreeRowModel = EntryRow | UnlistedRow | SearchUnlistedRow
+export type TreeRowModel = EntryRow | UnlistedRow | PrunedRow
 
 export type TreeViewOptions = {
   focusPath: string
   listings: Record<string, DirectoryEntry[] | undefined>
   openPaths: ReadonlySet<string>
+  // Per-directory visible-children caps from the auto-open fill (broot's
+  // screen-fit truncation): an open directory listed here shows only its first
+  // N children plus a "N unlisted" pruning row. The focus directory is never
+  // capped — its full listing is the core content.
+  autoOpenChildLimits?: ReadonlyMap<string, number>
   showHidden: boolean
   showGitignored: boolean
   showSizes: boolean
@@ -108,7 +114,15 @@ function connectorLead(ancestorWasLastFlags: boolean[]): string {
 // per folder. Filtering while typing is the server's job (`buildSearchRows`);
 // this is pure browse mode.
 export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
-  const { focusPath, listings, openPaths, showHidden, showGitignored, showSizes } = options
+  const {
+    focusPath,
+    listings,
+    openPaths,
+    autoOpenChildLimits,
+    showHidden,
+    showGitignored,
+    showSizes,
+  } = options
   const rows: TreeRowModel[] = []
 
   function walk(parentPath: string, ancestorWasLastFlags: boolean[]): void {
@@ -131,13 +145,24 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
       })
       .sort(compareEntries)
 
+    // broot's screen-fit truncation: a directory the fill opened only partway
+    // shows its first N children, then a "N unlisted" pruning row for the rest.
+    const childLimit = autoOpenChildLimits?.get(parentPath)
+    const prunedCount =
+      childLimit !== undefined && childLimit < visibleChildren.length
+        ? visibleChildren.length - childLimit
+        : 0
+    const shownChildren =
+      prunedCount > 0 ? visibleChildren.slice(0, childLimit) : visibleChildren
+
     const unlistedCount = hiddenCount + ignoredCount
     const largestFileSize = Math.max(...visibleChildren.map((child) => child.sizeBytes ?? 0), 0)
     const leadPrefix = connectorLead(ancestorWasLastFlags)
 
-    visibleChildren.forEach((child, childIndex) => {
+    shownChildren.forEach((child, childIndex) => {
       const childPath = joinTreePath(parentPath, child.name)
-      const isLastRow = childIndex === visibleChildren.length - 1 && unlistedCount === 0
+      const isLastRow =
+        childIndex === shownChildren.length - 1 && prunedCount === 0 && unlistedCount === 0
       const isOpen = child.kind === 'directory' && openPaths.has(childPath)
       rows.push({
         type: 'entry',
@@ -156,6 +181,15 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
       })
       if (isOpen) walk(childPath, [...ancestorWasLastFlags, isLastRow])
     })
+
+    if (prunedCount > 0) {
+      rows.push({
+        type: 'pruned',
+        path: `${parentPath}#pruned`,
+        connectorPrefix: leadPrefix + (unlistedCount === 0 ? '└──' : '├──'),
+        unlistedCount: prunedCount,
+      })
+    }
 
     if (unlistedCount > 0) {
       rows.push({
@@ -193,17 +227,38 @@ export type AutoOpenPlanOptions = {
 export type AutoOpenPlan = {
   // Directories the fill decided to open, beyond the user's manual opens.
   autoOpenPaths: Set<string>
+  // Auto-opened directories granted only part of the viewport: how many of
+  // their sorted visible children the row builder should show before the
+  // "N unlisted" pruning row. Directories opened in full are absent.
+  childRowLimits: Map<string, number>
   // Directories whose listings must be fetched before the fill can descend into
   // them. Row counts here fall back to `childCount` until the listing arrives.
   pendingListingPaths: string[]
 }
 
+// One directory the fill is feeding child rows to, round-robin.
+type FillCandidate = {
+  directoryPath: string
+  // Sorted visible children when the listing is loaded; null while pending.
+  visibleChildren: DirectoryEntry[] | null
+  // Total child rows this directory could show (estimated from `childCount`
+  // while the listing is pending — it counts filtered children too, so it is
+  // only used to pace the fill, never rendered).
+  totalChildRowCount: number
+  grantedChildRowCount: number
+}
+
 // broot's screen-fit openness, adapted to our lazy, scrolling tree: when a
-// directory holds little content, open the next depth of sub-directories —
-// breadth-first, shallowest and alphabetically-first wins — until the viewport
-// is filled, so the empty space below a short listing is used rather than left
-// blank. Whole directories are opened (no partial per-directory truncation);
-// overshoot simply scrolls, since unlike broot's fixed TUI our panel scrolls.
+// directory holds little content, open the next depth of sub-directories until
+// the viewport is filled, so the empty space below a short listing is used
+// rather than left blank — and never further. Like broot's builder, child rows
+// are granted one at a time, round-robin across the open directories
+// (shallowest and alphabetically-first get their turn first), so the space
+// spreads evenly instead of the first directory swallowing it all. A directory
+// that does not fit entirely is truncated: it shows the granted children plus
+// a "N unlisted" pruning row (`childRowLimits`), whose own row cost is held in
+// escrow from the moment the directory opens so the plan never overshoots the
+// viewport.
 //
 // It is a pure function of the currently-loaded listings: directories it wants
 // to descend into but has not fetched yet come back in `pendingListingPaths`,
@@ -220,60 +275,139 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
     rowCapacity,
   } = options
   const autoOpenPaths = new Set<string>()
+  const childRowLimits = new Map<string, number>()
   const pendingListingPaths: string[] = []
 
   const focusChildren = listings[focusPath]
-  if (focusChildren === undefined) return { autoOpenPaths, pendingListingPaths }
+  if (focusChildren === undefined) return { autoOpenPaths, childRowLimits, pendingListingPaths }
 
-  // The focus directory is always open; its own children are the baseline the
-  // fill adds onto.
-  let reservedRowCount = focusChildren.filter((child) =>
-    isVisibleChild(child, showHidden, showGitignored),
-  ).length
-
-  // Breadth-first over the open directories: a directory enters the queue only
-  // once it is known to be open (manually or by the fill), so shallower levels
-  // are always considered before deeper ones.
-  const openDirectoryQueue: string[] = [focusPath]
-  while (openDirectoryQueue.length > 0) {
-    const directoryPath = openDirectoryQueue.shift()!
-    const directoryListing = listings[directoryPath]
-    if (directoryListing === undefined) continue
-
-    const childDirectories = directoryListing
-      .filter(
-        (child) =>
-          child.kind === 'directory' && isVisibleChild(child, showHidden, showGitignored),
-      )
+  function sortedVisibleChildren(listing: DirectoryEntry[]): DirectoryEntry[] {
+    return listing
+      .filter((child) => isVisibleChild(child, showHidden, showGitignored))
       .sort(compareEntries)
+  }
 
-    for (const childDirectory of childDirectories) {
-      const childPath = joinTreePath(directoryPath, childDirectory.name)
-      if (closedPaths.has(childPath)) continue
-      const estimatedChildRows = childDirectory.childCount ?? 0
+  // The "… N hidden · M gitignored" tally row a directory renders when the
+  // filters hide some of its children — it costs viewport space too.
+  function filterTallyRowCount(listing: DirectoryEntry[]): number {
+    return listing.some((child) => !isVisibleChild(child, showHidden, showGitignored)) ? 1 : 0
+  }
 
-      const descend = () => {
-        // The listing may filter some children out, so `childCount` is an
-        // estimate; it is only used to pace the fill, never rendered.
-        reservedRowCount += estimatedChildRows
-        if (listings[childPath] === undefined) pendingListingPaths.push(childPath)
-        else openDirectoryQueue.push(childPath)
+  function makeCandidate(parentPath: string, childDirectory: DirectoryEntry): FillCandidate | null {
+    const directoryPath = joinTreePath(parentPath, childDirectory.name)
+    if (closedPaths.has(directoryPath)) return null
+    const listing = listings[directoryPath]
+    if (listing === undefined) {
+      const estimatedTotal = childDirectory.childCount ?? 0
+      if (estimatedTotal <= 0 && !manuallyOpenPaths.has(directoryPath)) return null
+      return {
+        directoryPath,
+        visibleChildren: null,
+        totalChildRowCount: estimatedTotal,
+        grantedChildRowCount: 0,
       }
-
-      if (manuallyOpenPaths.has(childPath)) {
-        descend()
-        continue
-      }
-      // Auto-open candidate: keep opening while the viewport has room. Empty or
-      // unreadable directories add no rows, so opening them would not help fill.
-      if (reservedRowCount >= rowCapacity) continue
-      if (estimatedChildRows <= 0) continue
-      autoOpenPaths.add(childPath)
-      descend()
+    }
+    const visibleChildren = sortedVisibleChildren(listing)
+    if (visibleChildren.length === 0 && !manuallyOpenPaths.has(directoryPath)) return null
+    return {
+      directoryPath,
+      visibleChildren,
+      totalChildRowCount: visibleChildren.length,
+      grantedChildRowCount: 0,
     }
   }
 
-  return { autoOpenPaths, pendingListingPaths }
+  // The focus directory is always fully open; its children and its filter
+  // tally row are the baseline the fill adds onto — never truncated, since the
+  // full focus listing is the core content (overflow there simply scrolls).
+  const focusVisibleChildren = sortedVisibleChildren(focusChildren)
+  let remainingRowBudget =
+    rowCapacity - focusVisibleChildren.length - filterTallyRowCount(focusChildren)
+
+  const candidateQueue: FillCandidate[] = []
+  const openedCandidates: FillCandidate[] = []
+
+  for (const focusChild of focusVisibleChildren) {
+    if (focusChild.kind !== 'directory') continue
+    const candidate = makeCandidate(focusPath, focusChild)
+    if (candidate !== null) candidateQueue.push(candidate)
+  }
+
+  // A granted child row that turns out to be a directory becomes a fill
+  // candidate of its own, at the back of the queue — deeper levels only get
+  // space once every shallower open directory has had its turn.
+  function enqueueNewlyGrantedChild(candidate: FillCandidate): void {
+    if (candidate.visibleChildren === null) return
+    const grantedChild = candidate.visibleChildren[candidate.grantedChildRowCount - 1]
+    if (grantedChild === undefined || grantedChild.kind !== 'directory') return
+    const childCandidate = makeCandidate(candidate.directoryPath, grantedChild)
+    if (childCandidate !== null) candidateQueue.push(childCandidate)
+  }
+
+  while (remainingRowBudget > 0 && candidateQueue.length > 0) {
+    const candidate = candidateQueue.shift()!
+
+    if (candidate.grantedChildRowCount === 0) {
+      // A directory the user opened by hand is open regardless: its children
+      // always show in full and always count against the budget, and the fill
+      // never truncates or closes it.
+      if (manuallyOpenPaths.has(candidate.directoryPath)) {
+        remainingRowBudget -= candidate.totalChildRowCount
+        if (candidate.visibleChildren === null) {
+          pendingListingPaths.push(candidate.directoryPath)
+          continue
+        }
+        remainingRowBudget -= filterTallyRowCount(listings[candidate.directoryPath]!)
+        for (const child of candidate.visibleChildren) {
+          if (child.kind !== 'directory') continue
+          const childCandidate = makeCandidate(candidate.directoryPath, child)
+          if (childCandidate !== null) candidateQueue.push(childCandidate)
+        }
+        continue
+      }
+
+      // First grant decides whether opening is worth it at all: the directory
+      // needs room for its filter tally row (if any), one child row, and —
+      // unless it fits in a single row — the escrowed "N unlisted" row.
+      const tallyRowCount =
+        candidate.visibleChildren === null
+          ? 0
+          : filterTallyRowCount(listings[candidate.directoryPath]!)
+      const rowsNeededToOpen = tallyRowCount + (candidate.totalChildRowCount === 1 ? 1 : 2)
+      if (remainingRowBudget < rowsNeededToOpen) continue
+      autoOpenPaths.add(candidate.directoryPath)
+      openedCandidates.push(candidate)
+      if (candidate.visibleChildren === null) pendingListingPaths.push(candidate.directoryPath)
+      remainingRowBudget -= rowsNeededToOpen
+      candidate.grantedChildRowCount = 1
+      enqueueNewlyGrantedChild(candidate)
+      if (candidate.grantedChildRowCount < candidate.totalChildRowCount)
+        candidateQueue.push(candidate)
+      continue
+    }
+
+    // Subsequent grant: one more child row. The final child is free — it takes
+    // the place of the escrowed "N unlisted" row, which is then not needed.
+    const grantCompletesDirectory =
+      candidate.grantedChildRowCount === candidate.totalChildRowCount - 1
+    if (!grantCompletesDirectory) remainingRowBudget -= 1
+    candidate.grantedChildRowCount += 1
+    enqueueNewlyGrantedChild(candidate)
+    if (candidate.grantedChildRowCount < candidate.totalChildRowCount)
+      candidateQueue.push(candidate)
+  }
+
+  for (const openedCandidate of openedCandidates) {
+    // A directory one child short of complete completes for free: the last
+    // child costs exactly the escrowed pruning row (and "1 unlisted" would be
+    // a pointless swap for the child itself).
+    if (openedCandidate.totalChildRowCount - openedCandidate.grantedChildRowCount === 1)
+      openedCandidate.grantedChildRowCount += 1
+    if (openedCandidate.grantedChildRowCount < openedCandidate.totalChildRowCount)
+      childRowLimits.set(openedCandidate.directoryPath, openedCandidate.grantedChildRowCount)
+  }
+
+  return { autoOpenPaths, childRowLimits, pendingListingPaths }
 }
 
 export type SearchViewOptions = {
@@ -377,8 +511,8 @@ export function buildSearchRows(options: SearchViewOptions): TreeRowsResult {
 
     if (trailingUnlistedCount > 0) {
       rows.push({
-        type: 'search-unlisted',
-        path: `${parentNodePath}#search-unlisted`,
+        type: 'pruned',
+        path: `${parentNodePath}#pruned`,
         connectorPrefix: `${leadPrefix}└──`,
         unlistedCount: trailingUnlistedCount,
       })
