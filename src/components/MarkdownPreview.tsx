@@ -5,9 +5,11 @@ import remarkGfm from 'remark-gfm'
 // Rendered-markdown primitive for the preview panel. Presentational and
 // data-agnostic (a UI-kit-style leaf): it takes the bounded head text a text
 // preview already carries and paints it as formatted markdown, styled entirely
-// with the app's grove tokens (theme.css) so it reads as a native citizen of
-// the terminal surface rather than a foreign document — the mono family is
-// inherited, not swapped for a proportional face that would clash.
+// with the app's grove tokens (theme.css). Prose reads in the proportional
+// --font-sans face (Inter) so a rendered document looks like a document, while
+// code — inline chips and fenced blocks — stays on --font-mono to preserve
+// alignment; the container flips the inherited mono family to sans and the
+// code/pre nodes flip back.
 //
 // Security fails safe (persona default): react-markdown renders to React
 // elements, never `dangerouslySetInnerHTML`. Without `rehype-raw` any inline
@@ -88,13 +90,13 @@ const MARKDOWN_COMPONENTS: Components = {
   // inline case and let `pre` own the block case.
   code: ({ children, className }) => {
     const isFenced = className?.startsWith('language-') ?? false
-    if (isFenced) return <code className="text-[11.5px] text-file">{children}</code>
+    if (isFenced) return <code className="font-mono text-[11.5px] text-file">{children}</code>
     return (
-      <code className="rounded bg-inset px-1 py-0.5 text-[11.5px] text-fg">{children}</code>
+      <code className="rounded bg-inset px-1 py-0.5 font-mono text-[11.5px] text-fg">{children}</code>
     )
   },
   pre: ({ children }) => (
-    <pre className="my-2 overflow-auto rounded border border-line-2 bg-void/50 p-3 whitespace-pre">
+    <pre className="my-2 overflow-auto rounded border border-line-2 bg-void/50 p-3 font-mono whitespace-pre">
       {children}
     </pre>
   ),
@@ -114,7 +116,7 @@ const MARKDOWN_COMPONENTS: Components = {
 
 export function MarkdownPreview({ source }: { source: string }): ReactNode {
   return (
-    <div className="px-4 py-2">
+    <div className="px-4 py-2 font-sans">
       <Markdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
         {source}
       </Markdown>

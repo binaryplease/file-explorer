@@ -20,6 +20,11 @@
 @theme {
   --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Mono",
     "Fira Code", monospace;
+  /* Proportional face for rendered markdown prose (see MarkdownPreview). Inter
+     is self-hosted via @fontsource-variable (index.css); the system sans stack
+     is the fallback while it loads or when embedded without the import. */
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
   --color-void: #080a0f;
   --color-term: #0e1119;

@@ -1,4 +1,10 @@
 @import "tailwindcss";
+/* Inter, self-hosted (ADR-0016 — never a runtime CDN font). Only the weight axis
+   (upright + italic) is pulled in: markdown prose needs regular, bold, and
+   italic and nothing else, so the optical-size/slant axes stay out of the
+   bundle. Drives the --font-sans token in theme.css. */
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource-variable/inter/wght-italic.css";
 /* The grove design tokens live in their own file so an embedding host can share
    the exact same palette over one definition (ADR-0027) — see theme.css. */
 @import "./theme.css";
