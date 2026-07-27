@@ -29,7 +29,12 @@ export default defineConfig({
     proxy: {
       // Dev: Vite serves the client, Elysia serves the API on :3000.
       "^/api/.*": {
-        target: process.env.VITE_API_TARGET || "http://localhost:3000",
+        // Literal IPv4, not `localhost`: on a dual-stack box `localhost`
+        // resolves `::1` first (verbatim DNS order, Node/Bun ≥17), but the
+        // Elysia server binds 127.0.0.1 — so a name-based target would try the
+        // wrong family first. dev.ts overrides this with VITE_API_TARGET anyway;
+        // this fallback only fires for a bare `dev:client`.
+        target: process.env.VITE_API_TARGET || "http://127.0.0.1:3000",
         changeOrigin: true,
       },
     },
