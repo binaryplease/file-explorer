@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DirectoryEntry } from '../shared/filesystem.schema'
+import type { DirectoryEntry, DirectoryListing } from '../shared/filesystem.schema'
 import type { Preview } from '../shared/preview.schema'
 import type { SearchSubtreeResult } from '../shared/search.schema'
 import {
@@ -12,6 +12,7 @@ import { isConfinementBlocked } from './lib/confinement'
 import {
   buildSearchRows,
   buildTreeRows,
+  canonicalizeFocusPath,
   joinTreePath,
   parentTreePath,
   planAutoOpen,
@@ -133,6 +134,12 @@ export function App({
   // absolute origin when embedded against a separate explorer server).
   const apiBaseUrl = useApiBase()
   const [rootPath, setRootPath] = useState<string | null>(null)
+  // Whether the served root is a security boundary (confined) or only a display
+  // anchor (unconfined, local-machine mode). Defaults to confined so that until
+  // the first listing lands — or if a server somehow omits the flag — the
+  // client refuses to navigate above the root (fail-safe, matching the schema
+  // default). It flips the "up from the anchor" affordance, nothing else.
+  const [isConfined, setIsConfined] = useState(true)
   const [focusPath, setFocusPath] = useState<string>(() => focusNavigation.initialFocusPath())
   const [listings, setListings] = useState<Record<string, DirectoryEntry[] | undefined>>({})
   // Three layers compose the effective open set. `openPaths` and `closedPaths`
@@ -180,25 +187,41 @@ export function App({
   const { themeMode, setThemeMode } = useTheme({ manageDocument: !embedded })
 
   const loadListing = useCallback(
-    async (relativePath: string) => {
+    async (relativePath: string): Promise<DirectoryListing | null> => {
       try {
         const listing = await fetchDirectoryListing(apiBaseUrl, relativePath)
         setRootPath(listing.rootPath)
+        setIsConfined(listing.confined)
         setListings((previousListings) => ({
           ...previousListings,
           [listing.relativePath]: listing.entries,
         }))
         setListingError(null)
+        return listing
       } catch (loadError) {
         setListingError(loadError instanceof Error ? loadError.message : String(loadError))
+        return null
       }
     },
     [apiBaseUrl],
   )
 
   useEffect(() => {
-    void loadListing(focusPath)
-  }, [focusPath, loadListing])
+    let cancelled = false
+    void loadListing(focusPath).then((listing) => {
+      // Adopt the server's canonical address for what we just loaded. In-app
+      // navigation is already canonical (focusDirectory), so this only bites a
+      // hand-typed deep link that addresses an in-root directory absolutely
+      // (`?path=/home/user`): the listing landed under the root-relative key, so
+      // the focus follows it there rather than reading an absent absolute key.
+      if (cancelled || listing === null || listing.relativePath === focusPath) return
+      focusNavigation.push(listing.relativePath)
+      setFocusPath(listing.relativePath)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [focusPath, loadListing, focusNavigation])
 
   // Warm the syntax highlighter off the first paint (AGENTS.md responsiveness
   // principle): the engine and common grammars load in the background so the
@@ -317,21 +340,36 @@ export function App({
 
   const focusDirectory = useCallback(
     (nextFocusPath: string) => {
-      focusNavigation.push(nextFocusPath)
-      setFocusPath(nextFocusPath)
+      // Speak the server's address for this directory: an absolute path that
+      // descends back inside the anchor collapses to its root-relative form, so
+      // the focus load stores and the tree reads the listing under one key.
+      const canonicalPath = canonicalizeFocusPath(nextFocusPath, rootPath)
+      focusNavigation.push(canonicalPath)
+      setFocusPath(canonicalPath)
       setPattern('')
       setSelectedPath(null)
     },
-    [focusNavigation],
+    [focusNavigation, rootPath],
   )
 
   const focusParentDirectory = useCallback(() => {
-    if (focusPath === '') return
-    focusDirectory(parentTreePath(focusPath))
+    if (focusPath === '') {
+      // Sitting on the anchor root. Confined, the root is a boundary — there is
+      // nowhere above it to go, so this is a no-op (the historical behaviour).
+      // Unconfined, the root is only a starting anchor: ascend into its parent
+      // on the real filesystem, addressed by absolute path (the wire format for
+      // out-of-root paths). `parentTreePath` stops the climb at `/`.
+      if (isConfined || rootPath === null) return
+      const rootParentPath = parentTreePath(rootPath)
+      if (rootParentPath === rootPath) return
+      focusDirectory(rootParentPath)
+    } else {
+      focusDirectory(parentTreePath(focusPath))
+    }
     // broot keeps the selection on the top line (the new current directory)
     // after walking up — it neither jumps to nor expands the directory we left.
     setSelectedPath(ROOT_LINE_PATH)
-  }, [focusPath, focusDirectory])
+  }, [focusPath, focusDirectory, isConfined, rootPath])
 
   const isSearching = pattern !== ''
 
@@ -810,13 +848,17 @@ export function App({
   const focusLabel = focusPath === '' ? rootName : baseName(focusPath)
   // Join the served root and the focused subpath with exactly one slash: when
   // the served root is the filesystem root (`/`), a naive `${rootPath}/…` would
-  // double it into `//home/…`.
+  // double it into `//home/…`. An absolute `focusPath` — reached only unconfined,
+  // once the user has ascended above the anchor — is already a full path and
+  // stands on its own; it must not be re-prefixed with the root.
   const focusFullPath =
     rootPath === null
       ? '…'
       : focusPath === ''
         ? rootPath
-        : `${rootPath === '/' ? '' : rootPath}/${focusPath}`
+        : focusPath.startsWith('/')
+          ? focusPath
+          : `${rootPath === '/' ? '' : rootPath}/${focusPath}`
 
   // The next Escape hands off to the host's close verb only once the layering is
   // spent: no filter, the selection already on the root line, and no focus

@@ -53,6 +53,15 @@ export const DirectoryListingSchema = z.object({
     .string()
     .describe('Listed directory, relative to the served root. Empty string for the root itself.'),
   entries: z.array(DirectoryEntrySchema).default([]).describe('Directory entries, unsorted.'),
+  confined: z
+    .boolean()
+    .default(true)
+    .describe(
+      'True when the served root is a security boundary: paths escaping it are refused, so the ' +
+        'client must not offer navigation above the root. False when the root is only a display ' +
+        'anchor (local-machine unconfined mode) and the parent filesystem is reachable. Defaults ' +
+        'to true so a client that cannot read this flag treats the root as a boundary (fail-safe).',
+    ),
 })
 export type DirectoryListing = z.infer<typeof DirectoryListingSchema>
 

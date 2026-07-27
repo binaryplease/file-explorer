@@ -1,6 +1,90 @@
 import { describe, expect, test } from 'bun:test'
 import type { DirectoryEntry } from '../../shared/filesystem.schema'
-import { buildTreeRows, planAutoOpen, type EntryRow } from './tree'
+import {
+  buildTreeRows,
+  canonicalizeFocusPath,
+  joinTreePath,
+  parentTreePath,
+  planAutoOpen,
+  type EntryRow,
+} from './tree'
+
+describe('canonicalizeFocusPath', () => {
+  const root = '/home/enrico'
+
+  test('leaves an in-root relative path untouched', () => {
+    expect(canonicalizeFocusPath('src/lib', root)).toBe('src/lib')
+  })
+
+  test('collapses the served root itself to the empty relative path', () => {
+    expect(canonicalizeFocusPath('/home/enrico', root)).toBe('')
+  })
+
+  test('rewrites an absolute path inside the root to its relative form', () => {
+    expect(canonicalizeFocusPath('/home/enrico/Developer', root)).toBe('Developer')
+  })
+
+  test('leaves an absolute path above the anchor absolute', () => {
+    expect(canonicalizeFocusPath('/home', root)).toBe('/home')
+  })
+
+  test('does not mistake a sibling prefix for containment', () => {
+    expect(canonicalizeFocusPath('/home/enrico-backup', root)).toBe('/home/enrico-backup')
+  })
+
+  test('handles a filesystem-root anchor', () => {
+    expect(canonicalizeFocusPath('/bin', '/')).toBe('bin')
+    expect(canonicalizeFocusPath('/', '/')).toBe('')
+  })
+
+  test('passes through unchanged before the root is known', () => {
+    expect(canonicalizeFocusPath('/home/enrico', null)).toBe('/home/enrico')
+  })
+})
+
+describe('joinTreePath', () => {
+  test('names a top-level entry by its bare name (in-root relative format)', () => {
+    expect(joinTreePath('', 'src')).toBe('src')
+  })
+
+  test('joins a relative parent and child with one slash', () => {
+    expect(joinTreePath('src/lib', 'tree.ts')).toBe('src/lib/tree.ts')
+  })
+
+  test('joins an absolute parent and child with one slash', () => {
+    expect(joinTreePath('/home/enrico', 'Developer')).toBe('/home/enrico/Developer')
+  })
+
+  // Climbing to `/` unconfined: the root carries its own slash, so a child must
+  // not double it into `//bin`.
+  test('does not double the slash under the filesystem root', () => {
+    expect(joinTreePath('/', 'bin')).toBe('/bin')
+  })
+})
+
+describe('parentTreePath', () => {
+  test('drops the last segment of an in-root relative path', () => {
+    expect(parentTreePath('src/lib/tree.ts')).toBe('src/lib')
+  })
+
+  test('bottoms a single in-root segment out at the anchor root', () => {
+    expect(parentTreePath('src')).toBe('')
+  })
+
+  test('rises a nested absolute path one level, keeping it absolute', () => {
+    expect(parentTreePath('/home/enrico/Developer')).toBe('/home/enrico')
+  })
+
+  // The documented loose end: a top-level absolute path must climb to `/`, not
+  // collapse to '' — which would teleport back down to the served anchor.
+  test('rises a top-level absolute path to the filesystem root', () => {
+    expect(parentTreePath('/home')).toBe('/')
+  })
+
+  test('makes the filesystem root its own parent, stopping the climb', () => {
+    expect(parentTreePath('/')).toBe('/')
+  })
+})
 
 function makeEntry(overrides: Partial<DirectoryEntry> & { name: string }): DirectoryEntry {
   return {

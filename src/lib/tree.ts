@@ -67,12 +67,44 @@ export type TreeRowsResult = {
 export const ROOT_LINE_PATH = '/__root_line__'
 
 export function joinTreePath(parentPath: string, childName: string): string {
-  return parentPath === '' ? childName : `${parentPath}/${childName}`
+  if (parentPath === '') return childName
+  // The filesystem root already ends in its own slash — reached only unconfined,
+  // once the user has climbed to `/`. Appending another would double it (`//bin`).
+  if (parentPath === '/') return `/${childName}`
+  return `${parentPath}/${childName}`
 }
 
+// The client's mirror of the server's `pathFromRoot`
+// (`server/services/filesystem.ts`): the wire address for a directory the user
+// focuses. An absolute path that lies inside the served root is spoken as its
+// root-relative form (the in-root format, `''` for the root itself); an in-root
+// relative path, or an absolute path above/outside the anchor, is already
+// canonical and passes through untouched.
+//
+// This keeps `focusPath` byte-identical to the `relativePath` the server
+// returns for it. It matters at exactly one seam: descending unconfined from
+// above the anchor (an absolute path) back down through the served root, where
+// the server switches from absolute to relative addressing and the client must
+// switch with it — otherwise the focus load stores the listing under the
+// server's key while the tree reads it under the absolute one, and paints empty.
+export function canonicalizeFocusPath(path: string, rootPath: string | null): string {
+  if (rootPath === null || !path.startsWith('/')) return path
+  if (path === rootPath) return ''
+  const rootPrefix = rootPath === '/' ? '/' : `${rootPath}/`
+  return path.startsWith(rootPrefix) ? path.slice(rootPrefix.length) : path
+}
+
+// The parent of a tree path. Relative paths (in-root, the confined format)
+// lose their last segment and bottom out at '' (the anchor root). Absolute
+// paths — only reached unconfined, when the user has ascended above the anchor
+// — keep their leading slash: a top-level absolute path (`/home`) rises to the
+// filesystem root `/` rather than collapsing to '' (which would teleport back
+// down to the served anchor), and `/` is its own parent (the walk stops there).
 export function parentTreePath(path: string): string {
   const lastSlashIndex = path.lastIndexOf('/')
-  return lastSlashIndex === -1 ? '' : path.slice(0, lastSlashIndex)
+  if (lastSlashIndex === -1) return ''
+  if (lastSlashIndex === 0) return '/'
+  return path.slice(0, lastSlashIndex)
 }
 
 // broot's natural order (Sort::None): files and directories interleaved, sorted

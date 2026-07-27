@@ -320,6 +320,7 @@ export function createFilesystemService(options: {
         rootPath: rootAbsolutePath,
         relativePath: pathFromRoot(absolutePath),
         entries,
+        confined: confine,
       },
     }
   }

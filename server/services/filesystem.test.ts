@@ -254,6 +254,18 @@ describe('unconfined mode — the root is a display anchor, not a boundary', () 
     expect(result.listing.entries.every((entry) => !entry.escapesRoot)).toBe(true)
   })
 
+  // The flag the client keys "up from the anchor" off: unconfined it is false,
+  // so the tree offers navigation above the served root; confined it is true.
+  test('reports the root as an anchor, not a boundary', async () => {
+    const unconfined = await unconfinedService.listDirectory('')
+    if (!unconfined.ok) throw new Error(`listing failed: ${unconfined.reason}`)
+    expect(unconfined.listing.confined).toBe(false)
+
+    const confined = await filesystemService.listDirectory('')
+    if (!confined.ok) throw new Error(`listing failed: ${confined.reason}`)
+    expect(confined.listing.confined).toBe(true)
+  })
+
   // The counterpart of the confined block's withholding tests: with nothing to
   // withhold, an escaping link reports its target's real metadata.
   test('reports the real kind and metadata of a link pointing outside the root', async () => {
