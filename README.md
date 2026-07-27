@@ -29,6 +29,44 @@ mise run dev      # Elysia (:3000) + Vite (:5173) — open http://localhost:5173
 `mise run typecheck` type-checks; `mise run build` produces `dist/client` +
 `dist/server`; `mise run start` runs the production server.
 
+## Install & run as a CLI (`bfe`)
+
+The flake builds a single on-demand executable — `bfe` — that serves a directory
+in your browser, broot-style: run it wherever you are in a terminal and it opens
+the explorer on the current directory.
+
+```sh
+nix run github:binaryplease/binp-file-explorer          # serve the current dir, open the browser
+nix run github:binaryplease/binp-file-explorer -- ~/src # serve a specific dir
+nix profile install github:binaryplease/binp-file-explorer   # then just: bfe
+```
+
+`bfe` **auto-assigns a free port** before launching, so any number of instances
+run at once, each on its own port — no flags, no collisions. Pass `-p/--port` to
+pin an exact port instead; that bind is strict and fails loudly if the port is
+taken (ADR-0018). The served root is a **starting anchor, not a boundary** — you
+can browse up and out of it (matching `broot` opened from anywhere). Pass
+`--confine` to make the root a real boundary.
+
+```
+bfe [path]                Serve a directory (default: current) and open the browser
+bfe daemon start [path]   Run it in the background (idempotent — restarts if running)
+bfe daemon stop           Stop the background server
+bfe daemon restart        Restart it (keeps the same root if none is given)
+bfe daemon status         Is the daemon alive and responding?
+bfe daemon logs [N]       Tail the last N daemon log lines
+bfe status                Full operational view (served root, uptime, port) + discovery links
+bfe help                  All commands and flags
+```
+
+The daemon is a single background server (PID at
+`$XDG_RUNTIME_DIR/binp-file-explorer.pid`, logs at
+`~/.local/share/binp-file-explorer/`); it forks detached, is torn down by
+process-group signal, and reports its full state at `/api/status`. For a hosted
+box, the flake also ships `nixosModules.default` (`services.binp-file-explorer`)
+— a systemd unit with the standard hardening (read-only filesystem, no
+capabilities, restricted syscalls), loopback-bound and confining by default.
+
 ## Serving a location
 
 The explorer serves the **home directory** of the user running the server by

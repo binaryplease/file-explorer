@@ -49,15 +49,19 @@ description = "Start Vite dev server"
 run = "bunx vite"
 
 [tasks.build]
-description = "Build client (Vite) and server (Bun)"
+description = "Build client (Vite) and server + CLI (Bun)"
 run = """
 bunx vite build
-NODE_ENV=production bun build server/index.ts --outdir dist/server --target bun --sourcemap=linked --production
+NODE_ENV=production bun build server/index.ts server/cli.ts --outdir dist/server --target bun --sourcemap=linked --production
 """
 
 [tasks.start]
 description = "Start production server"
 run = "NODE_ENV=production bun dist/server/index.js"
+
+[tasks.cli]
+description = "Run the explorer CLI (bfe) from source"
+run = "bun server/cli.ts"
 
 [tasks.typecheck]
 description = "Type-check all TypeScript"

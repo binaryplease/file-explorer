@@ -10,13 +10,14 @@
  * the runtime bind remains strict: if the chosen port is stolen between the
  * probe and the bind, the server still dies loudly.
  */
-import { createServer } from 'node:net'
+import { findAvailablePort, isPortAvailable } from '../server/services/port'
+
+// Re-exported so scripts/dev-ports.test.ts keeps exercising them through this
+// module; the implementations now live in the general port service (ADR-0032).
+export { findAvailablePort, isPortAvailable }
 
 export const CANONICAL_SERVER_PORT = 3000
 export const CANONICAL_CLIENT_PORT = 5173
-
-/** How far above the canonical port we are willing to search before giving up. */
-const PORT_SEARCH_SPAN = 50
 
 export type DevPortAssignment = {
   /** The port the service is configured to want. */
@@ -31,47 +32,6 @@ export type DevPorts = {
   host: string
   server: DevPortAssignment
   client: DevPortAssignment
-}
-
-/**
- * True when nothing is listening on `port` for `host`.
- *
- * Uses a real bind rather than a connect probe: a connect probe cannot tell an
- * unbound port from one bound by a process that refuses connections, and the
- * question we actually care about is "can our server bind here".
- */
-export function isPortAvailable(port: number, host: string): Promise<boolean> {
-  return new Promise((resolvePromise) => {
-    const probeServer = createServer()
-    probeServer.once('error', () => resolvePromise(false))
-    probeServer.once('listening', () => probeServer.close(() => resolvePromise(true)))
-    // exclusive: true — never let SO_REUSEPORT-style sharing mask a conflict
-    // (ADR-0018).
-    probeServer.listen({ port, host, exclusive: true })
-  })
-}
-
-/**
- * The first free port at or above `requestedPort`, skipping anything in
- * `reservedPorts` (ports already handed to a sibling process in this run, which
- * nothing is listening on yet).
- *
- * Throws when the whole search span is occupied — an environment that broken
- * should stop the developer, not be worked around.
- */
-export async function findAvailablePort(
-  requestedPort: number,
-  host: string,
-  reservedPorts: ReadonlySet<number> = new Set(),
-): Promise<number> {
-  for (let candidatePort = requestedPort; candidatePort < requestedPort + PORT_SEARCH_SPAN; candidatePort++) {
-    if (reservedPorts.has(candidatePort)) continue
-    if (await isPortAvailable(candidatePort, host)) return candidatePort
-  }
-  throw new Error(
-    `No free port found in ${requestedPort}-${requestedPort + PORT_SEARCH_SPAN - 1} on ${host}. ` +
-      'Something is occupying the whole range — check for runaway dev servers.',
-  )
 }
 
 async function assignPort(

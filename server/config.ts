@@ -44,6 +44,25 @@ const EnvironmentSchema = z.object({
     .string()
     .default('')
     .describe('Comma-separated exact Origins granted cross-origin (CORS) read access.'),
+  // How the server chooses its listen port. `strict` (the default, and what
+  // `mise run start` / a direct launch uses) binds PORT exactly and dies loudly
+  // on a conflict — ADR-0018. `auto` walks upward from PORT to the first free
+  // port, announcing each skip; it is the opt-in the `bfe` CLI sets so any
+  // number of instances land on distinct ports without colliding. Auto never
+  // fails silently — every reassignment is printed — and it is only ever
+  // enabled deliberately, so the ADR-0018 default posture is unchanged.
+  EXPLORER_PORT_STRATEGY: z
+    .enum(['strict', 'auto'])
+    .default('strict')
+    .describe('Port selection: `strict` binds PORT exactly (fail loud); `auto` walks to a free one.'),
+  // When set, the server writes the port it actually bound to this file the
+  // instant it starts listening. The CLI passes a private path here so it can
+  // learn an auto-assigned port (and confirm a strict one) without parsing
+  // stdout. Empty (the default) writes nothing.
+  EXPLORER_READY_FILE: z
+    .string()
+    .default('')
+    .describe('Path the server writes its bound port to once listening (for the CLI handshake).'),
 })
 
 export type Config = z.infer<typeof EnvironmentSchema>
@@ -58,6 +77,8 @@ export const config: Config = EnvironmentSchema.parse({
   EXPLORER_CONFINE: process.env.EXPLORER_CONFINE || undefined,
   EXPLORER_ALLOWED_HOSTS: process.env.EXPLORER_ALLOWED_HOSTS || undefined,
   EXPLORER_ALLOWED_ORIGINS: process.env.EXPLORER_ALLOWED_ORIGINS || undefined,
+  EXPLORER_PORT_STRATEGY: process.env.EXPLORER_PORT_STRATEGY || undefined,
+  EXPLORER_READY_FILE: process.env.EXPLORER_READY_FILE || undefined,
 })
 
 // Parsed once here rather than re-split per request.

@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "bin": {
+    "bfe": "./dist/server/cli.js"
+  },
   "exports": {
     "./mount": "./src/mount.tsx",
     "./theme.css": "./src/theme.css"
@@ -12,7 +15,8 @@
     "dev:ports": "bun scripts/dev-ports.ts",
     "dev:server": "bun --watch server/index.ts",
     "dev:client": "bunx vite",
-    "build": "bunx vite build && NODE_ENV=production bun build server/index.ts --outdir dist/server --target bun --sourcemap=linked --production",
+    "cli": "bun server/cli.ts",
+    "build": "bunx vite build && NODE_ENV=production bun build server/index.ts server/cli.ts --outdir dist/server --target bun --sourcemap=linked --production",
     "start": "NODE_ENV=production bun dist/server/index.js",
     "typecheck": "bunx tsc --noEmit"
   },

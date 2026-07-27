@@ -8,13 +8,28 @@ import { createCorsPolicy } from './services/cors'
 import { createPublicOriginResolver } from './services/public-origin'
 import { resolveClientAssetPath } from './services/client-asset-path'
 import { createBindExposurePolicy } from './services/bind-exposure'
-import { DiscoveryDocSchema, HealthResponseSchema } from './routes/discovery.schema'
+import { listenWithStrategy } from './services/listen'
+import {
+  DiscoveryDocSchema,
+  HealthResponseSchema,
+  StatusResponseSchema,
+} from './routes/discovery.schema'
 import { createFilesystemRoutes } from './routes/filesystem'
 import { createPreviewRoutes } from './routes/preview'
 import { filesystemService, previewService } from './services/instances'
 
 const SERVICE_NAME = 'binp-file-explorer'
 const SERVICE_VERSION = '0.1.0'
+
+// Captured once at module load, so `/api/status` can report how long this
+// process has been serving. Reported as an ISO string and a derived uptime.
+const processStartedAt = new Date()
+
+// The port this process actually bound. In `auto` strategy the server may walk
+// past a busy PORT, so the requested config.PORT is not necessarily the real
+// one — status and the startup banner must report what was bound. Set the
+// moment `listenWithStrategy` returns, below.
+let boundPort = config.PORT
 
 const trustedHostGuard = createTrustedHostGuard({ additionalAllowedHosts })
 // Cross-origin read access for the deliberate embedding seam — empty allowlist
@@ -117,6 +132,36 @@ const app = new Elysia()
       description: 'Returns `{ ok: true }` when the server is up. No auth required.',
     },
   })
+  // ADR-0015: operational snapshot the CLI's `status` view renders. Distinct
+  // from /api/health (liveness only) — this reports the served root, uptime,
+  // and process identity so a background daemon is fully inspectable.
+  .get(
+    '/api/status',
+    () => {
+      const now = new Date()
+      return {
+        name: SERVICE_NAME,
+        version: SERVICE_VERSION,
+        pid: process.pid,
+        uptimeSeconds: Math.max(0, Math.round((now.getTime() - processStartedAt.getTime()) / 1000)),
+        startedAt: processStartedAt.toISOString(),
+        host: config.HOST,
+        port: boundPort,
+        root: config.EXPLORER_ROOT,
+        confined: config.EXPLORER_CONFINE,
+      }
+    },
+    {
+      response: { 200: StatusResponseSchema },
+      detail: {
+        tags: ['system'],
+        summary: 'Operational status',
+        description:
+          'Served root, uptime, and process identity of the running server. Rendered by ' +
+          '`binp-file-explorer status`. No auth required.',
+      },
+    },
+  )
   .use(createFilesystemRoutes({ filesystemService }))
   .use(createPreviewRoutes({ previewService }))
 
@@ -147,15 +192,27 @@ createBindExposurePolicy().enforce({
   isConfined: config.EXPLORER_CONFINE,
 })
 
-// ADR-0018: a port conflict is a fatal startup error. Elysia's listen surfaces
-// EADDRINUSE by default — do not swallow it.
-app.listen({
-  port: config.PORT,
-  hostname: config.HOST,
-  development: isDev,
+// Bind the listen port. `strict` (the default, and every direct launch) fails
+// loudly on a conflict — ADR-0018; `auto` (the CLI's opt-in) walks to a free
+// port in-process, announcing each skip, so many instances coexist on distinct
+// ports. The bind stays exclusive either way (no SO_REUSEPORT). See
+// services/listen.ts.
+boundPort = listenWithStrategy(app, {
+  host: config.HOST,
+  requestedPort: config.PORT,
+  strategy: config.EXPLORER_PORT_STRATEGY,
+  isDev,
+  announce: (skippedPort) =>
+    console.log(`port ${skippedPort} is in use — trying ${skippedPort + 1}`),
 })
 
-const localBase = `http://${config.HOST}:${config.PORT}`
+// Hand the actually-bound port back to whoever launched us (the CLI) the moment
+// we are listening, so an auto-assigned port needs no stdout parsing.
+if (config.EXPLORER_READY_FILE) {
+  await Bun.write(config.EXPLORER_READY_FILE, String(boundPort))
+}
+
+const localBase = `http://${config.HOST}:${boundPort}`
 console.log(`binp-file-explorer running at ${localBase}`)
 console.log(
   `Serving ${config.EXPLORER_ROOT} ` +
