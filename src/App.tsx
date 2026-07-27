@@ -360,38 +360,6 @@ export function App({
   // deliberate collapse by opening a sibling to reclaim the space.
   const userHasAdjustedTree = openPaths.size > 0 || closedPaths.size > 0
 
-  const toggleDirectory = useCallback(
-    (directoryPath: string) => {
-      // Search rows are a server-pruned view; expand/collapse is browse-only.
-      if (isSearching) return
-      const isCurrentlyOpen = effectiveOpenPaths.has(directoryPath)
-      // A directory the fill opened only partway ("N unlisted") is showing an
-      // excerpt, not its contents: the first toggle completes the open — a
-      // manual open, which lifts the truncation — rather than collapsing it.
-      if (isCurrentlyOpen && autoOpenChildLimits.has(directoryPath)) {
-        setOpenPaths((previous) => new Set(previous).add(directoryPath))
-        return
-      }
-      if (isCurrentlyOpen) {
-        setClosedPaths((previous) => new Set(previous).add(directoryPath))
-        setOpenPaths((previous) => {
-          const next = new Set(previous)
-          next.delete(directoryPath)
-          return next
-        })
-      } else {
-        setOpenPaths((previous) => new Set(previous).add(directoryPath))
-        setClosedPaths((previous) => {
-          const next = new Set(previous)
-          next.delete(directoryPath)
-          return next
-        })
-        if (listings[directoryPath] === undefined) void loadListing(directoryPath)
-      }
-    },
-    [listings, loadListing, isSearching, effectiveOpenPaths, autoOpenChildLimits],
-  )
-
   // Each focus is a fresh view: clear the manual overrides and the fill so the
   // new directory is auto-filled from scratch, broot-style (focus = new root).
   useEffect(() => {
@@ -874,7 +842,6 @@ export function App({
           listingError={listingError}
           onSelect={setSelectedPath}
           onFocusParent={focusParentDirectory}
-          onToggleDirectory={toggleDirectory}
           onFocusDirectory={focusDirectory}
           onOpenFile={openFile}
           onToggleSizes={toggleSizes}

@@ -33,7 +33,6 @@ type EntryRowViewProps = {
   wasRefused: boolean
   showSizes: boolean
   onSelect: (path: string) => void
-  onToggleDirectory: (path: string) => void
   onFocusDirectory: (path: string) => void
   onOpenFile: (path: string) => void
 }
@@ -44,7 +43,6 @@ function EntryRowView({
   wasRefused,
   showSizes,
   onSelect,
-  onToggleDirectory,
   onFocusDirectory,
   onOpenFile,
 }: EntryRowViewProps) {
@@ -75,11 +73,10 @@ function EntryRowView({
       aria-describedby={showReasonLine ? reasonLineId : undefined}
       onClick={() => {
         onSelect(row.path)
-        if (isDirectory && !isBlocked) onToggleDirectory(row.path)
-      }}
-      onDoubleClick={() => {
-        // Still routed to the handlers when blocked: they own the refusal, so
-        // acting on the row explains itself instead of silently doing nothing.
+        // A single click acts like Enter (broot open_stay): a directory becomes
+        // the new root, a file opens. Still routed to the handlers when blocked:
+        // they own the refusal, so acting on the row explains itself instead of
+        // silently doing nothing.
         if (isBlocked) onOpenFile(row.path)
         else if (isDirectory) onFocusDirectory(row.path)
         else if (row.entry.kind === 'file') onOpenFile(row.path)
@@ -174,7 +171,6 @@ type TreeViewProps = {
   listingError: string | null
   onSelect: (path: string) => void
   onFocusParent: () => void
-  onToggleDirectory: (path: string) => void
   onFocusDirectory: (path: string) => void
   onOpenFile: (path: string) => void
   onToggleSizes: () => void
@@ -197,7 +193,6 @@ export function TreeView({
   listingError,
   onSelect,
   onFocusParent,
-  onToggleDirectory,
   onFocusDirectory,
   onOpenFile,
   onToggleSizes,
@@ -226,12 +221,15 @@ export function TreeView({
           it is the anchor the whole view hangs from. So it lives on its own
           chrome band — pinned above the scroll, divided from the rows by a
           border — rather than scrolling away as the first tree line. It stays a
-          selectable row: Enter (or double-click) on it walks up one level,
+          selectable row: Enter (or a click) on it walks up one level,
           broot-style. */}
       <div
         data-row-path={ROOT_LINE_PATH}
-        onClick={() => onSelect(ROOT_LINE_PATH)}
-        onDoubleClick={onFocusParent}
+        // A single click acts like Enter: the root line walks up one level.
+        onClick={() => {
+          onSelect(ROOT_LINE_PATH)
+          onFocusParent()
+        }}
         className={`relative grid flex-none cursor-pointer border-b border-line bg-chrome ${rowGridColumnsClass(showSizes)} items-center px-4 py-[3px] whitespace-pre transition-colors ${
           isRootLineSelected ? 'bg-sel' : 'hover:bg-hover'
         }`}
@@ -261,7 +259,6 @@ export function TreeView({
               wasRefused={row.path === refusedPath}
               showSizes={showSizes}
               onSelect={onSelect}
-              onToggleDirectory={onToggleDirectory}
               onFocusDirectory={onFocusDirectory}
               onOpenFile={onOpenFile}
             />
