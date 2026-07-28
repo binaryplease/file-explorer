@@ -294,7 +294,10 @@ function TextPreviewView({
                 past the fixed number gutter. Off restores exact columns and the
                 panel's horizontal scrollbar for code readers. */}
             <span
-              className={`min-w-0 pr-4 text-[12px] text-file ${
+              // No font-size here: the content line inherits the app root's
+              // 13.5px base (App.tsx), so the preview text matches the explorer
+              // tree's entry text by construction rather than a duplicated size.
+              className={`min-w-0 pr-4 text-file ${
                 wrapText ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
               }`}
             >
