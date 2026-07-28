@@ -1,6 +1,7 @@
-import type { AnchorHTMLAttributes, ReactNode } from 'react'
+import { useMemo, type AnchorHTMLAttributes, type ReactNode } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { parse as parseYaml } from 'yaml'
 
 // Rendered-markdown primitive for the preview panel. Presentational and
 // data-agnostic (a UI-kit-style leaf): it takes the bounded head text a text
@@ -114,11 +115,118 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
 }
 
+// Frontmatter is a mapping of arbitrary keys to arbitrary YAML values; there is
+// no fixed schema to model (so ADR-0013 does not apply here), which is exactly
+// why we lean on a real YAML parser rather than hand-rolling one.
+type FrontmatterData = Record<string, unknown>
+
+// Split a leading Jekyll-style YAML frontmatter block (a `---` fence on the very
+// first line, closed by a `---` or `...` fence on its own line) from the markdown
+// body. Returns the parsed mapping plus the body with the block removed. Anything
+// that is not a clean, parseable *mapping* — no fence, malformed YAML, a scalar
+// or a truncated block whose closing fence fell outside the bounded preview —
+// degrades to `{ data: null, body: source }`, so the raw text renders untouched
+// and nothing is ever silently hidden (persona default: fail safe, hide nothing).
+function extractFrontmatter(source: string): { data: FrontmatterData | null; body: string } {
+  const frontmatterMatch =
+    /^---[ \t]*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n([\s\S]*)|$)/.exec(source)
+  if (frontmatterMatch === null) return { data: null, body: source }
+  const [, yamlText, bodyText] = frontmatterMatch
+  let parsed: unknown
+  try {
+    parsed = parseYaml(yamlText)
+  } catch {
+    return { data: null, body: source }
+  }
+  const isMapping =
+    parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && !(parsed instanceof Date)
+  if (!isMapping) return { data: null, body: source }
+  return { data: parsed as FrontmatterData, body: bodyText ?? '' }
+}
+
+// A single scalar rendered as display text. YAML's core schema keeps timestamps
+// as strings, but a Date can still arrive through an explicit tag — normalise it
+// so a value never renders as `[object Object]`.
+function formatScalar(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  return String(value)
+}
+
+// One frontmatter value, painted by shape: an em-dash for empties, chip rows for
+// scalar arrays (the common `tags: [a, b]` case), nested definition lists for
+// maps and non-scalar arrays, and plain text for scalars.
+function FrontmatterValue({ value }: { value: unknown }): ReactNode {
+  if (value === null || value === undefined) return <span className="text-faint">—</span>
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-faint">—</span>
+    const isScalarList = value.every((item) => item === null || typeof item !== 'object')
+    if (isScalarList) {
+      return (
+        <span className="flex flex-wrap gap-1">
+          {value.map((item, itemIndex) => (
+            <span key={itemIndex} className="rounded bg-inset px-1.5 py-0.5 text-[11px] text-file">
+              {formatScalar(item)}
+            </span>
+          ))}
+        </span>
+      )
+    }
+    return (
+      <div className="flex flex-col gap-1">
+        {value.map((item, itemIndex) => (
+          <FrontmatterValue key={itemIndex} value={item} />
+        ))}
+      </div>
+    )
+  }
+
+  if (value instanceof Date) return <span>{formatScalar(value)}</span>
+  if (typeof value === 'object') return <FrontmatterEntries data={value as FrontmatterData} nested />
+  return <span>{formatScalar(value)}</span>
+}
+
+// The key/value rows themselves, as a native `<dl>` (persona: prefer native
+// semantics) so assistive tech reads the metadata as the term/definition pairs
+// it is. Nested maps hang under a left rule to show their depth.
+function FrontmatterEntries({ data, nested = false }: { data: FrontmatterData; nested?: boolean }) {
+  return (
+    <dl className={`flex flex-col gap-1${nested ? ' border-l border-line-2 pl-2' : ''}`}>
+      {Object.keys(data).map((key) => (
+        <div key={key} className="flex items-baseline gap-3">
+          <dt className="w-28 flex-none truncate text-[11.5px] text-dim">{key}</dt>
+          <dd className="min-w-0 flex-1 text-[11.5px] break-words text-file">
+            <FrontmatterValue value={data[key]} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+// The metadata card that sits above the rendered document — visually distinct
+// from the prose so it reads as the document's frontmatter, not its content.
+function FrontmatterCard({ data }: { data: FrontmatterData }) {
+  return (
+    <section
+      aria-label="Document frontmatter"
+      className="mb-3 rounded border border-line-2 bg-void/40 px-3 py-2.5"
+    >
+      <div className="pb-1.5 text-[10.5px] tracking-wide text-faint uppercase">frontmatter</div>
+      <FrontmatterEntries data={data} />
+    </section>
+  )
+}
+
 export function MarkdownPreview({ source }: { source: string }): ReactNode {
+  const { data, body } = useMemo(() => extractFrontmatter(source), [source])
   return (
     <div className="px-4 py-2 font-sans">
+      {data !== null && <FrontmatterCard data={data} />}
       <Markdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
-        {source}
+        {body}
       </Markdown>
     </div>
   )
