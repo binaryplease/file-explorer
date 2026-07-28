@@ -12,11 +12,17 @@ Before starting any non-trivial task, consult `.nightshift/` — the local dev
 notebook (gitignored) that is the single source of truth for plans, decisions,
 and open questions. Look here on your own; you should not need to be told.
 
-- `backlog.md` — current intent: next steps, ideas, open questions.
+- `requirements/` — one file per requirement (`NNN-<slug>.md`), each opening with
+  YAML frontmatter (`status`, `rank`, `blocks`/`blocked_by`, `research`, `adrs`,
+  `shipped`). `001`–`0xx` are delivery requirements in rank order; `1xx` are
+  standing constraints. Schema + index: `requirements/README.md`.
+- `backlog.md` — chronology and rationale: the ranked index of current intent,
+  the dated Log, the Decisions, and Ideas not yet promoted to requirements.
 - `research/` — dated deep-dives backing backlog decisions
   (`YYYY-MM-DD-<topic>.md`).
 
-Record session outcomes back here — update `backlog.md` — so the next agent
+Record session outcomes back here — a dated entry in `backlog.md`, plus the
+`status`/`updated` frontmatter of any requirement you moved — so the next agent
 inherits the context. See `.nightshift/README.md` for the full layout.
 
 ## Tech stack
@@ -98,8 +104,8 @@ a listing or search response never waits on enrichment work (git status,
 previews, directory sizes, thumbnails, …). Enrichment arrives after the tree
 has painted, is cancellable when the user navigates away, and degrades to
 absent rather than delaying the core. If a feature cannot be built this way,
-it does not ship. Perf budgets live in `.nightshift/backlog.md` (performance
-policy).
+it does not ship. Perf budgets live in
+`.nightshift/requirements/101-performance-budgets.md`.
 
 ## Structure
 
@@ -115,7 +121,10 @@ binp-file-explorer/
     index.ts          # Elysia entry: ADR-0020 discovery + health, listen
     config.ts         # env parsing (Zod)
     routes/           # route handlers + *.schema.ts (Zod)
-  .nightshift/        # local dev notebook (gitignored): backlog, research/
+  .nightshift/        # local dev notebook (gitignored):
+    requirements/     #   one file per requirement, YAML frontmatter
+    backlog.md        #   ranked index, dated log, decisions, ideas
+    research/         #   dated deep-dives
 ```
 
 ## Deployment
