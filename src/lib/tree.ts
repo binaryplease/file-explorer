@@ -94,6 +94,48 @@ export function canonicalizeFocusPath(path: string, rootPath: string | null): st
   return path.startsWith(rootPrefix) ? path.slice(rootPrefix.length) : path
 }
 
+// The absolute filesystem path a tree row (or the focused directory) denotes,
+// for "copy path". An in-root row carries a root-relative tree path and is
+// re-joined onto the served root; the empty path is the root itself; an
+// out-of-root row — only reached unconfined, above the anchor — already carries
+// an absolute path and stands on its own. Mirrors `focusFullPath` in App so the
+// breadcrumb and a copied path never disagree.
+export function absoluteTreePath(rowPath: string, rootPath: string): string {
+  if (rowPath === '') return rootPath
+  if (rowPath.startsWith('/')) return rowPath
+  return rootPath === '/' ? `/${rowPath}` : `${rootPath}/${rowPath}`
+}
+
+// A POSIX path expressed relative to a directory, `../` chains included. Both
+// arguments are absolute; segments are compared after dropping empty ones, so a
+// filesystem-root anchor (`/`) and trailing slashes behave. Returns '.' when the
+// path is the directory itself.
+export function posixRelativePath(fromDirectory: string, toPath: string): string {
+  const fromSegments = fromDirectory.split('/').filter((segment) => segment !== '')
+  const toSegments = toPath.split('/').filter((segment) => segment !== '')
+  let commonLength = 0
+  while (
+    commonLength < fromSegments.length &&
+    commonLength < toSegments.length &&
+    fromSegments[commonLength] === toSegments[commonLength]
+  )
+    commonLength++
+  const upwardSegments = fromSegments.slice(commonLength).map(() => '..')
+  const downwardSegments = toSegments.slice(commonLength)
+  const relativeSegments = [...upwardSegments, ...downwardSegments]
+  return relativeSegments.length === 0 ? '.' : relativeSegments.join('/')
+}
+
+// The served-root-relative path a tree row denotes, for "copy relative path".
+// An in-root row's tree path already is exactly this, so it passes through
+// untouched (the common case); the empty path is the root itself ('.'); an
+// out-of-root absolute row is expressed as a `../` chain up out of the anchor.
+export function relativeTreePath(rowPath: string, rootPath: string): string {
+  if (rowPath === '') return '.'
+  if (!rowPath.startsWith('/')) return rowPath
+  return posixRelativePath(rootPath, rowPath)
+}
+
 // The parent of a tree path. Relative paths (in-root, the confined format)
 // lose their last segment and bottom out at '' (the anchor root). Absolute
 // paths — only reached unconfined, when the user has ascended above the anchor

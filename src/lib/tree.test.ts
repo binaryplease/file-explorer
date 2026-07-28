@@ -1,13 +1,75 @@
 import { describe, expect, test } from 'bun:test'
 import type { DirectoryEntry } from '../../shared/filesystem.schema'
 import {
+  absoluteTreePath,
   buildTreeRows,
   canonicalizeFocusPath,
   joinTreePath,
   parentTreePath,
   planAutoOpen,
+  posixRelativePath,
+  relativeTreePath,
   type EntryRow,
 } from './tree'
+
+describe('absoluteTreePath', () => {
+  const root = '/home/enrico'
+
+  test('joins an in-root relative path onto the anchor', () => {
+    expect(absoluteTreePath('Music/song.mp3', root)).toBe('/home/enrico/Music/song.mp3')
+  })
+
+  test('the empty path is the anchor itself', () => {
+    expect(absoluteTreePath('', root)).toBe('/home/enrico')
+  })
+
+  test('an out-of-root absolute path stands on its own', () => {
+    expect(absoluteTreePath('/etc/hosts', root)).toBe('/etc/hosts')
+  })
+
+  test('does not double the slash against a filesystem-root anchor', () => {
+    expect(absoluteTreePath('bin', '/')).toBe('/bin')
+    expect(absoluteTreePath('', '/')).toBe('/')
+  })
+})
+
+describe('posixRelativePath', () => {
+  test('a descendant is expressed without any ../', () => {
+    expect(posixRelativePath('/home/enrico', '/home/enrico/Music/song.mp3')).toBe('Music/song.mp3')
+  })
+
+  test('the directory itself is .', () => {
+    expect(posixRelativePath('/home/enrico', '/home/enrico')).toBe('.')
+  })
+
+  test('an ancestor and sibling climb out with ../', () => {
+    expect(posixRelativePath('/home/enrico', '/home')).toBe('..')
+    expect(posixRelativePath('/home/enrico/src', '/home/enrico/docs/readme.md')).toBe(
+      '../docs/readme.md',
+    )
+  })
+
+  test('a filesystem-root anchor and trailing slashes are tolerated', () => {
+    expect(posixRelativePath('/', '/etc/hosts')).toBe('etc/hosts')
+    expect(posixRelativePath('/home/enrico/', '/home/enrico/Music')).toBe('Music')
+  })
+})
+
+describe('relativeTreePath', () => {
+  const root = '/home/enrico'
+
+  test('an in-root tree path already is the relative path', () => {
+    expect(relativeTreePath('Music/song.mp3', root)).toBe('Music/song.mp3')
+  })
+
+  test('the empty path (the anchor) is .', () => {
+    expect(relativeTreePath('', root)).toBe('.')
+  })
+
+  test('an out-of-root absolute path becomes a ../ chain', () => {
+    expect(relativeTreePath('/etc/hosts', root)).toBe('../../etc/hosts')
+  })
+})
 
 describe('canonicalizeFocusPath', () => {
   const root = '/home/enrico'

@@ -1,5 +1,14 @@
-import { IconLock } from '@tabler/icons-react'
-import { ROOT_LINE_PATH, type EntryRow, type TreeRowModel } from '../lib/tree'
+import { useCallback, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { IconClipboardCopy, IconCopy, IconLock } from '@tabler/icons-react'
+import {
+  absoluteTreePath,
+  relativeTreePath,
+  ROOT_LINE_PATH,
+  type EntryRow,
+  type TreeRowModel,
+} from '../lib/tree'
+import { copyTextToClipboard } from '../lib/clipboard'
+import { ContextMenu, type ContextMenuAnchor } from './ContextMenu'
 import { formatBytes, LARGE_FILE_THRESHOLD_BYTES } from '../lib/format'
 import {
   CONFINEMENT_BADGE_LABEL,
@@ -36,6 +45,7 @@ type EntryRowViewProps = {
   onFocusDirectory: (path: string) => void
   onPreviewFile: (path: string) => void
   onOpenFile: (path: string) => void
+  onContextMenu: (mouseEvent: ReactMouseEvent, row: EntryRow) => void
 }
 
 function EntryRowView({
@@ -47,6 +57,7 @@ function EntryRowView({
   onFocusDirectory,
   onPreviewFile,
   onOpenFile,
+  onContextMenu,
 }: EntryRowViewProps) {
   const isDirectory = row.entry.kind === 'directory'
   const showChildCount = isDirectory && !row.isOpen && (row.entry.childCount ?? 0) > 0
@@ -84,6 +95,7 @@ function EntryRowView({
         else if (isDirectory) onFocusDirectory(row.path)
         else if (row.entry.kind === 'file') onPreviewFile(row.path)
       }}
+      onContextMenu={(mouseEvent) => onContextMenu(mouseEvent, row)}
       onDoubleClick={() => {
         // A file's double-click hands it to the OS default app; the single
         // clicks that led here only opened the preview. Directories already
@@ -167,6 +179,10 @@ function EntryRowView({
 
 type TreeViewProps = {
   rootFullPath: string
+  // The served root's absolute path (the display anchor), used to resolve a
+  // row's absolute and served-root-relative path for the copy-path menu. Null
+  // until the first listing lands — the menu stays inert until then.
+  rootPath: string | null
   isRootLineSelected: boolean
   focusEntryCount: number | null
   rows: TreeRowModel[]
@@ -192,6 +208,7 @@ type TreeViewProps = {
 
 export function TreeView({
   rootFullPath,
+  rootPath,
   isRootLineSelected,
   focusEntryCount,
   rows,
@@ -212,8 +229,72 @@ export function TreeView({
   onToggleGitignored,
   onTogglePreview,
 }: TreeViewProps) {
+  const [contextMenu, setContextMenu] = useState<ContextMenuAnchor | null>(null)
+  // A short-lived confirmation that a copy landed (or didn't), so the action —
+  // which otherwise produces no visible change — acknowledges itself.
+  const [copyNotice, setCopyNotice] = useState<string | null>(null)
+  const copyNoticeTimerRef = useRef<number | null>(null)
+
+  const runCopy = useCallback((noun: string, text: string) => {
+    void copyTextToClipboard(text).then((copied) => {
+      setCopyNotice(copied ? `Copied ${noun}` : `Couldn't copy ${noun}`)
+      if (copyNoticeTimerRef.current !== null) window.clearTimeout(copyNoticeTimerRef.current)
+      copyNoticeTimerRef.current = window.setTimeout(() => setCopyNotice(null), 1800)
+    })
+  }, [])
+
+  // Build the copy-path menu for whatever was right-clicked, given its resolved
+  // absolute and served-root-relative paths. Shared by the entry rows and the
+  // root line so both offer exactly the same two verbs.
+  const openCopyMenu = useCallback(
+    (mouseEvent: ReactMouseEvent, absolutePath: string, relativePath: string) => {
+      mouseEvent.preventDefault()
+      setContextMenu({
+        clientX: mouseEvent.clientX,
+        clientY: mouseEvent.clientY,
+        items: [
+          {
+            key: 'copy-path',
+            label: 'Copy path',
+            icon: <IconCopy size={15} stroke={1.8} aria-hidden />,
+            onSelect: () => runCopy('path', absolutePath),
+          },
+          {
+            key: 'copy-relative-path',
+            label: 'Copy relative path',
+            icon: <IconClipboardCopy size={15} stroke={1.8} aria-hidden />,
+            onSelect: () => runCopy('relative path', relativePath),
+          },
+        ],
+      })
+    },
+    [runCopy],
+  )
+
+  const handleEntryContextMenu = useCallback(
+    (mouseEvent: ReactMouseEvent, row: EntryRow) => {
+      // The absolute path needs the anchor to resolve; without it (before the
+      // first listing) there is nothing meaningful to copy.
+      if (rootPath === null) return
+      onSelect(row.path)
+      openCopyMenu(mouseEvent, absoluteTreePath(row.path, rootPath), relativeTreePath(row.path, rootPath))
+    },
+    [rootPath, onSelect, openCopyMenu],
+  )
+
+  const handleRootLineContextMenu = useCallback(
+    (mouseEvent: ReactMouseEvent) => {
+      if (rootPath === null) return
+      onSelect(ROOT_LINE_PATH)
+      // The root line denotes the focused directory itself: its absolute path is
+      // the full breadcrumb, its relative path is that read against the anchor.
+      openCopyMenu(mouseEvent, rootFullPath, relativeTreePath(rootFullPath, rootPath))
+    },
+    [rootPath, rootFullPath, onSelect, openCopyMenu],
+  )
+
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* View-mode chips ride a slim strip on the tree panel's header, above
           the rows they reconfigure (ADR-0031) — off the tree lines themselves,
           so the root line reads as an ordinary line. */}
@@ -242,6 +323,7 @@ export function TreeView({
           onSelect(ROOT_LINE_PATH)
           onFocusParent()
         }}
+        onContextMenu={handleRootLineContextMenu}
         className={`relative grid flex-none cursor-pointer border-b border-line bg-chrome ${rowGridColumnsClass(showSizes)} items-center px-4 py-[3px] whitespace-pre transition-colors ${
           isRootLineSelected ? 'bg-sel' : 'hover:bg-hover'
         }`}
@@ -274,6 +356,7 @@ export function TreeView({
               onFocusDirectory={onFocusDirectory}
               onPreviewFile={onPreviewFile}
               onOpenFile={onOpenFile}
+              onContextMenu={handleEntryContextMenu}
             />
           ) : row.type === 'pruned' ? (
             // broot's pruning line: children trimmed from this directory's view
@@ -305,6 +388,21 @@ export function TreeView({
           ),
         )}
       </div>
+      {contextMenu !== null && (
+        <ContextMenu anchor={contextMenu} onClose={() => setContextMenu(null)} />
+      )}
+      {copyNotice !== null && (
+        // A calm, transient confirmation pinned to the panel's foot — the copy
+        // produced no other visible change, so this is the acknowledgement.
+        <div
+          role="status"
+          className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
+        >
+          <span className="rounded-full border border-line bg-chrome px-3 py-1 text-[11.5px] text-dim shadow-[0_10px_30px_-12px_rgba(0,0,0,0.85)]">
+            {copyNotice}
+          </span>
+        </div>
+      )}
     </div>
   )
 }

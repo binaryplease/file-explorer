@@ -10,6 +10,7 @@ import {
 } from './lib/api'
 import { isConfinementBlocked } from './lib/confinement'
 import {
+  absoluteTreePath,
   buildSearchRows,
   buildTreeRows,
   canonicalizeFocusPath,
@@ -846,19 +847,11 @@ export function App({
 
   const rootName = rootPath === null ? '…' : baseName(rootPath) || rootPath
   const focusLabel = focusPath === '' ? rootName : baseName(focusPath)
-  // Join the served root and the focused subpath with exactly one slash: when
-  // the served root is the filesystem root (`/`), a naive `${rootPath}/…` would
-  // double it into `//home/…`. An absolute `focusPath` — reached only unconfined,
-  // once the user has ascended above the anchor — is already a full path and
-  // stands on its own; it must not be re-prefixed with the root.
-  const focusFullPath =
-    rootPath === null
-      ? '…'
-      : focusPath === ''
-        ? rootPath
-        : focusPath.startsWith('/')
-          ? focusPath
-          : `${rootPath === '/' ? '' : rootPath}/${focusPath}`
+  // The focused directory's absolute path, for the breadcrumb. `absoluteTreePath`
+  // owns the join rules (single slash against a `/` anchor; an already-absolute
+  // focus path — reached only unconfined, above the anchor — stands on its own);
+  // '…' stands in until the anchor is known.
+  const focusFullPath = rootPath === null ? '…' : absoluteTreePath(focusPath, rootPath)
 
   // The next Escape hands off to the host's close verb only once the layering is
   // spent: no filter, the selection already on the root line, and no focus
@@ -884,6 +877,7 @@ export function App({
       <div ref={containerRef} className="flex min-h-0 flex-1">
         <TreeView
           rootFullPath={focusFullPath}
+          rootPath={rootPath}
           isRootLineSelected={selectedPath === ROOT_LINE_PATH}
           focusEntryCount={focusEntryCount}
           rows={rows}
