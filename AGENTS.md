@@ -6,24 +6,28 @@ broot-style — lazy tree navigation, ranked fuzzy search, in-place previews.
 Stack follows **ADR-0003** (default application tech stack). This file is the
 authoritative "how things are done here" reference — read it before building.
 
-## Project context — read `.nightshift/` first
+## Project context — read `requirements/`, then `.nightshift/`
 
-Before starting any non-trivial task, consult `.nightshift/` — the local dev
-notebook (gitignored) that is the single source of truth for plans, decisions,
-and open questions. Look here on your own; you should not need to be told.
+Before starting any non-trivial task, read both. Look on your own; you should not
+need to be told.
 
-- `requirements/` — one file per requirement (`NNN-<slug>.md`), each opening with
-  YAML frontmatter (`status`, `rank`, `blocks`/`blocked_by`, `research`, `adrs`,
-  `shipped`). `001`–`0xx` are delivery requirements in rank order; `1xx` are
-  standing constraints. Schema + index: `requirements/README.md`.
-- `backlog.md` — chronology and rationale: the ranked index of current intent,
-  the dated Log, the Decisions, and Ideas not yet promoted to requirements.
-- `research/` — dated deep-dives backing backlog decisions
-  (`YYYY-MM-DD-<topic>.md`).
+- **`requirements/` (committed)** — one file per requirement (`NNN-<slug>.md`),
+  each opening with YAML frontmatter (`status`, `rank`, `tags`,
+  `blocks`/`blocked_by`, `research`, `adrs`, `shipped`, `updated`). `001`–`0xx`
+  are delivery requirements in rank order; `1xx` are standing constraints that
+  bind every feature. This is what the product must do or be — schema, status
+  vocabulary and index in [`requirements/README.md`](requirements/README.md).
+- **`.nightshift/` (gitignored local notebook)** — why and when, not what:
+  - `backlog.md` — the ranked index of current intent, the dated Log, the
+    Decisions, and Ideas not yet promoted to requirements.
+  - `research/` — dated deep-dives backing those decisions
+    (`YYYY-MM-DD-<topic>.md`).
 
-Record session outcomes back here — a dated entry in `backlog.md`, plus the
-`status`/`updated` frontmatter of any requirement you moved — so the next agent
-inherits the context. See `.nightshift/README.md` for the full layout.
+Record session outcomes in both: a dated entry in `.nightshift/backlog.md`, plus
+the `status`/`updated` frontmatter (and body) of any requirement you moved. A
+requirement may cite the notebook for reasoning, but must stand on its own for a
+reader who only has the repo — the notebook is not in it. See
+`.nightshift/README.md` for the full layout.
 
 ## Tech stack
 
@@ -105,7 +109,7 @@ previews, directory sizes, thumbnails, …). Enrichment arrives after the tree
 has painted, is cancellable when the user navigates away, and degrades to
 absent rather than delaying the core. If a feature cannot be built this way,
 it does not ship. Perf budgets live in
-`.nightshift/requirements/101-performance-budgets.md`.
+`requirements/101-performance-budgets.md`.
 
 ## Structure
 
@@ -121,8 +125,10 @@ binp-file-explorer/
     index.ts          # Elysia entry: ADR-0020 discovery + health, listen
     config.ts         # env parsing (Zod)
     routes/           # route handlers + *.schema.ts (Zod)
+  requirements/       # committed: one file per requirement, YAML frontmatter
+    README.md         #   frontmatter schema, status vocabulary, index
+    NNN-<slug>.md     #   001-0xx delivery (ranked), 1xx standing constraints
   .nightshift/        # local dev notebook (gitignored):
-    requirements/     #   one file per requirement, YAML frontmatter
     backlog.md        #   ranked index, dated log, decisions, ideas
     research/         #   dated deep-dives
 ```
