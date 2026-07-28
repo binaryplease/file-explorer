@@ -40,45 +40,45 @@ function MarkdownLink({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnch
 // the map is built once, not per render.
 const MARKDOWN_COMPONENTS: Components = {
   h1: ({ children }) => (
-    <h1 className="mt-4 mb-2 border-b border-line-2 pb-1 text-[15px] font-semibold text-fg first:mt-0">
+    <h1 className="mt-4 mb-2 border-b border-line-2 pb-1 text-[16px] font-semibold text-fg first:mt-0">
       {children}
     </h1>
   ),
   h2: ({ children }) => (
-    <h2 className="mt-4 mb-1.5 border-b border-line-2 pb-1 text-[13.5px] font-semibold text-fg first:mt-0">
+    <h2 className="mt-4 mb-1.5 border-b border-line-2 pb-1 text-[14.5px] font-semibold text-fg first:mt-0">
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mt-3 mb-1 text-[12.5px] font-semibold text-fg first:mt-0">{children}</h3>
+    <h3 className="mt-3 mb-1 text-[13.5px] font-semibold text-fg first:mt-0">{children}</h3>
   ),
   h4: ({ children }) => (
-    <h4 className="mt-3 mb-1 text-[12px] font-semibold text-fg first:mt-0">{children}</h4>
+    <h4 className="mt-3 mb-1 text-[13px] font-semibold text-fg first:mt-0">{children}</h4>
   ),
   h5: ({ children }) => (
-    <h5 className="mt-3 mb-1 text-[11.5px] font-semibold text-dim first:mt-0">{children}</h5>
+    <h5 className="mt-3 mb-1 text-[12.5px] font-semibold text-dim first:mt-0">{children}</h5>
   ),
   h6: ({ children }) => (
-    <h6 className="mt-3 mb-1 text-[11.5px] font-semibold text-dim first:mt-0">{children}</h6>
+    <h6 className="mt-3 mb-1 text-[12.5px] font-semibold text-dim first:mt-0">{children}</h6>
   ),
-  p: ({ children }) => <p className="my-2 text-[12.5px] leading-relaxed text-file">{children}</p>,
+  p: ({ children }) => <p className="my-2 text-[13.5px] leading-relaxed text-file">{children}</p>,
   a: MarkdownLink,
   strong: ({ children }) => <strong className="font-semibold text-fg">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,
   del: ({ children }) => <del className="text-dim line-through">{children}</del>,
   ul: ({ children }) => (
-    <ul className="my-2 list-disc pl-5 text-[12.5px] leading-relaxed text-file marker:text-faint">
+    <ul className="my-2 list-disc pl-5 text-[13.5px] leading-relaxed text-file marker:text-faint">
       {children}
     </ul>
   ),
   ol: ({ children }) => (
-    <ol className="my-2 list-decimal pl-5 text-[12.5px] leading-relaxed text-file marker:text-faint">
+    <ol className="my-2 list-decimal pl-5 text-[13.5px] leading-relaxed text-file marker:text-faint">
       {children}
     </ol>
   ),
   li: ({ children }) => <li className="my-0.5">{children}</li>,
   blockquote: ({ children }) => (
-    <blockquote className="my-2 border-l-2 border-line pl-3 text-[12.5px] text-dim italic">
+    <blockquote className="my-2 border-l-2 border-line pl-3 text-[13.5px] text-dim italic">
       {children}
     </blockquote>
   ),
@@ -90,9 +90,9 @@ const MARKDOWN_COMPONENTS: Components = {
   // inline case and let `pre` own the block case.
   code: ({ children, className }) => {
     const isFenced = className?.startsWith('language-') ?? false
-    if (isFenced) return <code className="font-mono text-[11.5px] text-file">{children}</code>
+    if (isFenced) return <code className="font-mono text-[12.5px] text-file">{children}</code>
     return (
-      <code className="rounded bg-inset px-1 py-0.5 font-mono text-[11.5px] text-fg">{children}</code>
+      <code className="rounded bg-inset px-1 py-0.5 font-mono text-[12.5px] text-fg">{children}</code>
     )
   },
   pre: ({ children }) => (
@@ -102,7 +102,7 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
   table: ({ children }) => (
     <div className="my-2 overflow-auto">
-      <table className="border-collapse text-[11.5px] text-file">{children}</table>
+      <table className="border-collapse text-[12.5px] text-file">{children}</table>
     </div>
   ),
   th: ({ children }) => (
