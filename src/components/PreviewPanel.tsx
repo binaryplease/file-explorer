@@ -526,13 +526,18 @@ export function PreviewPanel({
   return (
     <div
       // The width comes from the divider beside it (the drag lives there); the
-      // panel just fills it. The focus accent lives on the divider's edge now
-      // (ADR-0028's shared interaction token), so the panel only tints its
-      // surface to echo which side holds the keyboard.
+      // panel just fills it. The focus accent lives on the divider's edge
+      // (ADR-0028's shared interaction token) and is echoed by the header row
+      // below — the content surface stays untinted, since darkening the very
+      // text the panel exists to make readable works against the preview.
       style={{ width }}
-      className={`flex min-h-0 flex-none flex-col ${isFocused ? 'bg-term-2' : ''}`}
+      className="flex min-h-0 flex-none flex-col"
     >
-      <div className="flex flex-none items-center gap-2 border-b border-line-2 px-3 py-1.5">
+      <div
+        className={`flex flex-none items-center gap-2 border-b border-line-2 px-3 py-1.5 transition-colors ${
+          isFocused ? 'bg-term-2' : ''
+        }`}
+      >
         {descriptor !== null && (
           <descriptor.Icon size={14} stroke={1.5} className="flex-none text-dim" />
         )}
