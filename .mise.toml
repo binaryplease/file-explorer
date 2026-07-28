@@ -5,9 +5,14 @@ bun = "1"
 PORT = "3000"
 NODE_ENV = "development"
 
-# Directory served by the explorer. Defaults to the home directory of the user
-# running the server; a positional CLI argument to the server wins over this.
-# EXPLORER_ROOT = "/path/to/serve"
+# Directory served by the explorer. Dev serves this repo — you are almost always
+# looking at the code you are changing, and it makes the tree the same for every
+# contributor instead of "whatever is in my home directory". `{{config_root}}`
+# is where this file lives, so it holds from any cwd. Point it elsewhere to
+# browse another location; a positional argument to the server still wins over
+# it, and the `bfe` CLI ignores it entirely (it serves its own cwd). Unset, the
+# server's own default is the home directory of the user running it.
+EXPLORER_ROOT = "{{config_root}}"
 
 # Whether the served root is a real boundary or just the tree's starting anchor.
 # Off by default: this is a local-only loopback tool running with the user's own

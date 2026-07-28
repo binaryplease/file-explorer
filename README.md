@@ -73,6 +73,11 @@ The explorer serves the **home directory** of the user running the server by
 default. To open it at a specific location instead, set `EXPLORER_ROOT` (see
 `.mise.toml`) or pass a positional argument: `bun server/index.ts ~/projects`.
 
+The mise tasks set `EXPLORER_ROOT` to **this repo**, so `mise run dev` opens on
+the code you are working on rather than your home directory. That is a dev-env
+convention, not a code default — a server started outside mise still falls back
+to the home directory, and `bfe` serves its own cwd either way.
+
 By default the root is the tree's **starting anchor**, not a boundary: browsing
 can follow a symlink or an absolute path out of it. Set `EXPLORER_CONFINE=true`
 to make the root a real boundary instead: paths that escape it, lexically or
