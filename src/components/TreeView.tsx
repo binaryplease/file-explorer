@@ -19,6 +19,20 @@ import {
 import { ViewChips } from './ViewChips'
 import { HighlightedSegments } from './FuzzyMatch'
 
+// Every line inside the tree scroll — entry rows and the annotation lines
+// ("N unlisted", the hidden/gitignored tally) alike — occupies one cell of a
+// single character grid, so it carries exactly these metrics: the same
+// horizontal padding, the same inherited font size, the same vertical padding.
+//
+// This is not only cosmetic. The connectors are box-drawing glyphs measured in
+// `ch`, so a line at a different font size breaks the vertical `│` guides
+// running down the tree; and `measureTreeRowCapacity` in App.tsx budgets the
+// screen-fit fill by dividing the viewport height by *one entry row's* height,
+// so a line that renders shorter than an entry row makes the plan come up short
+// and the tree ends in a blank strip. Annotation lines recede by color
+// (`text-faint`), never by size.
+const TREE_ROW_METRICS_CLASS = 'px-4 py-[2.5px] whitespace-pre'
+
 // The row grid is a single shared invariant: the root line and every entry row
 // must keep their columns aligned. When the size bars are hidden, the 104px bar
 // track is dropped entirely rather than reserved-and-emptied, so the filename
@@ -103,7 +117,7 @@ function EntryRowView({
         if (isBlocked) onOpenFile(row.path)
         else if (row.entry.kind === 'file') onOpenFile(row.path)
       }}
-      className={`relative grid cursor-pointer ${rowGridColumnsClass(showSizes)} items-center px-4 py-[2.5px] whitespace-pre transition-colors ${
+      className={`relative grid cursor-pointer ${rowGridColumnsClass(showSizes)} items-center ${TREE_ROW_METRICS_CLASS} transition-colors ${
         isSelected ? 'bg-sel' : 'hover:bg-hover'
       }`}
     >
@@ -164,13 +178,18 @@ function EntryRowView({
       <div
         id={reasonLineId}
         // Indented by the connector width so it hangs under the entry's name,
-        // wrapped lines included.
+        // wrapped lines included. The `ch` unit resolves against *this*
+        // element's font size, so the indent is measured here, at the tree's
+        // inherited size — the smaller reason text sits in a child, where its
+        // narrower `ch` can no longer pull the line out of the tree's grid.
         style={{ marginLeft: `${row.connectorPrefix.length}ch` }}
-        className={`px-4 pb-1 text-[11.5px] leading-snug ${
-          wasRefused ? 'text-bar-a' : 'text-dim'
-        }`}
+        className="px-4 pb-1"
       >
-        {CONFINEMENT_SHORT_REASON}
+        <span
+          className={`text-[11.5px] leading-snug ${wasRefused ? 'text-bar-a' : 'text-dim'}`}
+        >
+          {CONFINEMENT_SHORT_REASON}
+        </span>
       </div>
     )}
     </>
@@ -361,19 +380,17 @@ export function TreeView({
           ) : row.type === 'pruned' ? (
             // broot's pruning line: children trimmed from this directory's view
             // (the search's best-scoring cut, or the auto-open screen-fit).
-            <div
-              key={row.path}
-              className="px-4 py-px text-[11.5px] whitespace-pre text-faint"
-            >
+            <div key={row.path} className={`${TREE_ROW_METRICS_CLASS} text-faint`}>
               {row.connectorPrefix}
               {row.unlistedCount} unlisted
             </div>
           ) : (
-            <div
-              key={row.path}
-              className="px-4 py-px text-[11.5px] whitespace-pre text-faint"
-            >
-              {row.connectorPrefix}…{' '}
+            // The filters' tally line. Its label starts in the same column as
+            // every entry name and every pruning line — the connector is the
+            // whole indent, with no extra marker glyph pushing it out of the
+            // grid.
+            <div key={row.path} className={`${TREE_ROW_METRICS_CLASS} text-faint`}>
+              {row.connectorPrefix}
               {[
                 row.hiddenCount > 0
                   ? `${row.hiddenCount} hidden ( .dotfile${row.hiddenCount !== 1 ? 's' : ''} )`

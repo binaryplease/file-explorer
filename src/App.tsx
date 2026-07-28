@@ -43,14 +43,20 @@ const FALLBACK_TREE_ROW_HEIGHT = 27
 // The tree's scroll viewport and its first entry row. The root line is pinned
 // outside this container (a separate signal), so it is never mistaken for a
 // scrolling row when measuring.
+//
+// One entry row stands for every row in the viewport, which holds because
+// `TREE_ROW_METRICS_CLASS` in TreeView.tsx gives the annotation lines
+// ("N unlisted", the filter tally) the same metrics as an entry — measure a
+// short annotation line here and the budget below silently under-fills. The
+// height is read fractionally rather than as a rounded `offsetHeight`: the
+// error is multiplied by the row count, so rounding 26.87px up to 27px costs a
+// whole row of fill on a tall viewport.
 function measureTreeViewport(): { container: HTMLElement; rowHeight: number } | null {
   const container = document.querySelector<HTMLElement>('[data-tree-scroll]')
   if (container === null) return null
   const rowElement = container.querySelector<HTMLElement>('[data-row-path]')
-  const rowHeight =
-    rowElement !== null && rowElement.offsetHeight > 0
-      ? rowElement.offsetHeight
-      : FALLBACK_TREE_ROW_HEIGHT
+  const measuredRowHeight = rowElement?.getBoundingClientRect().height ?? 0
+  const rowHeight = measuredRowHeight > 0 ? measuredRowHeight : FALLBACK_TREE_ROW_HEIGHT
   return { container, rowHeight }
 }
 
