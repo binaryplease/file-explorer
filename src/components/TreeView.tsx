@@ -5,6 +5,7 @@ import {
   relativeTreePath,
   ROOT_LINE_PATH,
   type EntryRow,
+  type TreeConnector,
   type TreeRowModel,
 } from '../lib/tree'
 import { copyTextToClipboard } from '../lib/clipboard'
@@ -23,15 +24,77 @@ import { HighlightedSegments } from './FuzzyMatch'
 // ("N unlisted", the hidden/gitignored tally) alike — occupies one cell of a
 // single character grid, so it carries exactly these metrics: the same
 // horizontal padding, the same inherited font size, the same vertical padding.
+// `relative` is part of the contract too: the guide rails are drawn against the
+// row box, so they need it as their containing block.
 //
-// This is not only cosmetic. The connectors are box-drawing glyphs measured in
-// `ch`, so a line at a different font size breaks the vertical `│` guides
-// running down the tree; and `measureTreeRowCapacity` in App.tsx budgets the
+// This is not only cosmetic. `measureTreeRowCapacity` in App.tsx budgets the
 // screen-fit fill by dividing the viewport height by *one entry row's* height,
 // so a line that renders shorter than an entry row makes the plan come up short
 // and the tree ends in a blank strip. Annotation lines recede by color
 // (`text-faint`), never by size.
-const TREE_ROW_METRICS_CLASS = 'px-4 py-[2.5px] whitespace-pre'
+const TREE_ROW_METRICS_CLASS = 'relative px-4 py-[2.5px] whitespace-pre'
+
+// One tree level is three character cells wide — broot's `"│  "` lead and its
+// `"├──"` / `"└──"` corners (`display/displayable_tree.rs`), so the rails sit
+// where a terminal would put them. The rail itself runs down the middle of the
+// first cell.
+const RAIL_CELLS_PER_LEVEL = 3
+const RAIL_CENTRE_CH = 0.5
+
+// How far a row's own text is indented, in `ch`: one cell group per ancestor
+// level plus the group holding this row's corner.
+function railIndentCh(connector: TreeConnector): number {
+  return (connector.ancestorRailsContinue.length + 1) * RAIL_CELLS_PER_LEVEL
+}
+
+// The tree's guide rails, drawn as CSS rules rather than written as `│`/`├──`
+// box-drawing characters.
+//
+// The characters cannot do this job here. A glyph is only as tall as the font
+// draws it — roughly 16px at our 13.5px type — while a row is 26.9px, so a
+// column of `│` renders as a dashed line with a hole at every row seam. A
+// terminal has no such hole because its cell *is* the line box; in a browser
+// the leading has to be spanned deliberately. These rules take the row's full
+// height (`inset-y-0`, padding included), so a rail meets its neighbour exactly
+// and the tree reads as one continuous set of rails.
+//
+// Rendered once here and composed by every row kind (ADR-0026/0028) — entries,
+// the pruning line and the filter tally all draw the same rails from the same
+// descriptor, so they can never drift apart.
+function TreeRails({ connector }: { connector: TreeConnector }) {
+  const ownLevel = connector.ancestorRailsContinue.length
+  const ownRailLeftCh = ownLevel * RAIL_CELLS_PER_LEVEL + RAIL_CENTRE_CH
+  return (
+    // Decorative: the row's meaning is its name and its indent, both of which
+    // reach assistive tech as text. The rails are `aria-hidden` so a screen
+    // reader is not read a wall of box drawing.
+    <span aria-hidden className="pointer-events-none absolute inset-y-0 left-4">
+      {connector.ancestorRailsContinue.map((railContinues, level) =>
+        railContinues ? (
+          <span
+            key={level}
+            className="absolute inset-y-0 w-px bg-faint"
+            style={{ left: `${level * RAIL_CELLS_PER_LEVEL + RAIL_CENTRE_CH}ch` }}
+          />
+        ) : null,
+      )}
+      {/* This row's own corner. A last child stops at the row's middle (`└`);
+          any other carries the rail through to the next row (`├`). */}
+      <span
+        className={`absolute top-0 w-px bg-faint ${connector.isLastChild ? 'h-1/2' : 'bottom-0'}`}
+        style={{ left: `${ownRailLeftCh}ch` }}
+      />
+      {/* The corner's arm, reaching from the rail to where the text begins. */}
+      <span
+        className="absolute top-1/2 h-px bg-faint"
+        style={{
+          left: `${ownRailLeftCh}ch`,
+          width: `${RAIL_CELLS_PER_LEVEL - RAIL_CENTRE_CH}ch`,
+        }}
+      />
+    </span>
+  )
+}
 
 // The row grid is a single shared invariant: the root line and every entry row
 // must keep their columns aligned. When the size bars are hidden, the 104px bar
@@ -117,13 +180,16 @@ function EntryRowView({
         if (isBlocked) onOpenFile(row.path)
         else if (row.entry.kind === 'file') onOpenFile(row.path)
       }}
-      className={`relative grid cursor-pointer ${rowGridColumnsClass(showSizes)} items-center ${TREE_ROW_METRICS_CLASS} transition-colors ${
+      className={`grid cursor-pointer ${rowGridColumnsClass(showSizes)} items-center ${TREE_ROW_METRICS_CLASS} transition-colors ${
         isSelected ? 'bg-sel' : 'hover:bg-hover'
       }`}
     >
       {isSelected && <span className="absolute inset-y-0 left-0 w-[3px] bg-sel-bar" />}
-      <span className="overflow-hidden text-ellipsis">
-        <span className="text-faint">{row.connectorPrefix}</span>
+      <TreeRails connector={row.connector} />
+      <span
+        className="overflow-hidden text-ellipsis"
+        style={{ paddingLeft: `${railIndentCh(row.connector)}ch` }}
+      >
         {/* broot path-search display: the parent part of a matched subpath
             rides ahead of the name, dimmed, matches still highlighted. */}
         {row.pathPrefixSegments.length > 0 && (
@@ -182,7 +248,7 @@ function EntryRowView({
         // element's font size, so the indent is measured here, at the tree's
         // inherited size — the smaller reason text sits in a child, where its
         // narrower `ch` can no longer pull the line out of the tree's grid.
-        style={{ marginLeft: `${row.connectorPrefix.length}ch` }}
+        style={{ marginLeft: `${railIndentCh(row.connector)}ch` }}
         className="px-4 pb-1"
       >
         <span
@@ -381,16 +447,18 @@ export function TreeView({
             // broot's pruning line: children trimmed from this directory's view
             // (the search's best-scoring cut, or the auto-open screen-fit).
             <div key={row.path} className={`${TREE_ROW_METRICS_CLASS} text-faint`}>
-              {row.connectorPrefix}
-              {row.unlistedCount} unlisted
+              <TreeRails connector={row.connector} />
+              <span style={{ paddingLeft: `${railIndentCh(row.connector)}ch` }}>
+                {row.unlistedCount} unlisted
+              </span>
             </div>
           ) : (
             // The filters' tally line. Its label starts in the same column as
-            // every entry name and every pruning line — the connector is the
-            // whole indent, with no extra marker glyph pushing it out of the
-            // grid.
+            // every entry name and every pruning line — the rails are the whole
+            // indent, with no extra marker glyph pushing it out of the grid.
             <div key={row.path} className={`${TREE_ROW_METRICS_CLASS} text-faint`}>
-              {row.connectorPrefix}
+              <TreeRails connector={row.connector} />
+              <span style={{ paddingLeft: `${railIndentCh(row.connector)}ch` }}>
               {[
                 row.hiddenCount > 0
                   ? `${row.hiddenCount} hidden ( .dotfile${row.hiddenCount !== 1 ? 's' : ''} )`
@@ -401,6 +469,7 @@ export function TreeView({
               ]
                 .filter((labelPart) => labelPart !== null)
                 .join(' · ')}
+              </span>
             </div>
           ),
         )}

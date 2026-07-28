@@ -439,7 +439,7 @@ describe('buildTreeRows — screen-fit truncation', () => {
     if (prunedRow.type === 'pruned') {
       expect(prunedRow.unlistedCount).toBe(3)
       // Nothing follows the pruning row here, so it closes the branch.
-      expect(prunedRow.connectorPrefix.endsWith('└──')).toBe(true)
+      expect(prunedRow.connector.isLastChild).toBe(true)
     }
   })
 
@@ -466,7 +466,8 @@ describe('buildTreeRows — screen-fit truncation', () => {
     expect(tallyRow!.type).toBe('unlisted')
     if (prunedRow!.type === 'pruned') {
       expect(prunedRow!.unlistedCount).toBe(2)
-      expect(prunedRow!.connectorPrefix.endsWith('├──')).toBe(true)
+      // The tally row follows it, so the branch stays open past the cut.
+      expect(prunedRow!.connector.isLastChild).toBe(false)
     }
   })
 

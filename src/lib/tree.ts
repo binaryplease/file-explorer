@@ -2,11 +2,27 @@ import type { DirectoryEntry } from '../../shared/filesystem.schema'
 import type { SearchNode, SearchSubtreeResult } from '../../shared/search.schema'
 import { fuzzyMatch, type FuzzySegment } from '../../shared/fuzzy'
 
+// The tree's guide rails for one row, as structure rather than box-drawing
+// characters. `ancestorRailsContinue[level]` is true when that ancestor still
+// has a sibling below, so its vertical rail passes through this row;
+// `isLastChild` picks the corner this row's own rail draws — a '└' that stops
+// at the row's middle, or a '├' that carries on down.
+//
+// It is structure and not a `"│  ├──"` string because glyphs cannot draw an
+// unbroken rail here: a `│` is about 16px of ink inside a 27px row, so a column
+// of them renders as a dashed line with a hole at every row seam. A terminal
+// has no such hole — its cell *is* the line box — so TreeView draws the rails
+// as CSS rules spanning the row's full height instead. See the note there.
+export type TreeConnector = {
+  ancestorRailsContinue: boolean[]
+  isLastChild: boolean
+}
+
 export type EntryRow = {
   type: 'entry'
   path: string
   entry: DirectoryEntry
-  connectorPrefix: string
+  connector: TreeConnector
   isOpen: boolean
   // Search rows show the whole subpath, broot-style: the parent part renders
   // dimmed ahead of the name. Empty outside searches / for top-level rows.
@@ -22,7 +38,7 @@ export type EntryRow = {
 export type UnlistedRow = {
   type: 'unlisted'
   path: string
-  connectorPrefix: string
+  connector: TreeConnector
   hiddenCount: number
   ignoredCount: number
 }
@@ -33,7 +49,7 @@ export type UnlistedRow = {
 export type PrunedRow = {
   type: 'pruned'
   path: string
-  connectorPrefix: string
+  connector: TreeConnector
   unlistedCount: number
 }
 
@@ -177,10 +193,13 @@ function unmatchedSegments(name: string): FuzzySegment[] {
   return name === '' ? [] : [{ text: name, matched: false }]
 }
 
-function connectorLead(ancestorWasLastFlags: boolean[]): string {
-  return ancestorWasLastFlags
-    .map((ancestorWasLast) => (ancestorWasLast ? '   ' : '│  '))
-    .join('')
+// An ancestor that was its own parent's last child has nothing below it, so its
+// rail stops there; every other ancestor's rail runs on through this row.
+function makeConnector(ancestorWasLastFlags: boolean[], isLastChild: boolean): TreeConnector {
+  return {
+    ancestorRailsContinue: ancestorWasLastFlags.map((ancestorWasLast) => !ancestorWasLast),
+    isLastChild,
+  }
 }
 
 // Flattens the loaded tree under `focusPath` into display rows, in the broot
@@ -231,7 +250,6 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
 
     const unlistedCount = hiddenCount + ignoredCount
     const largestFileSize = Math.max(...visibleChildren.map((child) => child.sizeBytes ?? 0), 0)
-    const leadPrefix = connectorLead(ancestorWasLastFlags)
 
     shownChildren.forEach((child, childIndex) => {
       const childPath = joinTreePath(parentPath, child.name)
@@ -242,7 +260,7 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
         type: 'entry',
         path: childPath,
         entry: child,
-        connectorPrefix: leadPrefix + (isLastRow ? '└──' : '├──'),
+        connector: makeConnector(ancestorWasLastFlags, isLastRow),
         isOpen,
         pathPrefixSegments: [],
         nameSegments: unmatchedSegments(child.name),
@@ -260,7 +278,7 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
       rows.push({
         type: 'pruned',
         path: `${parentPath}#pruned`,
-        connectorPrefix: leadPrefix + (unlistedCount === 0 ? '└──' : '├──'),
+        connector: makeConnector(ancestorWasLastFlags, unlistedCount === 0),
         unlistedCount: prunedCount,
       })
     }
@@ -269,7 +287,7 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
       rows.push({
         type: 'unlisted',
         path: `${parentPath}#unlisted`,
-        connectorPrefix: `${leadPrefix}└──`,
+        connector: makeConnector(ancestorWasLastFlags, true),
         hiddenCount,
         ignoredCount,
       })
@@ -543,7 +561,6 @@ export function buildSearchRows(options: SearchViewOptions): TreeRowsResult {
       compareEntryNames(firstNode.entry.name, secondNode.entry.name),
     )
     const largestFileSize = Math.max(...children.map((child) => child.entry.sizeBytes ?? 0), 0)
-    const leadPrefix = connectorLead(ancestorWasLastFlags)
 
     children.forEach((child, childIndex) => {
       // Row paths are relative to the served root, like browse rows, so
@@ -566,7 +583,7 @@ export function buildSearchRows(options: SearchViewOptions): TreeRowsResult {
         type: 'entry',
         path: rowPath,
         entry: child.entry,
-        connectorPrefix: leadPrefix + (isLastRow ? '└──' : '├──'),
+        connector: makeConnector(ancestorWasLastFlags, isLastRow),
         isOpen: hasChildren,
         pathPrefixSegments,
         nameSegments,
@@ -587,7 +604,7 @@ export function buildSearchRows(options: SearchViewOptions): TreeRowsResult {
       rows.push({
         type: 'pruned',
         path: `${parentNodePath}#pruned`,
-        connectorPrefix: `${leadPrefix}└──`,
+        connector: makeConnector(ancestorWasLastFlags, true),
         unlistedCount: trailingUnlistedCount,
       })
     }
