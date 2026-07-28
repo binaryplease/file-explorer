@@ -6,6 +6,7 @@
  * signal/PID ceremony here (ADR-0021).
  */
 import { describeDevPorts, devPortEnvironment, resolveDevPorts } from './dev-ports'
+import { devRootEnvironment, repositoryRoot } from './dev-root'
 
 const devPorts = await resolveDevPorts()
 console.log(describeDevPorts(devPorts))
@@ -23,8 +24,11 @@ const devProcess = Bun.spawn(
   {
     // Resolve against this script's own location so the dev task works from any
     // cwd (ADR-0011).
-    cwd: new URL('..', import.meta.url).pathname,
-    env: { ...process.env, ...devPortEnvironment(devPorts) },
+    cwd: repositoryRoot,
+    // The served root is a default (`bun dev` gets what `mise run dev` gets),
+    // the ports are decisions already made above — hence the order: an
+    // EXPLORER_ROOT from the environment survives, a stale PORT does not.
+    env: { ...process.env, ...devRootEnvironment(), ...devPortEnvironment(devPorts) },
     stdio: ['inherit', 'inherit', 'inherit'],
   },
 )
