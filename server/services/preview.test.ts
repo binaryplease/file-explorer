@@ -213,6 +213,19 @@ describe('previewEntry', () => {
     expect(videoResult.preview.lines).toEqual([])
   })
 
+  test('points a PDF at the raw endpoint rather than reading its bytes as binary', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    // A minimal PDF header — binary bytes that would classify as `binary` if the
+    // extension branch did not catch them first.
+    await writeFile(join(rootPath, 'report.pdf'), new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]))
+    const result = await previewService.previewEntry('report.pdf')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.preview.kind).toBe('pdf')
+    expect(result.preview.mediaUrlPath).toBe('/api/fs/raw?path=report.pdf')
+    expect(result.preview.lines).toEqual([])
+  })
+
   test('summarizes a directory from its own listing', async () => {
     const { rootPath, previewService } = await createScratchRoot()
     await mkdir(join(rootPath, 'project'))

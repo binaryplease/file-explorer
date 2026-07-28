@@ -30,6 +30,12 @@ beforeAll(async () => {
     join(servedRoot, 'pixel.gif'),
     Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'),
   )
+  // A PDF: the one raw byte served `inline` for the preview iframe, so it must
+  // NOT carry the attachment/sandbox hardening the markup files above do.
+  await writeFile(
+    join(servedRoot, 'report.pdf'),
+    Buffer.from('%PDF-1.4\n%%EOF\n', 'latin1'),
+  )
   await writeFile(join(servedRoot, 'quote"and\\slash.txt'), 'awkward name')
   await writeFile(join(servedRoot, 'rapport-café.txt'), 'non-ascii name')
 
@@ -95,6 +101,22 @@ describe('GET /api/fs/raw hardening', () => {
     const response = await requestRaw('evil.html')
 
     expect(response.headers.get('Content-Disposition')).toContain('filename="evil.html"')
+  })
+
+  test('serves a PDF inline so the preview iframe renders it', async () => {
+    const response = await requestRaw('report.pdf')
+
+    expect(response.status).toBe(200)
+    // `nosniff` stays load-bearing: it forbids the bytes being re-interpreted as
+    // anything but `application/pdf`, which is what makes inline serving safe.
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    expect(response.headers.get('Content-Type')).toContain('application/pdf')
+    // Inline — the disposition that lets the `<iframe>` render instead of
+    // downloading — and never the `sandbox` that would blank the viewer.
+    expect(response.headers.get('Content-Disposition')).toStartWith('inline;')
+    expect(response.headers.get('Content-Disposition')).toContain('filename="report.pdf"')
+    expect(response.headers.get('Content-Security-Policy')).toBe("default-src 'none'")
+    expect(response.headers.get('Content-Security-Policy')).not.toContain('sandbox')
   })
 })
 

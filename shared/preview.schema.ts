@@ -13,6 +13,10 @@ export const PreviewKindSchema = z.enum([
   // whole file is fetched (progressively, via Range) rather than head-read.
   'audio',
   'video',
+  // A PDF the browser renders inline in an `<iframe>` off `/api/fs/raw` (served
+  // with an `inline` disposition and `application/pdf`, unlike every other raw
+  // byte). Like `image`, the whole file is fetched rather than head-read.
+  'pdf',
   'binary',
   'empty',
   'too-large',
@@ -109,8 +113,8 @@ export const PreviewSchema = z.object({
     .nullable()
     .default(null)
     .describe(
-      'URL the client should load the raw media bytes from, for the image, audio and video ' +
-        'kinds. Null for every other kind.',
+      'URL the client should load the raw media bytes from, for the image, audio, video and ' +
+        'pdf kinds. Null for every other kind.',
     ),
   directory: DirectorySummarySchema.nullable()
     .default(null)

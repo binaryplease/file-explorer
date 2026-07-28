@@ -56,11 +56,33 @@ const RAW_RESPONSE_SECURITY_HEADERS = {
   'Content-Security-Policy': "sandbox; default-src 'none'",
 } as const
 
-// `filename="..."` carries the basename for the download. Quotes, backslashes
+// The one exception to the attachment-download rule: a PDF is served inline so
+// the preview panel's `<iframe>` renders it. It is safe precisely where an
+// HTML/SVG file is not: `nosniff` forces the browser to treat the bytes as
+// `application/pdf`, so they can never be re-interpreted as a scriptable
+// same-origin document — the attack the hardening above exists to stop — and
+// the built-in PDF viewer runs the document isolated from the explorer origin
+// (no DOM, no same-origin fetch). So the `sandbox` CSP that neutralises a
+// rendered markup document is dropped here (it would only blank the viewer);
+// `default-src 'none'` stays as defence in depth, the viewer needing no
+// subresources of its own, and `nosniff` remains the load-bearing guard.
+const INLINE_PDF_SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'none'",
+} as const
+
+function isInlinePdf(entryBasename: string): boolean {
+  return entryBasename.toLowerCase().endsWith('.pdf')
+}
+
+// `filename="..."` carries the basename for the response. Quotes, backslashes
 // and control characters (a newline would let a crafted name inject a header)
 // are stripped or escaped; the RFC 5987 `filename*` form carries the exact
 // name for non-ASCII basenames, which the bare `filename` cannot express.
-export function attachmentDispositionFor(entryBasename: string): string {
+function contentDispositionFor(
+  dispositionType: 'attachment' | 'inline',
+  entryBasename: string,
+): string {
   const isControlCharacter = (character: string) => {
     const characterCode = character.charCodeAt(0)
     return characterCode < 32 || characterCode === 127
@@ -76,7 +98,27 @@ export function attachmentDispositionFor(entryBasename: string): string {
     })
     .join('')
   const exactName = withoutControlCharacters.join('')
-  return `attachment; filename="${quotedAsciiFallback}"; filename*=UTF-8''${encodeURIComponent(exactName)}`
+  return `${dispositionType}; filename="${quotedAsciiFallback}"; filename*=UTF-8''${encodeURIComponent(exactName)}`
+}
+
+export function attachmentDispositionFor(entryBasename: string): string {
+  return contentDispositionFor('attachment', entryBasename)
+}
+
+// The full set of raw-response headers for one entry: every byte carries the
+// attachment-download hardening except a PDF, which is served inline for the
+// preview iframe (see `INLINE_PDF_SECURITY_HEADERS`).
+function rawResponseHeadersFor(entryBasename: string): Record<string, string> {
+  if (isInlinePdf(entryBasename)) {
+    return {
+      ...INLINE_PDF_SECURITY_HEADERS,
+      'Content-Disposition': contentDispositionFor('inline', entryBasename),
+    }
+  }
+  return {
+    ...RAW_RESPONSE_SECURITY_HEADERS,
+    'Content-Disposition': attachmentDispositionFor(entryBasename),
+  }
 }
 
 // Factory per ADR-0007, and the seam a host app mounts: the routes take their
@@ -164,10 +206,7 @@ export function createFilesystemRoutes(options: { filesystemService: FilesystemS
           const { statusCode, message } = failureStatusAndMessage(result.reason, query.path)
           return status(statusCode, { error: message })
         }
-        const rawResponseHeaders = {
-          ...RAW_RESPONSE_SECURITY_HEADERS,
-          'Content-Disposition': attachmentDispositionFor(basename(result.absolutePath)),
-        }
+        const rawResponseHeaders = rawResponseHeadersFor(basename(result.absolutePath))
         // Unconfined: unchanged. Bun.file streams the bytes and infers the
         // content type from the extension — a raw byte-serving endpoint
         // (download/preview). The explorer's own "open" hands the file to the OS
@@ -219,7 +258,11 @@ export function createFilesystemRoutes(options: { filesystemService: FilesystemS
             "`Content-Security-Policy: sandbox; default-src 'none'` so that browser-executable " +
             'content (HTML, SVG) downloads instead of rendering as a document in the ' +
             'explorer origin. Subresource loads such as `<img src>` ignore the disposition, ' +
-            `so inline image preview is unaffected. ${CONFINEMENT_NOTE}`,
+            'so inline image preview is unaffected. A `.pdf` is the one exception: it is served ' +
+            "`inline` with a `default-src 'none'` policy (no `sandbox`) so the preview panel's " +
+            '`<iframe>` renders it, which is safe because `nosniff` forbids the bytes being ' +
+            're-interpreted as a scriptable same-origin document and the built-in PDF viewer ' +
+            `runs isolated from the explorer origin. ${CONFINEMENT_NOTE}`,
         },
       },
     )

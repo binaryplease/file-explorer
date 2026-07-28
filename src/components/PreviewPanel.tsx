@@ -12,6 +12,7 @@ import {
   IconBinary,
   IconFileOff,
   IconFileText,
+  IconFileTypePdf,
   IconFileUnknown,
   IconFolder,
   IconLock,
@@ -48,6 +49,7 @@ const PREVIEW_KIND_DESCRIPTORS: Record<PreviewKind, { label: string; Icon: typeo
   image: { label: 'image', Icon: IconPhoto },
   audio: { label: 'audio', Icon: IconMusic },
   video: { label: 'video', Icon: IconMovie },
+  pdf: { label: 'pdf', Icon: IconFileTypePdf },
   binary: { label: 'binary', Icon: IconBinary },
   empty: { label: 'empty', Icon: IconFileOff },
   'too-large': { label: 'too large', Icon: IconAlertTriangle },
@@ -169,6 +171,21 @@ function MediaPreviewView({ preview, src }: { preview: Preview; src: string }) {
         onError={() => setPlaybackFailed(true)}
       />
     </div>
+  )
+}
+
+// Inline PDF: the browser's own viewer renders the bytes streamed from the raw
+// endpoint into an `<iframe>` — enrichment, exactly like the image and media
+// previews, and never head-read into the panel. The raw endpoint serves `.pdf`
+// with an `inline` disposition specifically so this frame renders instead of
+// downloading. The `title` is the iframe's accessible name.
+function PdfPreviewView({ preview, src }: { preview: Preview; src: string }) {
+  return (
+    <iframe
+      src={src}
+      title={`PDF preview of ${preview.name}`}
+      className="h-full w-full border-0 bg-inset"
+    />
   )
 }
 
@@ -607,6 +624,8 @@ export function PreviewPanel({
         ) : (preview.kind === 'audio' || preview.kind === 'video') &&
           preview.mediaUrlPath !== null ? (
           <MediaPreviewView preview={preview} src={withApiBase(apiBase, preview.mediaUrlPath)} />
+        ) : preview.kind === 'pdf' && preview.mediaUrlPath !== null ? (
+          <PdfPreviewView preview={preview} src={withApiBase(apiBase, preview.mediaUrlPath)} />
         ) : (
           <PreviewMarker preview={preview} />
         )}

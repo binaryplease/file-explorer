@@ -77,6 +77,13 @@ const VIDEO_EXTENSIONS = new Set([
   '.mkv',
 ])
 
+// A PDF is rendered inline by the browser's own viewer in an `<iframe>` off the
+// raw endpoint — never head-read into the panel. Extension-classified for the
+// same reason as audio/video: its bytes are binary and would otherwise fall
+// through to the `binary` marker. The raw endpoint serves `.pdf` with an
+// `inline` disposition so the iframe renders it instead of downloading it.
+const PDF_EXTENSIONS = new Set(['.pdf'])
+
 // The raw byte-serving URL an image/audio/video preview points its element at.
 // The whole file is fetched (progressively for media), never head-read.
 function rawUrlPath(relativePath: string): string {
@@ -223,6 +230,10 @@ export function createPreviewService(options: { filesystemService: FilesystemSer
 
     if (VIDEO_EXTENSIONS.has(extension)) {
       return { ...preview, kind: 'video', mediaUrlPath: rawUrlPath(relativePath) }
+    }
+
+    if (PDF_EXTENSIONS.has(extension)) {
+      return { ...preview, kind: 'pdf', mediaUrlPath: rawUrlPath(relativePath) }
     }
 
     let headBytes: Uint8Array
