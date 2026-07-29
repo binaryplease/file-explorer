@@ -73,6 +73,20 @@ Via mise (`.mise.toml`):
 | `mise run build` | Build client (Vite → `dist/client/`) + server (Bun → `dist/server/`). |
 | `mise run start` | Production server. |
 | `mise run typecheck` | `tsc --noEmit`. |
+| `mise run deps:hash` | Refresh the vendored-dependency hash in `flake.nix`. Run after **any** dependency change. |
+
+**Changing a dependency is a two-file change.** `flake.nix` vendors
+`node_modules` as a fixed-output derivation, which nix identifies by its
+`outputHash` and by nothing else — package.json and bun.lock are not inputs to
+its store path. So editing dependencies without refreshing that hash leaves nix
+reusing the tree it fetched *before* your change, and the failure lands far from
+the cause (an unresolvable import in the middle of the vite build, naming a
+package that is plainly right there in bun.lock). `mise run deps:hash` — or
+`./update-deps-hash.sh` directly — syncs the lockfile, computes the new hash from
+the mismatch nix reports, writes it back and verifies the build. Commit
+`flake.nix` and `bun.lock` together. As a backstop the derivation name embeds a
+digest of `bun.lock`, so forgetting fails loudly with a hash mismatch rather than
+silently building against stale dependencies (ADR-0018).
 
 Ports are resolved before either process binds (`scripts/dev-ports.ts`): if 3000
 or 5173 is taken, the next free port is chosen, announced on stdout, and pinned

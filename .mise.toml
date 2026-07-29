@@ -75,3 +75,7 @@ run = "bunx tsc --noEmit"
 [tasks.test]
 description = "Run unit tests (bun test)"
 run = "bun test"
+
+[tasks."deps:hash"]
+description = "Refresh the vendored-dependency hash in flake.nix (run after any dependency change)"
+run = "{{config_root}}/update-deps-hash.sh"
