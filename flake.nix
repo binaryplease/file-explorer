@@ -21,6 +21,16 @@
           pname = "binp-file-explorer";
           version = "0.1.0";
 
+          # A fixed-output derivation is addressed by its `outputHash` alone, so
+          # a stale hash makes nix silently reuse the previously-fetched tree
+          # even after bun.lock gains a dependency — which surfaces much later
+          # as an unresolvable import in the middle of the vite build. Stamping
+          # the lockfile digest into the derivation name changes the store path
+          # whenever the dependency set changes, forcing a refetch that fails
+          # loudly with a hash mismatch (ADR-0018) instead of building against
+          # yesterday's node_modules.
+          lockDigest = builtins.substring 0 12 (builtins.hashFile "sha256" ./bun.lock);
+
           # Vendored dependencies as a fixed-output derivation: `bun install`
           # needs the network, which only an FOD is allowed, so deps are fetched
           # once here and the build proper runs offline. The hash is content-
@@ -30,7 +40,7 @@
           # set `outputHash` to `pkgs.lib.fakeHash`, run `nix build`, and copy
           # the "got:" hash the mismatch prints.
           nodeModules = pkgs.stdenv.mkDerivation {
-            pname = "${pname}-node-modules";
+            pname = "${pname}-node-modules-${lockDigest}";
             inherit version;
             # Only the files that determine the dependency set — so editing app
             # source never invalidates the (slow) dependency fetch.
@@ -58,7 +68,7 @@
             '';
             outputHashMode = "recursive";
             outputHashAlgo = "sha256";
-            outputHash = "sha256-jBtcLgH91CGFDwOHSac/HFHgf63ULBlS/YMWawF+5CA=";
+            outputHash = "sha256-jHU3FHXfnJQdRyKWqptwOiakx3gV7cEMmxZVT27JPto=";
           };
 
           binp-file-explorer = pkgs.stdenv.mkDerivation {
