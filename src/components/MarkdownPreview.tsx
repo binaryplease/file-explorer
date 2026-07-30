@@ -2,6 +2,8 @@ import { useMemo, type AnchorHTMLAttributes, type ReactNode } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { parse as parseYaml } from 'yaml'
+import { mermaidDiagramSource } from '../lib/mermaid'
+import { MermaidDiagram } from './MermaidDiagram'
 
 // Rendered-markdown primitive for the preview panel. Presentational and
 // data-agnostic (a UI-kit-style leaf): it takes the bounded head text a text
@@ -96,11 +98,21 @@ const MARKDOWN_COMPONENTS: Components = {
       <code className="rounded bg-inset px-1 py-0.5 font-mono text-[12.5px] text-fg">{children}</code>
     )
   },
-  pre: ({ children }) => (
-    <pre className="my-2 overflow-auto rounded border border-line-2 bg-void/50 p-3 font-mono whitespace-pre">
-      {children}
-    </pre>
-  ),
+  // A fenced block is a code block — unless it is a ```mermaid one, which is a
+  // diagram. The block's frame is built here either way and handed to the
+  // diagram as its source fallback, so the pending and failed-to-parse states
+  // render the identical code block rather than a second copy of its styling
+  // (ADR-0027: the frame is the invariant).
+  pre: ({ children, node }) => {
+    const codeBlock = (
+      <pre className="my-2 overflow-auto rounded border border-line-2 bg-void/50 p-3 font-mono whitespace-pre">
+        {children}
+      </pre>
+    )
+    const diagramSource = mermaidDiagramSource(node)
+    if (diagramSource === null) return codeBlock
+    return <MermaidDiagram source={diagramSource} sourceFallback={codeBlock} />
+  },
   table: ({ children }) => (
     <div className="my-2 overflow-auto">
       <table className="border-collapse text-[12.5px] text-file">{children}</table>

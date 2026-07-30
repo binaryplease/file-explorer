@@ -74,3 +74,34 @@ export function useTheme(
 
   return { themeMode, setThemeMode }
 }
+
+// The theme actually painted right now, read off `<html data-theme>`. Unset
+// reads as `dark`, matching theme.css, whose @theme block is the dark palette
+// and doubles as the no-attribute fallback.
+function documentResolvedTheme(): ResolvedTheme {
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
+}
+
+// Subscribe to the resolved theme. This is for content that a *library* paints
+// rather than our tokens — a Mermaid SVG, a canvas — which must be re-rendered
+// when the palette flips because no CSS custom property reaches inside it.
+// Anything styled with grove utilities re-skins for free and must not use this.
+//
+// It watches the attribute rather than the `useTheme` state deliberately: the
+// attribute is the one signal both mount modes agree on — standalone the
+// explorer writes it, embedded the host does — so a subscriber follows the host
+// app's theme without the explorer owning it.
+export function useResolvedTheme(): ResolvedTheme {
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(documentResolvedTheme)
+
+  useEffect(() => {
+    // Re-read on subscribe: the attribute may have been written between the
+    // initial state and this effect (the pre-paint shim, or a host's own mount).
+    setResolvedTheme(documentResolvedTheme())
+    const themeObserver = new MutationObserver(() => setResolvedTheme(documentResolvedTheme()))
+    themeObserver.observe(document.documentElement, { attributeFilter: ['data-theme'] })
+    return () => themeObserver.disconnect()
+  }, [])
+
+  return resolvedTheme
+}

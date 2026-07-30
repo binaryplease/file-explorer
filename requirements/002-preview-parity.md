@@ -9,7 +9,7 @@ blocked_by: []
 research: [../.nightshift/research/2026-07-20-nightshift-ui-adoption.md]
 adrs: [ADR-0013, ADR-0019, ADR-0025, ADR-0026, ADR-0027, ADR-0028, ADR-0031]
 shipped: null
-updated: 2026-07-28
+updated: 2026-07-31
 ---
 
 # Preview parity — the preview is the viewer, not a glance
@@ -37,6 +37,52 @@ reads are async and cancellable.
 Blocks: in-document find across windows (see below).
 
 ## Delivered
+
+### Mermaid diagrams — shipped 2026-07-31
+
+A ```` ```mermaid ```` fenced block in a rendered markdown file paints as a
+diagram instead of as code. `mermaidDiagramSource` (`src/lib/mermaid.ts`, pure,
+unit-tested) decides whether a hast `<pre>` node is a diagram and hands back its
+text; the `pre` component in `MarkdownPreview.tsx` builds the code-block frame
+once and passes it to `MermaidDiagram` as the source fallback, so the diagram's
+pending and failed states render the identical block rather than a second copy
+of its styling (ADR-0027).
+
+Non-blocking by construction (responsiveness principle): the fenced source is
+already on screen and the engine arrives via `import('mermaid')`, code-split by
+Vite into its own chunks — the entry bundle only references them by URL, it does
+not carry them (ADR-0016: bundled, never a CDN). A render that lands after the
+source or theme changed is dropped under the same `cancelled` guard the
+highlighter uses.
+
+Themed off the grove tokens, not a second palette: `groveThemeVariables` reads
+the very `--color-*` custom properties theme.css defines and hands them to
+Mermaid's `base` theme, at the document's own 13.5px/`--font-sans` type scale
+rather than Mermaid's 16px default. Because Mermaid bakes colours into finished
+SVG, a theme flip must re-render — new `useResolvedTheme` (`src/lib/theme.ts`)
+watches `<html data-theme>`, the one signal standalone (explorer-written) and
+embedded (host-written) mounts agree on.
+
+Security is the justified opt-in, not the default: this is the app's single
+`dangerouslySetInnerHTML`, and what makes it safe is `securityLevel: 'strict'` —
+every label goes through Mermaid's DOMPurify pass, HTML in labels stays escaped,
+and `click`/`callback` interaction directives are disabled, so an untrusted
+previewed file cannot script the explorer through the seam.
+`suppressErrorRendering: true` keeps Mermaid's own error graphic out of the
+document; a diagram that will not parse degrades to its source plus a one-line
+explanation (full parser dump on the title) — nothing is hidden.
+
+Verified in-browser in both themes: flowchart and sequence diagrams render in
+grove colours, an ordinary ```` ```typescript ```` fence still renders as code,
+a broken diagram shows source + reason, and the dark toggle re-renders the SVG
+live. 257 tests (+6) + typecheck green; `nix build` green after
+`mise run deps:hash`.
+
+**Not done:** no per-diagram source/diagram toggle (the header `rendered` chip
+already puts the whole file's source one click away), no pan/zoom for a diagram
+wider than the panel (it scrolls), and a diagram whose source is cut off by the
+bounded head read fails to parse and shows that truncated source — the same
+boundary the frontmatter card has.
 
 ### PDF — shipped 2026-07-28
 
