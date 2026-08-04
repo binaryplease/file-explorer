@@ -55,17 +55,24 @@ export async function fetchDirectoryListing(
   return DirectoryListingSchema.parse(await response.json())
 }
 
+export type PreviewRequestOptions = {
+  baseUrl: string
+  relativePath: string
+  // The reader's opt-in, from the panel's truncation notice: read the whole file
+  // (up to the server's full-read ceiling) instead of the cheap first window.
+  // False for every preview the tree triggers by itself.
+  fullText: boolean
+  abortSignal: AbortSignal
+}
+
 // Preview is enrichment, not navigation: the caller fires it after the tree has
 // painted and aborts it the moment the selection moves on.
-export async function fetchPreview(
-  baseUrl: string,
-  relativePath: string,
-  abortSignal: AbortSignal,
-): Promise<Preview> {
-  const response = await fetch(
-    withApiBase(baseUrl, `/api/fs/preview?path=${encodeURIComponent(relativePath)}`),
-    { signal: abortSignal },
-  )
+export async function fetchPreview(options: PreviewRequestOptions): Promise<Preview> {
+  const { baseUrl, relativePath, fullText, abortSignal } = options
+  const searchParams = new URLSearchParams({ path: relativePath, fullText: String(fullText) })
+  const response = await fetch(withApiBase(baseUrl, `/api/fs/preview?${searchParams.toString()}`), {
+    signal: abortSignal,
+  })
   if (!response.ok) return parseErrorResponse(response, 'preview')
   return PreviewSchema.parse(await response.json())
 }

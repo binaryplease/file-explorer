@@ -9,7 +9,7 @@ blocked_by: []
 research: [../.nightshift/research/2026-07-20-nightshift-ui-adoption.md]
 adrs: [ADR-0013, ADR-0019, ADR-0025, ADR-0026, ADR-0027, ADR-0028, ADR-0031]
 shipped: null
-updated: 2026-07-31
+updated: 2026-08-04
 ---
 
 # Preview parity — the preview is the viewer, not a glance
@@ -25,18 +25,63 @@ through land on `binary` / `unsupported` (`shared/preview.schema.ts:8-16`).
 
 ## Open
 
-### Windowed reads for long text
+### Windowed reads on scroll for long text
 
-`PREVIEW_HEAD_BYTES = 128 KiB` / `PREVIEW_MAX_LINES = 600`
-(`services/preview.ts:22-23`) is right for a glance, not for reading. Add a
-ranged read so the panel scrolls past line 600 — keep the bounded *first*
-response (it is what makes a 40 GB log cheap) and fetch further windows on
-scroll. The responsiveness principle holds: first paint stays bounded, extra
-reads are async and cancellable.
+The read is now a *window with a way out* (see "Lines are never clipped" below):
+1 MiB / 4000 lines per selection, a loud quantified notice when that is not the
+whole file, and a one-click re-read to 8 MiB / 40 000 lines. What is still open
+is the *incremental* half — fetching further windows as the reader scrolls,
+rather than one bigger re-read — plus a ranged read so the panel can scroll into
+a 40 GB log at all. The responsiveness principle holds either way: first paint
+stays bounded, extra reads are async and cancellable.
 
 Blocks: in-document find across windows (see below).
 
 ## Delivered
+
+### Lines are never clipped — shipped 2026-08-04
+
+The preview clipped every line at 500 characters and appended `…`
+(`PREVIEW_MAX_LINE_LENGTH`), so an ordinary document — German legal prose in
+unwrapped paragraphs, a long import list, a one-line JSON blob — was silently
+misquoted on screen with nothing to say it had been. A clipped line is a lie
+about the file's contents, and it is invisible: unlike a short read, there is no
+"the file continues" to notice. **The clip is gone.** A line is returned whole
+or not at all; the cut is always *between* lines.
+
+The bounds that remain are about how far into the file the read goes, and they
+are now two budgets instead of one cliff: `PREVIEW_WINDOW_BYTES` 1 MiB /
+`PREVIEW_WINDOW_MAX_LINES` 4000 for the per-selection look (up from 128 KiB /
+600, so ordinary documents and source files arrive whole and no notice ever
+appears), and `PREVIEW_FULL_BYTES` 8 MiB / `PREVIEW_FULL_MAX_LINES` 40 000 for
+the reader's explicit `?fullText=true` opt-in. Browsing the tree never triggers
+the larger read, so a 40 GB log still costs one window.
+
+When a read *is* short, the panel is loud about it and says it in quantities.
+`PreviewSchema` grew `truncationReason` (`'byte-budget'` | `'line-budget'`) and
+`bytesShown` — the exact byte count the returned lines account for, measured on
+the source text before tab expansion, so "showing X of Y" is a statement rather
+than an estimate. `truncationSummary` (`PreviewPanel.tsx`) is the single
+descriptor both surfaces read (ADR-0026): a sticky amber banner above the
+document ("Truncated — 1.4M of this file is not shown / Showing the first 4,000
+lines, 354K of 1.7M (19%) — stopped after 4,000 lines") carrying a **load whole
+file** button, and a marker at the text's end so the document's end is never
+mistaken for the file's. At the full-read ceiling the button stays put, disabled
+and explaining why (ADR-0025); the notice keeps reporting the true remainder.
+No budget constant crosses the seam — the wording is derived from the numbers
+the response itself carries.
+
+Two smaller honesty fixes ride along: a lone unterminated line (a minified
+bundle, one enormous line) is now kept rather than dropped as a fragment, which
+used to leave the panel blank; and above `HIGHLIGHT_MAX_LINES` (10 000)
+tokenizing would hold the main thread long enough to be felt, so highlighting
+degrades to plain text *and says so* under the document instead of vanishing
+quietly.
+
+Verified in-browser: the reported file renders all 87 lines with its 1051-character
+line intact (the only `…` left on screen is one the author typed); a 20 000-line
+log shows the banner, loads whole on click, and drops it; a 60 000-line log hits
+the ceiling and reports the 1.8M still missing. 262 tests (+5) + typecheck green.
 
 ### Mermaid diagrams — shipped 2026-07-31
 

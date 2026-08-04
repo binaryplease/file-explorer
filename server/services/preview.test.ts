@@ -11,6 +11,10 @@ function textBytes(text: string): Uint8Array {
   return new TextEncoder().encode(text)
 }
 
+// A line budget far above every fixture here, for the cases that are about
+// something other than the cap itself.
+const LINE_BUDGET = 100_000
+
 function entry(overrides: Partial<DirectoryEntry> & { name: string }): DirectoryEntry {
   return {
     kind: 'file',
@@ -49,40 +53,66 @@ describe('looksBinary', () => {
 
 describe('toPreviewLines', () => {
   test('numbers lines from one and drops the trailing-newline artefact', () => {
-    const { lines, isTruncated, totalLineCount } = toPreviewLines('alpha\nbeta\n', false)
-    expect(lines).toEqual([
+    const result = toPreviewLines('alpha\nbeta\n', false, LINE_BUDGET)
+    expect(result.lines).toEqual([
       { number: 1, text: 'alpha' },
       { number: 2, text: 'beta' },
     ])
-    expect(isTruncated).toBe(false)
-    expect(totalLineCount).toBe(2)
+    expect(result.isTruncated).toBe(false)
+    expect(result.truncationReason).toBeNull()
+    expect(result.totalLineCount).toBe(2)
+    expect(result.bytesShown).toBe('alpha\nbeta\n'.length)
   })
 
   test('strips carriage returns and expands tabs', () => {
-    const { lines } = toPreviewLines('a\tb\r\n', false)
+    const { lines } = toPreviewLines('a\tb\r\n', false, LINE_BUDGET)
     expect(lines[0]!.text).toBe('a    b')
   })
 
   test('drops the half-read final line when the read stopped short', () => {
-    const { lines, isTruncated, totalLineCount } = toPreviewLines('alpha\nbet', true)
-    expect(lines).toEqual([{ number: 1, text: 'alpha' }])
-    expect(isTruncated).toBe(true)
-    // The total is unknowable from a bounded head — it must not be guessed.
-    expect(totalLineCount).toBeNull()
+    const result = toPreviewLines('alpha\nbet', true, LINE_BUDGET)
+    expect(result.lines).toEqual([{ number: 1, text: 'alpha' }])
+    expect(result.isTruncated).toBe(true)
+    expect(result.truncationReason).toBe('byte-budget')
+    // The total is unknowable from a bounded read — it must not be guessed.
+    expect(result.totalLineCount).toBeNull()
+    // Exactly the bytes the one kept line accounts for, its newline included.
+    expect(result.bytesShown).toBe('alpha\n'.length)
   })
 
-  test('caps the line count and reports the truncation', () => {
+  test('caps the line count, names the budget that bit, and counts what it shows', () => {
     const manyLines = Array.from({ length: 900 }, (_unused, index) => `line ${index}`).join('\n')
-    const { lines, isTruncated, totalLineCount } = toPreviewLines(`${manyLines}\n`, false)
-    expect(lines.length).toBe(600)
-    expect(isTruncated).toBe(true)
-    expect(totalLineCount).toBeNull()
+    const result = toPreviewLines(`${manyLines}\n`, false, 600)
+    expect(result.lines.length).toBe(600)
+    expect(result.isTruncated).toBe(true)
+    expect(result.truncationReason).toBe('line-budget')
+    expect(result.totalLineCount).toBeNull()
+    const shownSource = manyLines.split('\n').slice(0, 600).join('\n')
+    expect(result.bytesShown).toBe(shownSource.length + 1)
   })
 
-  test('clips a single enormous line rather than shipping it whole', () => {
-    const { lines } = toPreviewLines(`${'x'.repeat(5000)}\n`, false)
-    expect(lines[0]!.text.length).toBe(501)
-    expect(lines[0]!.text.endsWith('…')).toBe(true)
+  // The regression this all exists for: a document with long prose lines must
+  // come back verbatim. A clipped line is a silent lie about the file.
+  test('never clips a long line — it is returned whole', () => {
+    const longLine = 'x'.repeat(5000)
+    const { lines, isTruncated } = toPreviewLines(`${longLine}\n`, false, LINE_BUDGET)
+    expect(lines[0]!.text).toBe(longLine)
+    expect(isTruncated).toBe(false)
+  })
+
+  // Dropping the fragment is right when there are whole lines to fall back on;
+  // when it is the only line there is, dropping it would empty the panel.
+  test('keeps a lone unterminated line rather than showing nothing', () => {
+    const result = toPreviewLines('x'.repeat(5000), true, LINE_BUDGET)
+    expect(result.lines.length).toBe(1)
+    expect(result.lines[0]!.text.length).toBe(5000)
+    expect(result.isTruncated).toBe(true)
+    expect(result.truncationReason).toBe('byte-budget')
+  })
+
+  test('counts bytes, not characters, for a multibyte document', () => {
+    const { bytesShown } = toPreviewLines('héllo — wörld\n', false, LINE_BUDGET)
+    expect(bytesShown).toBe(new TextEncoder().encode('héllo — wörld\n').length)
   })
 })
 
@@ -240,17 +270,66 @@ describe('previewEntry', () => {
     expect(result.preview.directory?.fileCount).toBe(1)
   })
 
-  test('reads a bounded head, never the whole file', async () => {
+  test('reads a bounded window, never the whole file', async () => {
     const { rootPath, previewService } = await createScratchRoot()
     const oneLine = `${'y'.repeat(99)}\n`
-    await writeFile(join(rootPath, 'big.txt'), oneLine.repeat(4000)) // ~400 KB
+    await writeFile(join(rootPath, 'big.txt'), oneLine.repeat(20_000)) // ~2 MB
     const result = await previewService.previewEntry('big.txt')
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.preview.kind).toBe('text')
     expect(result.preview.isTruncated).toBe(true)
+    expect(result.preview.truncationReason).toBe('line-budget')
     expect(result.preview.totalLineCount).toBeNull()
-    expect(result.preview.lines.length).toBe(600)
+    expect(result.preview.lines.length).toBe(4_000)
+    // What the panel needs to say "showing X of Y": exact, not an estimate.
+    expect(result.preview.bytesShown).toBe(4_000 * 100)
+    expect(result.preview.sizeBytes).toBe(20_000 * 100)
+  })
+
+  // An ordinary document — long prose lines, no trailing wrap — must come back
+  // exactly as written. This is the regression the per-line clip caused.
+  test('returns long lines verbatim, and reports the file as whole', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    const longParagraph = `${'sentence — '.repeat(200)}end`
+    await writeFile(join(rootPath, 'notes.md'), `# Title\n\n${longParagraph}\n`)
+    const result = await previewService.previewEntry('notes.md')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.preview.lines[2]!.text).toBe(longParagraph)
+    expect(result.preview.isTruncated).toBe(false)
+    expect(result.preview.truncationReason).toBeNull()
+    expect(result.preview.totalLineCount).toBe(3)
+  })
+
+  // The way out of a truncated preview: the reader asks for the file whole and
+  // the read runs to the far larger ceiling instead of the per-selection window.
+  test('reads past the window when full text is asked for', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    const oneLine = `${'y'.repeat(99)}\n`
+    await writeFile(join(rootPath, 'big.txt'), oneLine.repeat(20_000)) // ~2 MB
+    const result = await previewService.previewEntry('big.txt', { fullText: true })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.preview.lines.length).toBe(20_000)
+    expect(result.preview.isTruncated).toBe(false)
+    expect(result.preview.truncationReason).toBeNull()
+    expect(result.preview.totalLineCount).toBe(20_000)
+    expect(result.preview.bytesShown).toBe(20_000 * 100)
+  })
+
+  // Even the opt-in is a ceiling, not "read anything": a huge file still comes
+  // back bounded, and still says so.
+  test('the full-text read is itself bounded, and reports the remainder', async () => {
+    const { rootPath, previewService } = await createScratchRoot()
+    const oneLine = `${'y'.repeat(99)}\n`
+    await writeFile(join(rootPath, 'huge.log'), oneLine.repeat(60_000)) // ~6 MB, 60k lines
+    const result = await previewService.previewEntry('huge.log', { fullText: true })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.preview.lines.length).toBe(40_000)
+    expect(result.preview.isTruncated).toBe(true)
+    expect(result.preview.truncationReason).toBe('line-budget')
   })
 
   // A blocked entry is described, not errored: the panel always has something
@@ -295,11 +374,11 @@ describe('previewEntry', () => {
   // Confined, the head is read positionally from the descriptor the filesystem
   // service verified, not by re-opening the path — the same check/use gap the
   // raw endpoint closes. The bound must survive that change: a huge file still
-  // costs one 128 KiB read.
-  test('reads only the bounded head of a large file, from the verified descriptor', async () => {
+  // costs one window read.
+  test('reads only the bounded window of a large file, from the verified descriptor', async () => {
     const { rootPath, previewService } = await createScratchRoot()
     const oneLine = `${'x'.repeat(99)}\n`
-    const hugeFileBytes = oneLine.repeat(20_000) // ~2 MB, well past the 128 KiB head
+    const hugeFileBytes = oneLine.repeat(20_000) // ~2 MB, well past the 1 MiB window
     await writeFile(join(rootPath, 'huge.log'), hugeFileBytes)
 
     const result = await previewService.previewEntry('huge.log')
@@ -311,7 +390,7 @@ describe('previewEntry', () => {
     // descriptor read that forgot its position would start mid-file instead.
     expect(result.preview.isTruncated).toBe(true)
     expect(result.preview.totalLineCount).toBeNull()
-    expect(result.preview.lines.length).toBe(600)
+    expect(result.preview.lines.length).toBe(4_000)
     expect(result.preview.lines[0]?.text).toBe('x'.repeat(99))
   })
 

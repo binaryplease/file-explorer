@@ -34,9 +34,17 @@ export const PreviewLineSchema = z.object({
   text: z
     .string()
     .default('')
-    .describe('Line content, tabs expanded, clipped to a bounded display width.'),
+    .describe(
+      'Line content verbatim, tabs expanded and the carriage return stripped. Never clipped: a ' +
+        'line is returned whole or not at all, so what the panel shows is what the file says.',
+    ),
 })
 export type PreviewLine = z.infer<typeof PreviewLineSchema>
+
+// Which budget stopped the read short, so the panel can name it rather than
+// saying "there is more" and leaving the reader to guess how much.
+export const PreviewTruncationReasonSchema = z.enum(['byte-budget', 'line-budget'])
+export type PreviewTruncationReason = z.infer<typeof PreviewTruncationReasonSchema>
 
 export const DirectorySummarySchema = z.object({
   entryCount: z.number().int().nonnegative().default(0).describe('Direct children, all kinds.'),
@@ -100,14 +108,29 @@ export const PreviewSchema = z.object({
   isTruncated: z
     .boolean()
     .default(false)
-    .describe('True when the file continues past the bounded head that was read.'),
+    .describe('True when the file continues past the window that was read.'),
+  truncationReason: PreviewTruncationReasonSchema.nullable()
+    .default(null)
+    .describe(
+      'Which budget stopped the read: the byte budget for the window, or the line budget. Null ' +
+        'when nothing was cut. The panel names it in its truncation notice.',
+    ),
+  bytesShown: z
+    .number()
+    .int()
+    .nonnegative()
+    .default(0)
+    .describe(
+      'Bytes of the file the returned lines account for — the exact numerator of "showing X of ' +
+        'sizeBytes". 0 for every non-text kind.',
+    ),
   totalLineCount: z
     .number()
     .int()
     .nonnegative()
     .nullable()
     .default(null)
-    .describe('Total lines in the file, known only when the whole file fit in the bounded read.'),
+    .describe('Total lines in the file, known only when the whole file fit in the window read.'),
   mediaUrlPath: z
     .string()
     .nullable()
@@ -132,5 +155,13 @@ export const PreviewQuerySchema = z.object({
     .string()
     .default('')
     .describe('Entry to preview, relative to the served root. Defaults to the root itself.'),
+  fullText: z
+    .stringbool()
+    .default(false)
+    .describe(
+      'Read the whole text file, up to the far larger full-read ceiling, instead of the cheap ' +
+        'first window. The reader opts into this from the truncation notice, so navigating the ' +
+        'tree never pays for it — a 40 GB log still costs one window read per selection.',
+    ),
 })
 export type PreviewQuery = z.infer<typeof PreviewQuerySchema>

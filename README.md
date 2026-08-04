@@ -148,6 +148,10 @@ selected text file, renders small images, summarizes directories, and marks
 binary / too-large / empty / unpreviewable entries rather than dumping bytes —
 reads are bounded, so a 40 GB log previews as cheaply as a 4 KB one, and the
 request is deferred past the paint and aborted the moment the selection moves.
+A line is never clipped: the read stops *between* lines (1 MiB / 4000 lines per
+selection), and when it stops short the panel says so loudly — how many bytes
+are missing, what share is on screen, and a **load whole file** button that
+re-reads to a far larger ceiling.
 Not yet built: git status, directory sizing, broot's computed screen-fit
 openness (R8 — manual expand/collapse kept for now as a deliberate departure).
 

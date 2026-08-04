@@ -69,16 +69,25 @@ export function warmHighlighter(): void {
   void loadHighlighter().catch(() => {})
 }
 
+// Tokenizing is one synchronous pass over the whole window, so it scales with
+// the window: past this many lines it would hold the main thread long enough to
+// be felt, and a reader who asked to see a 40 000-line file whole asked for its
+// *text*, not its colours. Above it the panel renders plain and says so, rather
+// than dropping the colours silently (ADR-0025).
+export const HIGHLIGHT_MAX_LINES = 10_000
+
 // Tokenizes one preview window into per-line `ThemedToken` arrays, or `null`
 // when it should render as plain text: a `'txt'` hint, an unknown grammar that
-// never loaded, or a line-count mismatch (a defensive guard so a token line can
-// never land on the wrong source line). One job — the panel owns rendering.
+// never loaded, a window past `HIGHLIGHT_MAX_LINES`, or a line-count mismatch (a
+// defensive guard so a token line can never land on the wrong source line). One
+// job — the panel owns rendering.
 export async function tokenizePreviewLines(
   code: string,
   language: string,
   expectedLineCount: number,
 ): Promise<ThemedToken[][] | null> {
   if (language === 'txt') return null
+  if (expectedLineCount > HIGHLIGHT_MAX_LINES) return null
   const highlighter = await loadHighlighter(language)
   if (!highlighter.getLoadedLanguages().includes(language)) return null
   const { tokens } = highlighter.codeToTokens(code, {

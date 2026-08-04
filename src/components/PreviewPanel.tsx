@@ -32,7 +32,7 @@ import {
   type DocumentSearchResult,
 } from '../lib/documentSearch'
 import { formatBytes } from '../lib/format'
-import { tokenizePreviewLines } from '../lib/highlighter'
+import { HIGHLIGHT_MAX_LINES, tokenizePreviewLines } from '../lib/highlighter'
 import { MATCH_HIGHLIGHT_CLASS } from './FuzzyMatch'
 import { MarkdownPreview } from './MarkdownPreview'
 import { ToggleChip } from './ToggleChip'
@@ -189,12 +189,88 @@ function PdfPreviewView({ preview, src }: { preview: Preview; src: string }) {
   )
 }
 
-// One wording for the bounded-read caveat, shared by the source and the
-// rendered-markdown views so they can never describe the boundary differently.
-function TruncationNote() {
+// The one description of a cut-short preview (ADR-0026): every surface that
+// mentions the boundary — the banner above the document, the marker at its end —
+// reads its numbers from here, so they can never disagree about how much is
+// missing. The panel says it in quantities, never "there is more": the reader
+// can see exactly what fraction of the file they are looking at.
+function truncationSummary(preview: Preview): {
+  missingBytes: number
+  headline: string
+  detail: string
+} {
+  const totalBytes = preview.sizeBytes ?? 0
+  const missingBytes = Math.max(0, totalBytes - preview.bytesShown)
+  const shownPercent = totalBytes === 0 ? 100 : Math.floor((preview.bytesShown / totalBytes) * 100)
+  // Which budget bit, said in the numbers this very response carries rather than
+  // in the server's constants — no budget value is duplicated across the seam.
+  const stoppedAt =
+    preview.truncationReason === 'line-budget'
+      ? `stopped after ${preview.lines.length.toLocaleString()} lines`
+      : `stopped after ${formatBytes(preview.bytesShown)}`
+  return {
+    missingBytes,
+    headline: `Truncated — ${formatBytes(missingBytes)} of this file is not shown`,
+    detail:
+      `Showing the first ${preview.lines.length.toLocaleString()} lines, ` +
+      `${formatBytes(preview.bytesShown)} of ${formatBytes(totalBytes)} (${shownPercent}%) — ${stoppedAt}.`,
+  }
+}
+
+// The loud half of that: an amber banner pinned to the top of the scrolling
+// document, impossible to mistake for content and impossible to scroll away
+// from. It carries the way out, too — one click re-reads the file whole — and
+// when that has already happened the button stays put and explains why it is
+// spent rather than vanishing (ADR-0025).
+function TruncationBanner({
+  preview,
+  isFullTextRequested,
+  isLoading,
+  onLoadFullText,
+}: {
+  preview: Preview
+  isFullTextRequested: boolean
+  isLoading: boolean
+  onLoadFullText: () => void
+}) {
+  const { headline, detail } = truncationSummary(preview)
+  const isSpent = isFullTextRequested && !isLoading
   return (
-    <div className="px-4 py-2 text-[11px] text-faint">
-      … preview bounded — the file continues past what was read
+    <div
+      role="status"
+      className="sticky top-0 z-10 flex items-start gap-2 border-b border-match/40 bg-match-bg px-3 py-2 backdrop-blur-sm"
+    >
+      <IconAlertTriangle size={15} stroke={1.8} className="mt-px flex-none text-match" />
+      <div className="min-w-0 flex-1">
+        <div className="text-[11.5px] font-semibold text-match">{headline}</div>
+        <div className="text-[11px] text-dim">{detail}</div>
+      </div>
+      <button
+        type="button"
+        disabled={isSpent || isLoading}
+        onClick={onLoadFullText}
+        title={
+          isSpent
+            ? 'This file is already loaded to the panel’s full-read ceiling; the rest is beyond what the panel will render. Open the file to read all of it.'
+            : `Re-read this file whole (${formatBytes(preview.sizeBytes)}) instead of the fast first window. May take a moment to render.`
+        }
+        className="flex-none rounded-[3px] border border-match/50 px-2 py-1 text-[11px] text-match outline-none hover:bg-match/15 focus-visible:ring-1 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isLoading ? 'loading…' : isSpent ? 'at read ceiling' : 'load whole file'}
+      </button>
+    </div>
+  )
+}
+
+// The quiet half: where the text actually stops. Same numbers, no action — the
+// banner above owns that — so the end of the document is never mistaken for the
+// end of the file.
+function TruncationEndMarker({ preview }: { preview: Preview }) {
+  const { missingBytes } = truncationSummary(preview)
+  return (
+    <div className="mt-2 border-t border-match/30 px-4 py-2 text-[11px] text-match">
+      — file continues past line {preview.lines.length.toLocaleString()}; {formatBytes(missingBytes)}{' '}
+      not shown —
     </div>
   )
 }
@@ -290,6 +366,11 @@ function TextPreviewView({
     }
   }, [preview.path, preview.language, preview.lines])
 
+  // A grammar was known but the window is too big to tokenize — the one case
+  // where a coloured file renders plain, so the panel says why below the text.
+  const isPlainByLineCount =
+    preview.language !== 'txt' && preview.lines.length > HIGHLIGHT_MAX_LINES
+
   return (
     <div className="py-2">
       {preview.lines.map((line, lineIndex) => {
@@ -323,7 +404,13 @@ function TextPreviewView({
           </div>
         )
       })}
-      {preview.isTruncated && <TruncationNote />}
+      {isPlainByLineCount && (
+        <div className="px-4 py-2 text-[11px] text-faint">
+          syntax highlighting is off above {HIGHLIGHT_MAX_LINES.toLocaleString()} lines — the text
+          itself is complete
+        </div>
+      )}
+      {preview.isTruncated && <TruncationEndMarker preview={preview} />}
     </div>
   )
 }
@@ -346,6 +433,10 @@ type PreviewPanelProps = {
   // markdown text preview; ignored for every other kind.
   renderMarkdown: boolean
   onToggleRenderMarkdown: () => void
+  // Whether this preview was read under the reader's "load whole file" opt-in,
+  // and the request to take it. Owned by App because it keys the fetch.
+  isFullTextRequested: boolean
+  onLoadFullText: () => void
   onFocusChange: (isFocused: boolean) => void
 }
 
@@ -424,6 +515,8 @@ export function PreviewPanel({
   onToggleWrap,
   renderMarkdown,
   onToggleRenderMarkdown,
+  isFullTextRequested,
+  onLoadFullText,
   onFocusChange,
 }: PreviewPanelProps) {
   // The image `<img src>` is a server-built path (`/api/fs/raw?...`); like every
@@ -605,17 +698,32 @@ export function PreviewPanel({
           <div className="px-4 py-3 text-xs text-bar-a">{previewError}</div>
         ) : preview === null ? (
           <div className="px-4 py-3 text-xs text-faint">{isLoading ? 'reading…' : 'no selection'}</div>
-        ) : preview.kind === 'text' && showingRenderedMarkdown ? (
-          <>
-            <MarkdownPreview source={preview.lines.map((line) => line.text).join('\n')} />
-            {preview.isTruncated && <TruncationNote />}
-          </>
         ) : preview.kind === 'text' ? (
-          <TextPreviewView
-            preview={preview}
-            wrapText={wrapText}
-            lineMatches={documentSearch.lineMatches}
-          />
+          // One truncation banner for both text renderings — it describes the
+          // read, not the renderer, so it sits above whichever one is mounted
+          // and stays pinned there while the document scrolls under it.
+          <>
+            {preview.isTruncated && (
+              <TruncationBanner
+                preview={preview}
+                isFullTextRequested={isFullTextRequested}
+                isLoading={isLoading}
+                onLoadFullText={onLoadFullText}
+              />
+            )}
+            {showingRenderedMarkdown ? (
+              <>
+                <MarkdownPreview source={preview.lines.map((line) => line.text).join('\n')} />
+                {preview.isTruncated && <TruncationEndMarker preview={preview} />}
+              </>
+            ) : (
+              <TextPreviewView
+                preview={preview}
+                wrapText={wrapText}
+                lineMatches={documentSearch.lineMatches}
+              />
+            )}
+          </>
         ) : preview.kind === 'directory' ? (
           <DirectorySummaryView preview={preview} />
         ) : preview.kind === 'image' && preview.mediaUrlPath !== null ? (

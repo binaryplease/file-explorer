@@ -186,6 +186,11 @@ export function App({
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  // The one file the reader asked to see in full, keyed by path rather than a
+  // bare flag: moving the selection therefore drops the opt-in by itself, and
+  // coming back to the same file re-reads the cheap window — the expensive read
+  // is never something the tree can trigger on its own.
+  const [fullTextPath, setFullTextPath] = useState<string | null>(null)
   const [isPreviewFocused, setIsPreviewFocused] = useState(false)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
@@ -297,6 +302,7 @@ export function App({
   // current directory itself) previews that directory.
   const previewTargetPath =
     selectedPath === null || selectedPath === ROOT_LINE_PATH ? focusPath : selectedPath
+  const isFullTextRequested = fullTextPath === previewTargetPath
 
   // Preview is enrichment, never part of the navigation path: the request is
   // deferred past the paint, aborted the moment the selection moves on, and its
@@ -311,7 +317,12 @@ export function App({
     const abortController = new AbortController()
     setIsPreviewLoading(true)
     const settleTimer = window.setTimeout(() => {
-      fetchPreview(apiBaseUrl, previewTargetPath, abortController.signal)
+      fetchPreview({
+        baseUrl: apiBaseUrl,
+        relativePath: previewTargetPath,
+        fullText: isFullTextRequested,
+        abortSignal: abortController.signal,
+      })
         .then((loadedPreview) => {
           if (abortController.signal.aborted) return
           setPreview(loadedPreview)
@@ -333,7 +344,7 @@ export function App({
       window.clearTimeout(settleTimer)
       abortController.abort()
     }
-  }, [showPreview, previewTargetPath, apiBaseUrl])
+  }, [showPreview, previewTargetPath, isFullTextRequested, apiBaseUrl])
 
   // Focus changes that originate outside App — the browser back/forward buttons
   // (URL seam) or the explorer's own "back" verb (in-memory seam) — arrive here
@@ -931,6 +942,8 @@ export function App({
               onToggleWrap={toggleWrapPreview}
               renderMarkdown={renderMarkdown}
               onToggleRenderMarkdown={toggleRenderMarkdown}
+              isFullTextRequested={isFullTextRequested}
+              onLoadFullText={() => setFullTextPath(previewTargetPath)}
               onFocusChange={setIsPreviewFocused}
             />
           </>
