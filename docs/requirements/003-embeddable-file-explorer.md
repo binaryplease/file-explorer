@@ -1,13 +1,15 @@
 ---
 id: 003-embeddable-file-explorer
 title: Embeddable `<FileExplorer>` component
+summary: "`App` is the shell and owns global browser state, so it cannot be mounted by a host or twice on a page — this is the work that makes it a component."
 status: planned
 rank: 3
 tags: [client, packaging]
 blocks: []
 blocked_by: [001-unconfined-root-anchor, 002-preview-parity]
-research: [../.nightshift/research/2026-07-20-nightshift-ui-adoption.md]
-adrs: [ADR-0026, ADR-0027, ADR-0032]
+research: []
+decisions: [2026-07-20-the-preview-is-the-viewer]
+conventions: [one-descriptor-one-wrapper-one-guard, share-the-invariant, code-lives-with-dependencies, package-name-matches-repo]
 shipped: null
 updated: 2026-07-20
 ---
@@ -15,9 +17,11 @@ updated: 2026-07-20
 # Embeddable `<FileExplorer>` component
 
 Today `App` *is* the shell and owns global browser state, so it cannot be mounted
-by a host app or twice on a page. nightshift-ui retires its own file browser and
-preview pane (≈1,265 LOC) and consumes this component instead — that adoption is
-what ranks this requirement above everything except the preview work it stands on.
+by a host app or twice on a page. A host application retires its own file browser
+and preview pane (≈1,265 LOC) and consumes this component instead — that adoption
+is what ranks this requirement above everything except the preview work it stands
+on. See
+[the preview is the viewer](../decisions/2026-07-20-the-preview-is-the-viewer.md).
 
 ## Work
 
@@ -35,14 +39,14 @@ what ranks this requirement above everything except the preview work it stands o
 - **Namespace per instance:** the `localStorage` keys (`lib/theme.ts`,
   `lib/viewSettings.ts:25,44`) and the `[data-row-path]` document queries
   (`App.tsx:47-52`, `258-263`).
-- **Accept a `rowClassName` prop** — nightshift-ui enforces its own
-  `selectedRowClass` token via a conventions guard.
+- **Accept a `rowClassName` prop** — a host may enforce its own selected-row
+  token through its own conventions guard, and cannot do that through a class
+  this component hardcodes.
 - **Parameterize the API base** in `lib/api.ts:30,40,51,75` (hardcoded
   same-origin `/api/fs/*`).
 - **Package:** drop `"private": true`, add an `exports` map (`.`, `./server`,
-  `./shared`) and a library build target. Mirror
-  `nightshift-ui/design/nightshift/package.json` — that pattern is already proven
-  in this workspace.
+  `./shared`) and a library build target, plus a `files` allowlist deciding what
+  is actually packed before a version is spent on it.
 
 ## Constraint carried in from [001](001-unconfined-root-anchor.md)
 

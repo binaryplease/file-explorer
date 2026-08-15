@@ -32,9 +32,8 @@ EXPLORER_ROOT = "{{config_root}}"
 # default) means no CORS headers at all — the historical, most-restrictive
 # posture, relying on the same-origin policy to guard responses. Set it only for
 # the deliberate embedding seam, where a host app mounts this frontend into its
-# own page while running this server as a separate process on another port (e.g.
-# nightshift-ui): naming that host's Origin here returns CORS headers for it, and
-# nothing else. The loopback bind and Host-header guard are untouched.
+# own page while running this server as a separate process on another port:
+# naming that host's Origin here returns CORS headers for it, and nothing else. The loopback bind and Host-header guard are untouched.
 # EXPLORER_ALLOWED_ORIGINS = "http://localhost:5175"
 
 [tasks.dev]

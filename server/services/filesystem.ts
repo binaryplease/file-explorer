@@ -73,7 +73,7 @@ export type SearchSubtreeServiceResult =
 // Search walk budgets, per broot's tree builder (tree_build/builder.rs): keep
 // walking until 10× the targeted line count is gathered, or until the target
 // is reached and ~900ms elapsed, then trim to the best-scoring lines. See
-// `.nightshift/research/2026-07-17-broot-engine.md`.
+// `docs/research/2026-07-17-broot-engine.md`.
 const SEARCH_TIME_BUDGET_MILLISECONDS = 900
 const SEARCH_OVERSCAN_FACTOR = 10
 // broot walks until interrupted by a keystroke; a server request needs a hard
@@ -103,8 +103,8 @@ function isPathWithin(containerAbsolutePath: string, absolutePath: string): bool
 // anchor: absolute paths anywhere on the machine resolve, nothing is refused
 // for leaving the root, and the per-symlink `realpath()` disappears from the
 // hot path. Local-machine use runs unconfined (the process already has the
-// user's own filesystem privileges); see the 2026-07-20 decision in
-// `.nightshift/backlog.md`.
+// user's own filesystem privileges); see
+// `docs/decisions/2026-07-20-no-path-confinement-for-local-use.md`.
 export function createFilesystemService(options: {
   rootAbsolutePath: string
   confine?: boolean

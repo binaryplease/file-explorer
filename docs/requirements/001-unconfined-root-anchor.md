@@ -1,13 +1,15 @@
 ---
 id: 001-unconfined-root-anchor
 title: The served root is a display anchor, not a security boundary
+summary: "The served root is where the tree starts, not where it ends — confinement is a default flip behind a flag, so out-of-root paths travel the wire as absolute paths."
 status: shipped
 rank: 1
 tags: [server, security, config]
 blocks: [003-embeddable-file-explorer, 004-host-app-endpoints]
 blocked_by: []
-research: [../.nightshift/research/2026-07-20-nightshift-ui-adoption.md]
-adrs: [ADR-0007, ADR-0018, ADR-0032]
+research: []
+decisions: [2026-07-20-no-path-confinement-for-local-use, 2026-07-20-the-origin-is-the-security-boundary]
+conventions: [factory-services, fail-loud-ports, code-lives-with-dependencies]
 shipped: 2026-07-20
 updated: 2026-07-27
 ---
@@ -29,7 +31,7 @@ subtree that is not the user's own is exactly the case confinement exists for.
   defaulting to **true at the factory** (strongest posture is the default) and
   `EXPLORER_CONFINE` (default false) wiring the local-tool flip from config.
 - `createFilesystemRoutes` / `createPreviewRoutes` factories, so a host app
-  mounts the routes as a plugin (ADR-0007).
+  mounts the routes as a plugin (factory services).
 - Confinement stayed implemented and tested across 11 files — a default flip, as
   planned.
 
@@ -44,20 +46,19 @@ relative.
 ## Loose ends
 
 - ~~`parentTreePath('/etc')` → `''` walked up to the anchor rather than `/`.~~ →
-  **fixed 2026-07-27** as part of enabling above-anchor navigation (backlog log
-  entry "Above-anchor navigation unconfined"). `DirectoryListingSchema` now
+  **fixed 2026-07-27** as part of enabling above-anchor navigation.
+  `DirectoryListingSchema` now
   carries `confined` (default **true** — fail-safe: a client that can't read it
   treats the root as a boundary), and the client ascends past the anchor only
   when the server says it is unconfined.
 
 ## Related decisions
 
-Both live in `../.nightshift/backlog.md` → Decisions:
-
-- **2026-07-20 — no path confinement for local-machine use.** Supersedes the
-  standing "local-only tool" requirement *in respect of path confinement only*;
-  the loopback bind stays ([100](100-loopback-only-service.md)).
-- **2026-07-20 — the origin is the security boundary, not the path.** Probing
-  the running server showed the confinement default was never the exposure; the
-  hole was an unvalidated `Host` header, fixed with a Host guard
-  (`services/trusted-host.ts`).
+- [**No path confinement for local-machine use**](../decisions/2026-07-20-no-path-confinement-for-local-use.md)
+  (2026-07-20). Supersedes the standing "local-only tool" requirement *in
+  respect of path confinement only*; the loopback bind stays
+  ([100](100-loopback-only-service.md)).
+- [**The origin is the security boundary, not the path**](../decisions/2026-07-20-the-origin-is-the-security-boundary.md)
+  (2026-07-20). Probing the running server showed the confinement default was
+  never the exposure; the hole was an unvalidated `Host` header, fixed with a
+  Host guard (`server/services/trusted-host.ts`).

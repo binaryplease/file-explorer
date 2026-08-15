@@ -18,7 +18,7 @@ let unconfinedService: ReturnType<typeof createFilesystemService>
 beforeAll(async () => {
   // The temp dir itself is often reached through a symlink (/tmp, /var). Its
   // real path is what the service will compare against.
-  const scratchDirectory = await realpath(await mkdtemp(join(tmpdir(), 'binp-fex-confinement-')))
+  const scratchDirectory = await realpath(await mkdtemp(join(tmpdir(), 'bfe-confinement-')))
   servedRoot = join(scratchDirectory, 'served')
   outsideDirectory = join(scratchDirectory, 'outside')
 

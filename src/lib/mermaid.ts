@@ -61,7 +61,7 @@ const DIAGRAM_FONT_SIZE = 13.5
 
 // Mermaid paints its own SVG — it cannot read the app's Tailwind utilities — so
 // the grove palette is handed to it as theme variables read from the very same
-// custom properties theme.css defines (requirements/102-theme-token-model.md:
+// custom properties theme.css defines (docs/requirements/102-theme-token-model.md:
 // one definition, no second palette to drift). Only the solid tokens are used:
 // the overlay tokens (`--color-line`, `--color-hover`, `--color-inset`) are
 // alpha-baked for compositing over a surface, which Mermaid's color maths

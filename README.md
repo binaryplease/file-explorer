@@ -14,9 +14,10 @@ fast.
 
 ## Stack
 
-Bun · Elysia · React 19 · Tailwind CSS v4 · Vite. Per **ADR-0003** (default
-application tech stack). See [`AGENTS.md`](AGENTS.md) for the full breakdown and
-conventions.
+Bun · Elysia · React 19 · Tailwind CSS v4 · Vite. See [`AGENTS.md`](AGENTS.md)
+for the full breakdown, and
+[`docs/requirements/103-engineering-conventions.md`](docs/requirements/103-engineering-conventions.md)
+for the conventions the code is held to.
 
 ## Develop
 
@@ -44,7 +45,7 @@ nix profile install github:binaryplease/binp-file-explorer   # then just: bfe
 `bfe` **auto-assigns a free port** before launching, so any number of instances
 run at once, each on its own port — no flags, no collisions. Pass `-p/--port` to
 pin an exact port instead; that bind is strict and fails loudly if the port is
-taken (ADR-0018). The served root is a **starting anchor, not a boundary** — you
+taken. The served root is a **starting anchor, not a boundary** — you
 can browse up and out of it (matching `broot` opened from anywhere). Pass
 `--confine` to make the root a real boundary.
 
@@ -121,7 +122,7 @@ confining to.
 **Embedding (CORS).** Shipping no CORS headers is the default because the
 same-origin policy is what guards the responses. A host app that mounts this
 explorer's frontend into its own page while running this server as a separate
-process on another port (as nightshift-ui does) makes cross-origin requests the
+process on another port makes cross-origin requests the
 browser would otherwise refuse to read. `EXPLORER_ALLOWED_ORIGINS`
 (comma-separated exact Origins) is the deliberate opt-in for exactly that seam:
 the server reflects CORS headers back to a listed Origin and no other, leaving

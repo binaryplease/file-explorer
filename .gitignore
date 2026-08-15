@@ -31,7 +31,7 @@ result
 # Brand/logo scratch (creative explorations)
 brand
 
-# Local dev notebook: log, decisions, research, ideas, run logs (sole-dev, not
-# yet adopted by ADR — see .nightshift/README.md). Requirements are NOT here:
-# they live in the committed top-level requirements/.
+# Local dev notebook: chronological log, ideas not yet promoted, run logs
+# (sole-dev, local-only — see .nightshift/README.md). Requirements, decisions
+# and research are NOT here: they live in the committed docs/.
 .nightshift

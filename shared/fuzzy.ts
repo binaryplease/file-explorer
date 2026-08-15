@@ -1,6 +1,6 @@
 // Scored fuzzy matching, re-engineered in TypeScript from broot's
 // `src/pattern/fuzzy_pattern.rs` (MIT, https://github.com/Canop/broot) used as
-// the reference spec — see `.nightshift/research/2026-07-17-broot-engine.md`.
+// the reference spec — see `docs/research/2026-07-17-broot-engine.md`.
 // Shared seam: the server ranks search results with the exact same code the
 // client uses to highlight them, so scores and highlights can never drift.
 

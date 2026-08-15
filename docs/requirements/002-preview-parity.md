@@ -1,13 +1,15 @@
 ---
 id: 002-preview-parity
 title: Preview parity — the preview is the viewer, not a glance
+summary: "The preview is the only viewer a consuming app gets, so it must render what the file actually is; windowed reads on scroll are the one item still open."
 status: in-progress
 rank: 2
 tags: [preview, client, server]
 blocks: [003-embeddable-file-explorer]
 blocked_by: []
-research: [../.nightshift/research/2026-07-20-nightshift-ui-adoption.md]
-adrs: [ADR-0013, ADR-0019, ADR-0025, ADR-0026, ADR-0027, ADR-0028, ADR-0031]
+research: []
+decisions: [2026-07-20-the-preview-is-the-viewer]
+conventions: [zod-single-source, highlight-what-matched, never-hide-a-control, one-descriptor-one-wrapper-one-guard, share-the-invariant, interaction-token, affordances-adjacent, bundled-never-cdn]
 shipped: null
 updated: 2026-08-04
 ---
@@ -15,9 +17,10 @@ updated: 2026-08-04
 # Preview parity — the preview is the viewer, not a glance
 
 The deliberate "bounded head" scope was right for a glance and is **not**
-sufficient for being the only viewer. Since the 2026-07-20 decision that bfe is
-the single source of truth for tree and preview across binp apps, a gap in the
-preview is a gap in every consuming app.
+sufficient for being the only viewer. Since the 2026-07-20 decision that this
+explorer is
+[the single source of truth for tree and preview](../decisions/2026-07-20-the-preview-is-the-viewer.md),
+a gap in the preview is a gap in every consuming app.
 
 Everything below is a renderer addition on top of the existing kind dispatch:
 `PreviewKind` grows, the bounding design does not change. Kinds that fall
@@ -62,12 +65,12 @@ When a read *is* short, the panel is loud about it and says it in quantities.
 `bytesShown` — the exact byte count the returned lines account for, measured on
 the source text before tab expansion, so "showing X of Y" is a statement rather
 than an estimate. `truncationSummary` (`PreviewPanel.tsx`) is the single
-descriptor both surfaces read (ADR-0026): a sticky amber banner above the
+descriptor both surfaces read (one descriptor, one wrapper, one guard): a sticky amber banner above the
 document ("Truncated — 1.4M of this file is not shown / Showing the first 4,000
 lines, 354K of 1.7M (19%) — stopped after 4,000 lines") carrying a **load whole
 file** button, and a marker at the text's end so the document's end is never
 mistaken for the file's. At the full-read ceiling the button stays put, disabled
-and explaining why (ADR-0025); the notice keeps reporting the true remainder.
+and explaining why (never hide a control); the notice keeps reporting the true remainder.
 No budget constant crosses the seam — the wording is derived from the numbers
 the response itself carries.
 
@@ -91,12 +94,12 @@ unit-tested) decides whether a hast `<pre>` node is a diagram and hands back its
 text; the `pre` component in `MarkdownPreview.tsx` builds the code-block frame
 once and passes it to `MermaidDiagram` as the source fallback, so the diagram's
 pending and failed states render the identical block rather than a second copy
-of its styling (ADR-0027).
+of its styling (share the invariant).
 
 Non-blocking by construction (responsiveness principle): the fenced source is
 already on screen and the engine arrives via `import('mermaid')`, code-split by
 Vite into its own chunks — the entry bundle only references them by URL, it does
-not carry them (ADR-0016: bundled, never a CDN). A render that lands after the
+not carry them (bundled, never a CDN). A render that lands after the
 source or theme changed is dropped under the same `cancelled` guard the
 highlighter uses.
 
@@ -135,7 +138,7 @@ Extension-classified in `services/preview.ts` (`PDF_EXTENSIONS`, alongside
 audio/video and before the head read so its binary bytes don't fall through to
 `binary`) into a new `pdf` `PreviewKind` (`shared/preview.schema.ts`), reusing
 the shared `mediaUrlPath` → `/api/fs/raw` (the same "fetch raw bytes" invariant
-as image/audio/video, ADR-0026/0027). `PdfPreviewView`
+as image/audio/video, one descriptor, one wrapper, one guard; share the invariant). `PdfPreviewView`
 (`components/PreviewPanel.tsx`) renders an `<iframe>` off
 `withApiBase(mediaUrlPath)` with an accessible `title`; header badge +
 `IconFileTypePdf` via `PREVIEW_KIND_DESCRIPTORS`.
@@ -170,9 +173,9 @@ Extension-classified in `services/preview.ts`
 don't fall through to the `binary` marker) into two new `PreviewKind`s
 (`shared/preview.schema.ts`); the image-only `imageUrlPath` field was renamed to
 the shared `mediaUrlPath` (one field for the image/audio/video "fetch raw bytes"
-invariant, ADR-0026/0027). `MediaPreviewView` renders native `<audio controls>` /
+invariant, one descriptor, one wrapper, one guard; share the invariant). `MediaPreviewView` renders native `<audio controls>` /
 `<video controls>` off `withApiBase(mediaUrlPath)`, with an `onError` fallback to
-a marker note for codecs the browser can't decode (ADR-0025).
+a marker note for codecs the browser can't decode (never hide a control).
 
 Verified in-browser (default unconfined): both players render with native
 controls, and `/api/fs/raw` answers `206 Partial Content` with `accept-ranges:
@@ -199,9 +202,9 @@ built-in url transform drops `javascript:` links; external `<a>` get
 `target=_blank rel=noreferrer noopener`.
 
 A `renderMarkdown` view-setting (default true, `lib/viewSettings.ts`) drives a
-header `rendered` ToggleChip (ADR-0031, beside the kind badges); off restores the
+header `rendered` ToggleChip (affordances sit beside what they change — beside the kind badges); off restores the
 highlighted source view, and the `wrap` chip only shows while source is displayed
-since it governs the line-gutter renderer (ADR-0025: source is one click away,
+since it governs the line-gutter renderer (never hide a control: source is one click away,
 not hidden). The truncation caveat is a shared `TruncationNote` used by both
 views. 171 tests + typecheck green.
 
@@ -216,7 +219,7 @@ card above the rendered document instead of the old garbage (leading `---` →
 thematic break, `key: value` → a giant setext heading). New `extractFrontmatter`
 helper in `components/MarkdownPreview.tsx` splits the block with one regex and
 parses it with `yaml@^2` (added dep — arbitrary user YAML, no fixed schema, so
-ADR-0013/Zod doesn't apply). Rendered as a native `<dl>` in a `FrontmatterCard`:
+the Zod-single-source rule doesn't apply). Rendered as a native `<dl>` in a `FrontmatterCard`:
 scalars as text, scalar arrays as `bg-inset` chips (the `tags:` case), nested
 maps as indented sub-lists.
 
@@ -237,9 +240,9 @@ inside *truncated* frontmatter.
 
 ### Syntax highlighting — shipped 2026-07-21
 
-Client-side Shiki (`shiki@^3`, dual github-light/dark themes), an
-extract-and-transplant (ADR-0006) of binp-git-graph's `highlighter.ts` singleton
-+ `languageForPath` detector, retargeted to standalone Shiki's grammar IDs
+Client-side Shiki (`shiki@^3`, dual github-light/dark themes): a highlighter
+singleton plus a `languageForPath` detector, retargeted to standalone Shiki's
+grammar IDs
 (`cpp`/`csharp`, not `c++`/`c#`). New pure `shared/language.ts` (client+server
 agree, no round trip); `PreviewSchema` grew a `language: z.string().default('txt')`
 the server stamps for `kind:'text'` only (bounded-read design untouched —
@@ -254,14 +257,14 @@ at app mount. Verified both themes in-browser; 162 tests + typecheck green.
 
 When the preview holds the keyboard (broot's ctrl/cmd-→ hand-off) and shows a
 source text view, typing drives a fuzzy search over the document's *words* and
-highlights the matched characters (ADR-0019), overlaid on top of the Shiki syntax
+highlights the matched characters (highlight what matched), overlaid on top of the Shiki syntax
 colours (unmatched runs keep their token colour). New pure
 `src/lib/documentSearch.ts` (`searchDocument` word-tokenises each line and scores
 with the shared `shared/fuzzy.ts` engine, all in code-point space;
 `splitRunByMatch` slices plain lines or Shiki tokens into matched/unmatched runs).
 
 The match-highlight styling is now a single shared token (`MATCH_HIGHLIGHT_CLASS`
-+ `HighlightedSegments` in `src/components/FuzzyMatch.tsx`, ADR-0028) that
++ `HighlightedSegments` in `src/components/FuzzyMatch.tsx`, interaction styling is a shared token) that
 TreeView and the preview both compose — the tree's two inline `bg-match-bg
 text-match` copies were folded into it. Capture lives on the preview's focusable
 scroll container: printable keys append, Backspace deletes, Space still scrolls
@@ -269,7 +272,7 @@ scroll container: printable keys append, Backspace deletes, Space still scrolls
 lines (`data-doc-line` + `scrollIntoView`); each query change auto-scrolls the
 first match into view. A header find control (search icon → focuses the doc,
 query, live match count, clear-✕) sits beside the wrap/rendered chips
-(ADR-0031/0025).
+(affordances sit beside what they change; never hide a control).
 
 Bounded, client-only, non-blocking (the preview is already head-capped) — the
 core loop never waits on it. Verified in-browser; 179 tests + typecheck green.

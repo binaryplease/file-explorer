@@ -1,13 +1,15 @@
 ---
 id: 101-performance-budgets
 title: Speed budgets, and when optimization starts
+summary: "Optimize when a real interaction misses a budget on a real tree, not before — no stress fixture, no optimization."
 status: standing
 rank: null
 tags: [perf, server, client]
 blocks: []
 blocked_by: []
-research: [../.nightshift/research/2026-07-17-broot-engine.md]
-adrs: []
+research: [../research/2026-07-17-broot-engine.md]
+decisions: [2026-07-17-re-engineer-the-broot-engine]
+conventions: []
 shipped: null
 updated: 2026-07-17
 ---
@@ -41,7 +43,7 @@ feature cannot be built this way, it does not ship** — see
 
 ## Where serious optimization starts
 
-One backlog item is *inherently* performance work, and that is when the
+One requirement is *inherently* performance work, and that is when the
 optimization happens — as part of the feature, not as a separate pass:
 
 1. **[007-directory-sizes](007-directory-sizes.md)** — aggregated du is the known

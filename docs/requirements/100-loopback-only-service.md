@@ -1,13 +1,15 @@
 ---
 id: 100-loopback-only-service
 title: Loopback-only service; exposure is an explicit opt-in
+summary: "This is an unauthenticated filesystem API: the loopback bind is the boundary, and a non-loopback `HOST` fails closed unless the operator names the served hosts."
 status: standing
 rank: null
 tags: [server, security, config]
 blocks: []
 blocked_by: []
 research: []
-adrs: [ADR-0018, ADR-0036, ADR-0037]
+decisions: [2026-07-20-the-origin-is-the-security-boundary, 2026-07-20-no-path-confinement-for-local-use]
+conventions: [fail-loud-ports, explicit-flags, allocate-before-strict-bind]
 shipped: null
 updated: 2026-07-27
 ---
@@ -20,7 +22,7 @@ off the network, and it is the default.
 - **`HOST=127.0.0.1` is the default** and starts silently. No auth work is needed
   for the local tool.
 - **Binding a non-loopback `HOST` fails closed** (`server/services/bind-exposure.ts`,
-  fatal per ADR-0018) when `EXPLORER_ALLOWED_HOSTS` is empty. The documented
+  a fatal startup error) when `EXPLORER_ALLOWED_HOSTS` is empty. The documented
   `HOST=0.0.0.0`-behind-Caddy deployment therefore requires the operator to
   (a) front the port with an **authenticating** reverse proxy and (b) name the
   served host(s) in `EXPLORER_ALLOWED_HOSTS` as the acknowledgement.

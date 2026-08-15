@@ -14,7 +14,7 @@ let servedRoot: string
 let application: ReturnType<typeof createHardenedApplication>
 
 beforeAll(async () => {
-  servedRoot = await realpath(await mkdtemp(join(tmpdir(), 'binp-fex-raw-headers-')))
+  servedRoot = await realpath(await mkdtemp(join(tmpdir(), 'bfe-raw-headers-')))
   await mkdir(servedRoot, { recursive: true })
   await writeFile(
     join(servedRoot, 'evil.html'),
@@ -133,7 +133,7 @@ describe('GET /api/fs/raw confined-mode check/use gap', () => {
   let confinedApplication: ReturnType<typeof createHardenedApplication>
 
   beforeAll(async () => {
-    const temporaryParent = await realpath(await mkdtemp(join(tmpdir(), 'binp-fex-toctou-')))
+    const temporaryParent = await realpath(await mkdtemp(join(tmpdir(), 'bfe-toctou-')))
     confinedRoot = join(temporaryParent, 'served')
     outsideRoot = join(temporaryParent, 'outside')
     await mkdir(join(confinedRoot, 'swappable'), { recursive: true })

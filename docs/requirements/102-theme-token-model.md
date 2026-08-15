@@ -1,13 +1,15 @@
 ---
 id: 102-theme-token-model
 title: One `@theme` block; alternate themes override the same vars
+summary: "Design tokens live in one `@theme` block with dark as the base; an alternate theme overrides those same `--color-*` vars, never a second token set."
 status: standing
 rank: null
 tags: [client, theme]
 blocks: []
 blocked_by: []
 research: []
-adrs: [ADR-0028]
+decisions: []
+conventions: [interaction-token]
 shipped: null
 updated: 2026-07-17
 ---
@@ -20,7 +22,7 @@ updated: 2026-07-17
   `[data-theme="…"]` selector — never a second token set, never per-utility
   variants.
 - An interaction-state style that appears on two or more surfaces is a single
-  shared token owned by one module and composed by every surface (ADR-0028) —
+  shared token owned by one module and composed by every surface (interaction styling is a shared token) —
   e.g. `MATCH_HIGHLIGHT_CLASS` for fuzzy matches, and the preview/tree focus
   accent carried by the split divider.
 

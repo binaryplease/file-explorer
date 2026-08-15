@@ -1,21 +1,23 @@
 ---
 id: 006-preview-panel
 title: Preview panel beside the tree
+summary: "The preview is a resizable column beside the tree, never a modal over it; a file click previews, a directory click enters, and focus shows at the seam."
 status: shipped
 rank: 6
 tags: [preview, client]
 blocks: []
 blocked_by: []
 research: []
-adrs: [ADR-0028, ADR-0031]
+decisions: [2026-07-20-the-preview-is-the-viewer]
+conventions: [interaction-token, affordances-adjacent]
 shipped: 2026-07-20
 updated: 2026-07-28
 ---
 
 # Preview panel beside the tree
 
-**Shipped 2026-07-20** (see the backlog log entry). A column beside the rows it
-describes (ADR-0031), never a modal over them, with a draggable divider sizing
+**Shipped 2026-07-20.** A column beside the rows it
+describes (affordances sit beside what they change), never a modal over them, with a draggable divider sizing
 the split.
 
 ## Follow-ups
@@ -25,7 +27,7 @@ the split.
   [002-preview-parity](002-preview-parity.md) — highlighting shipped 2026-07-21,
   windowed reads are still the one open item there.
 - ~~A resizable split~~ → shipped; the divider owns the drag and carries the
-  focus accent (ADR-0028's shared interaction token).
+  focus accent (the shared interaction token).
 - **Still unscheduled:** previewing the *hovered* row rather than the selected
   one.
 

@@ -1,22 +1,25 @@
 ---
 id: 004-host-app-endpoints
 title: Two endpoints host apps need — `exists` and `reveal`
+summary: "Two seam endpoints a host app needs: a batch `exists` to check paths before linkifying them, and `reveal` to select an entry in the OS file manager."
 status: planned
 rank: 4
 tags: [server, api]
 blocks: []
 blocked_by: []
-research: [../.nightshift/research/2026-07-20-nightshift-ui-adoption.md]
-adrs: [ADR-0013, ADR-0014, ADR-0020, ADR-0024, ADR-0029]
+research: []
+decisions: [2026-07-20-the-preview-is-the-viewer]
+conventions: [zod-single-source, zod-route-schemas, discovery-routes, emit-nullish, zod-defaults]
 shipped: null
 updated: 2026-07-20
 ---
 
 # Two endpoints host apps need
 
-Both are seam requirements from the nightshift-ui adoption: designed for the
-screen that consumes them, not derived from what the filesystem service happens
-to expose.
+Both are seam requirements from
+[the host-adoption decision](../decisions/2026-07-20-the-preview-is-the-viewer.md):
+designed for the screen that consumes them, not derived from what the filesystem
+service happens to expose.
 
 ## `POST /api/fs/exists`
 

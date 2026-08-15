@@ -1,13 +1,15 @@
 ---
 id: 010-broot-tree-display-and-navigation
 title: broot tree display and navigation parity (R1–R8)
+summary: "broot's exact connectors, screen-fit auto-open and interleaved alpha order are delivered; vim keys, the back-vs-parent split and the extra columns are open."
 status: in-progress
 rank: 10
 tags: [tree, client]
 blocks: []
 blocked_by: []
-research: [../.nightshift/research/2026-07-17-broot-tree-display-and-navigation.md]
-adrs: [ADR-0019, ADR-0027, ADR-0028, ADR-0031]
+research: [../research/2026-07-17-broot-tree-display-and-navigation.md, ../research/2026-07-17-broot-engine.md]
+decisions: [2026-07-17-re-engineer-the-broot-engine]
+conventions: [highlight-what-matched, share-the-invariant, interaction-token, affordances-adjacent]
 shipped: null
 updated: 2026-07-28
 ---
@@ -17,8 +19,9 @@ updated: 2026-07-28
 The visual look (exact connectors, screen-fit ` …` truncation marker, column
 set/defaults) and the navigation feel (vim keys, back-as-history vs parent,
 Enter-focus / root-goes-up, Tab match-walking) are specced against **broot 1.58
-source** in `../.nightshift/research/2026-07-17-broot-tree-display-and-navigation.md` as
-R1–R8. That research file is the spec; this file tracks what is delivered.
+source** in
+[`../research/2026-07-17-broot-tree-display-and-navigation.md`](../research/2026-07-17-broot-tree-display-and-navigation.md)
+as R1–R8. That research file is the spec; this file tracks what is delivered.
 
 ## Still open
 
@@ -28,8 +31,8 @@ R1–R8. That research file is the spec; this file tracks what is delivered.
 - **R5 — back-vs-parent split**: broot's `back` is history, not "go up"; ours
   currently conflates them. `focusNavigation.ts` already models the history side.
 - **R8 — computed screen-fit openness vs manual expand/collapse** was the
-  architectural decision the rest hang on, flagged as a `principal-engineer`
-  call. It was answered in practice by the 2026-07-21/27 auto-open work below
+  architectural decision the rest hang on, and was deferred as one. It was
+  answered in practice by the 2026-07-21/27 auto-open work below
   (computed openness won, with manual toggles layered over it) — worth an
   explicit ratification if the question resurfaces.
 
@@ -74,12 +77,12 @@ R1–R8. That research file is the spec; this file tracks what is delivered.
    *pixels*: the "N unlisted" and hidden-tally lines rendered at 11.5px/`py-px`
    (21px) against an entry row's 27px, so each one the fill planned left ~6px
    blank, and their `ch`-measured connectors broke the tree's vertical guides.
-   All row kinds now share `TREE_ROW_METRICS_CLASS` (ADR-0028: one owned token,
-   composed by every surface); annotations recede by colour, not size. Row
+   All row kinds now share `TREE_ROW_METRICS_CLASS` (interaction styling is a shared
+   token — one owned token, composed by every surface); annotations recede by colour, not size. Row
    height is also read fractionally now — `getBoundingClientRect().height`, not
    a rounded `offsetHeight`, whose error multiplies by the row count. Trailing
    space is down to `pb-2.5` plus a sub-row remainder, which is the screen-fit
-   floor working as intended, not a gap. See the 2026-07-28 backlog entry.
+   floor working as intended, not a gap.
 
    **Rails drawn rather than written, same day.** Equal row heights still left a
    hole at every row *boundary*: a `│` glyph is ~16px of ink in a 26.9px row, so
@@ -118,8 +121,9 @@ sort and the fill planner (170 tests green).
 
 ## Engine note
 
-**Decided 2026-07-17 — re-engineer, don't extract.** broot has no supported
-library API; the algorithms are small and MIT, so they are ported in TypeScript
-with broot's source as the reference spec. A Rust-sidecar extraction is the
-fallback, gated on a stress fixture proving Bun misses the budgets
-(`../.nightshift/research/2026-07-17-broot-engine.md`).
+[**Re-engineer, don't extract**](../decisions/2026-07-17-re-engineer-the-broot-engine.md)
+(2026-07-17). broot has no supported library API; the algorithms are small and
+MIT, so they are ported in TypeScript with broot's source as the reference spec.
+A Rust-sidecar extraction is the fallback, gated on a stress fixture proving Bun
+misses the budgets
+([`../research/2026-07-17-broot-engine.md`](../research/2026-07-17-broot-engine.md)).
