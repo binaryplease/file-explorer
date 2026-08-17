@@ -3,6 +3,30 @@
 A **high-speed Bun file explorer** — a web app for browsing a served filesystem
 fast.
 
+<!--
+  Hero shots: 1440×900 viewport at devicePixelRatio 2 (so the files are 2×),
+  one per theme, same tree state. Served root is a checkout copied to a neutral
+  path, because the title bar prints the served path verbatim and a home
+  directory would publish a username.
+-->
+<p align="center">
+  <picture>
+    <source
+      media="(prefers-color-scheme: dark)"
+      srcset="assets/hero-dark.png"
+    />
+    <source
+      media="(prefers-color-scheme: light)"
+      srcset="assets/hero-light.png"
+    />
+    <img
+      src="assets/hero-light.png"
+      alt="The explorer serving a project directory: a fuzzy query over the whole subtree, its matched characters highlighted in every result path, with the selected file rendered in the preview panel beside the tree."
+      width="960"
+    />
+  </picture>
+</p>
+
 ## Goals
 
 - **Incredibly fast.** Bun-native filesystem serving; directory listings and
