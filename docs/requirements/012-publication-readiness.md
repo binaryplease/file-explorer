@@ -1,7 +1,7 @@
 ---
 id: 012-publication-readiness
 title: The repository is publishable by a stranger, and safe to have published
-summary: "Publication is blocked on git history — not the tip: the working tree is clean, but 21 commits still carry a sibling service's name and upload contract, and a deleted file maps an outside decision corpus. The tip's own gap is 119 source comments citing record numbers from that corpus."
+summary: "Publication is blocked on git history and on the remote's object store — not the tip: commits carry a sibling service's name (one in a subject line), a deleted file maps an outside decision corpus, and an unreferenced commit is still served by SHA after a reset. The route is settled: a new repository, never a rewrite. The tip's own gap is 121 source comments citing record numbers from that corpus."
 status: planned
 rank: 12
 tags: [packaging, config]
@@ -65,7 +65,21 @@ decision corpus that lives outside this repository, each with a one-line summary
 of what it binds. It is reachable in history. Related: an early planning file
 carries an internal system's record identifier and its queueing conventions.
 
-### B3 — 119 source comments cite record numbers from that corpus, at the tip
+### B2b — The remote serves an unreferenced commit that no scan can see
+
+Re-verified 2026-08-17. The reflog records two `reset: moving to HEAD~1` moves.
+One of the commits they dropped, `73c0c03`, is reachable from **no ref** — not
+locally, not on the remote — yet the hosting platform still returns the commit
+*and its blobs* when queried by SHA. The full-history secret scan walked 75
+commits and never saw it, because a clone only fetches reachable objects. Its
+message and diff cite five record numbers from the outside corpus. The second
+dropped commit, `be63bb0`, was never pushed and is local-only; its message names
+an outside host application, so it must not travel either.
+
+This blocker is why the route in the definition of done is no longer a choice:
+a rewrite cannot reach an object the server keeps serving by SHA.
+
+### B3 — 121 source comments cite record numbers from that corpus, at the tip
 
 Live, in `src/`, `server/`, `shared/`, `scripts/`, `vite.config.ts` and
 `flake.nix`. A reader with only this repository cannot resolve any of them.
@@ -112,10 +126,15 @@ scan independent of the git-history scan above.
 
 ## Definition of done
 
-1. B1–B4 resolved by a route chosen and recorded: either a history rewrite
-   (approved on its own terms, with the freeze window it requires) or a fresh
-   repository published from a clean tree with a stated "history starts here".
-2. B5–B7 landed in the tree.
+1. B1–B4 resolved by the route now recorded in
+   the publication-route decision:
+   a **fresh repository** from the reviewed tree, starting at a single
+   "history starts here" commit, with this repository parked private under a
+   legacy name. A history rewrite is not an option — B2b puts objects beyond
+   the reach of one.
+2. B3 and B5–B7 landed **in the tree, before the export.** Extraction copies a
+   tree; it does not clean one, so a tip that still cites the outside corpus
+   would simply be carried across into the new repository's first commit.
 3. B8 answered by whoever holds the mandate; the finish line written down.
 4. Public, and verified from a fresh clone in a clean environment with no
    credentials: install, build, test, run.
