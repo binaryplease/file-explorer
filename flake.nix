@@ -142,6 +142,7 @@
 
             meta = {
               description = "High-speed Bun file explorer, browse a filesystem in your browser";
+              license = pkgs.lib.licenses.mit;
               mainProgram = "bfe";
               platforms = pkgs.lib.platforms.unix;
             };

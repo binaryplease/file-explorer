@@ -165,3 +165,7 @@ Deviation from broot's keyboard shortcuts: broot reveals hidden and gitignored
 files through two independent toggles (`:toggle_hidden` / `:toggle_git_ignore`,
 Alt-h / Alt-i by default). We add `alt+a` on top of those — a one-stroke
 "reveal everything" that flips both views together (both on / both off).
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).
