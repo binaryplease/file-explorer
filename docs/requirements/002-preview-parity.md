@@ -11,7 +11,7 @@ research: []
 decisions: [2026-07-20-the-preview-is-the-viewer]
 conventions: [zod-single-source, highlight-what-matched, never-hide-a-control, one-descriptor-one-wrapper-one-guard, share-the-invariant, interaction-token, affordances-adjacent, bundled-never-cdn]
 shipped: null
-updated: 2026-08-04
+updated: 2026-08-17
 ---
 
 # Preview parity — the preview is the viewer, not a glance
@@ -274,8 +274,20 @@ first match into view. A header find control (search icon → focuses the doc,
 query, live match count, clear-✕) sits beside the wrap/rendered chips
 (affordances sit beside what they change; never hide a control).
 
-Bounded, client-only, non-blocking (the preview is already head-capped) — the
-core loop never waits on it. Verified in-browser; 179 tests + typecheck green.
+Client-only and non-blocking — the core loop never waits on it. Verified
+in-browser; 179 tests + typecheck green.
+
+**Its bound moved under it, 2026-08-04.** This entry originally read "bounded …
+the preview is already head-capped", which was true against the 128 KiB / 600-line
+window it shipped on. Raising the window to 1 MiB / 4000 lines — and 8 MiB /
+40 000 lines under `?fullText=true` — raised the search's ceiling with it, because
+`searchDocument` re-scans every line of whatever the panel holds on every
+keystroke. The same change gave the *highlighter* an explicit `HIGHLIGHT_MAX_LINES`
+(10 000) cut-off for exactly this reason; the find pass got no equivalent guard.
+It is a much cheaper per-line pass, so this is a suspect rather than a known miss,
+and it is recorded as one in
+[101-performance-budgets](101-performance-budgets.md) — measure a real 40 000-line
+find before adding a cap.
 
 **Not done:** find inside *rendered* markdown (only the source text view is
 searchable) and across windowed reads (blocked on the open item above).

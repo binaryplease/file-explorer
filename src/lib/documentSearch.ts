@@ -36,9 +36,18 @@ function isWordCharacter(character: string): boolean {
 // matched character positions so the preview can highlight which words matched
 // and why (ADR-0019). Matching is per word — a document's searchable unit — so a
 // short pattern lands on whole identifiers rather than scattering matched holes
-// across an entire line. The work is bounded: the preview is already head-capped
-// to a few hundred short lines, so this stays a cheap per-keystroke pass and the
-// core navigation never waits on it (AGENTS.md responsiveness principle).
+// across an entire line. The work is bounded only by the preview window the
+// panel already holds — 4000 lines / 1 MiB for an ordinary selection, but 40 000
+// lines / 8 MiB once the reader takes the full-text opt-in — and this runs on
+// every keystroke, so the ceiling is the reader's, not a few hundred lines as it
+// was when the window was 600. Unlike `tokenizePreviewLines`, which stops
+// colouring above `HIGHLIGHT_MAX_LINES` (10 000) because tokenizing that many
+// lines is felt on the main thread, there is deliberately no line guard here
+// yet: the pass is far cheaper per line, and this repo optimizes when a real
+// interaction misses a budget on a real file, not before (see
+// docs/requirements/101-performance-budgets.md, where it is listed as a
+// suspect). It stays client-only and off the core loop either way, so the tree's
+// list/search/move never waits on it (AGENTS.md responsiveness principle).
 export function searchDocument(
   lines: readonly PreviewLine[],
   pattern: string,

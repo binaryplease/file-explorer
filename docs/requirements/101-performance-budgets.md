@@ -11,7 +11,7 @@ research: [../research/2026-07-17-broot-engine.md]
 decisions: [2026-07-17-re-engineer-the-broot-engine]
 conventions: []
 shipped: null
-updated: 2026-07-17
+updated: 2026-08-17
 ---
 
 # Speed budgets, and when optimization starts
@@ -65,6 +65,14 @@ Touch these only when measurements name them:
   gone; filtering is server-side (2026-07-17).
 - `/api/fs/list` also loads the `.gitignore` chain per listing (one readFile
   attempt per ancestor level) — negligible locally; batch/cache if it ever shows.
+- In-document find (`searchDocument`, [002](002-preview-parity.md)) re-scans
+  every line of the preview window per keystroke. It shipped against a 600-line
+  window; the window is now 4000 lines, and 40 000 under the full-text opt-in,
+  so its ceiling grew 66× without review. The highlighter took an explicit
+  10 000-line cut-off in that same change — this pass did not, on the grounds
+  that word-scoring a line is far cheaper than tokenizing it. Unmeasured either
+  way: type into a 40 000-line file and watch the keypress→paint budget before
+  capping it.
 
 ## The gate
 
