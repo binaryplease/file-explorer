@@ -77,10 +77,11 @@ count are the same number, by construction.
 | [010-broot-tree-display-and-navigation.md](requirements/010-broot-tree-display-and-navigation.md) | broot's exact connectors, screen-fit auto-open and interleaved alpha order are delivered; vim keys, the back-vs-parent split and the extra columns are open. | in-progress | 10 |
 | [011-command-palette-verbs.md](requirements/011-command-palette-verbs.md) | A keyboard-first verb palette sharing one descriptor per verb with the context menu, now that copy, open and publish are actions worth naming. | proposed | 11 |
 | [012-publication-readiness.md](requirements/012-publication-readiness.md) | Publication is blocked on git history and on the remote's object store — not the tip: commits carry a sibling service's name (one in a subject line), a deleted file maps an outside decision corpus, and an unreferenced commit is still served by SHA after a reset. The route is settled: a new repository, never a rewrite. The tip's own gap is 121 source comments citing record numbers from that corpus. | planned | 12 |
+| [013-large-directory-listing-performance.md](requirements/013-large-directory-listing-performance.md) | A directory of tens of thousands of entries misses the listing budget by 4–5× today — measured, not suspected: `/tmp` with 37 071 entries takes ~200ms and 6.4 MiB of JSON. | planned | 13 |
 | [100-loopback-only-service.md](requirements/100-loopback-only-service.md) | This is an unauthenticated filesystem API: the loopback bind is the boundary, and a non-loopback `HOST` fails closed unless the operator names the served hosts. | standing | — |
 | [101-performance-budgets.md](requirements/101-performance-budgets.md) | Optimize when a real interaction misses a budget on a real tree, not before — no stress fixture, no optimization. | standing | — |
 | [102-theme-token-model.md](requirements/102-theme-token-model.md) | Design tokens live in one `@theme` block with dark as the base; an alternate theme overrides those same `--color-*` vars, never a second token set. | standing | — |
 | [103-engineering-conventions.md](requirements/103-engineering-conventions.md) | The full text of every convention this repo is held to, each with a slug other requirements cite — stated here rather than referenced, so the repo is readable without any other repository. | standing | — |
 
-_16 entries — one row per file in `requirements/`._
+_17 entries — one row per file in `requirements/`._
 <!-- index:end -->
