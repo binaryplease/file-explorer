@@ -7,6 +7,11 @@ import type { DirectoryEntry, DirectoryListing } from '../../shared/filesystem.s
 import type { SearchNode, SearchSubtreeResult } from '../../shared/search.schema'
 import { fuzzyScore } from '../../shared/fuzzy'
 import { isPathIgnored, loadIgnoreFile, type IgnoreFile } from './ignore'
+import {
+  createListingCounters,
+  type ListingCounters,
+  type ListingTiming,
+} from './listing-timing'
 import { openPathWithDefaultApplication } from './open'
 
 // `outside-root` is the lexical escape (`../../etc/passwd`) — a malformed
@@ -21,8 +26,12 @@ export type ListDirectoryFailureReason =
   | 'not-a-directory'
   | 'not-readable'
 
+// A successful listing carries what it cost alongside what it found. The
+// budget in `docs/requirements/101-performance-budgets.md` is only enforceable
+// if every listing reports its own timing, so the measurement is part of the
+// result rather than something a caller has to wrap the call to obtain.
 export type ListDirectoryResult =
-  | { ok: true; listing: DirectoryListing }
+  | { ok: true; listing: DirectoryListing; timing: ListingTiming }
   | { ok: false; reason: ListDirectoryFailureReason }
 
 export type ReadFileFailureReason =
@@ -83,6 +92,48 @@ const SEARCH_HARD_TIME_LIMIT_MILLISECONDS = 3000
 // direct matches get a small extra bump over ancestor-only directories.
 const SEARCH_DEPTH_DOPING_BASE = 10_000
 const SEARCH_DIRECT_MATCH_BONUS = 10
+
+// What a directory entry is *before* following it — the `lstat` verdict. The
+// one `readdir(…, { withFileTypes: true })` that reads the directory already
+// carries it, so asking the entry costs nothing.
+//
+// `unknown` is the case that must not be quietly folded into `other`: a
+// filesystem that does not fill in the kernel's `d_type` (some network and
+// older on-disk filesystems) reports every entry as unknown, and treating that
+// as `other` would blank the whole listing on those mounts. It is answered with
+// an `lstat` that no other entry pays for.
+type EntryLinkKind = 'directory' | 'file' | 'symlink' | 'other' | 'unknown'
+
+function direntLinkKind(dirent: Dirent): EntryLinkKind {
+  if (dirent.isSymbolicLink()) return 'symlink'
+  if (dirent.isDirectory()) return 'directory'
+  if (dirent.isFile()) return 'file'
+  if (
+    dirent.isBlockDevice() ||
+    dirent.isCharacterDevice() ||
+    dirent.isFIFO() ||
+    dirent.isSocket()
+  ) {
+    return 'other'
+  }
+  return 'unknown'
+}
+
+function statsLinkKind(entryInfo: Stats): EntryLinkKind {
+  if (entryInfo.isSymbolicLink()) return 'symlink'
+  if (entryInfo.isDirectory()) return 'directory'
+  if (entryInfo.isFile()) return 'file'
+  return 'other'
+}
+
+// `join(parent, name)` for the one case a listing ever needs: an already
+// normalized absolute parent, and a dirent name, which cannot contain a
+// separator. `join` re-normalizes both on every call, which is 40 000 wasted
+// normalizations on a directory that size, so the prefix is built once per
+// listing and the name concatenated onto it.
+function entryPathPrefixOf(directoryAbsolutePath: string): string {
+  return directoryAbsolutePath.endsWith('/') ? directoryAbsolutePath : `${directoryAbsolutePath}/`
+}
 
 // True when `absolutePath` is `containerAbsolutePath` itself or sits beneath
 // it. Compares path segments, so a sibling (`../elsewhere`) is rejected while a
@@ -150,8 +201,12 @@ export function createFilesystemService(options: {
   // here — which also keeps the extra syscall off the miss path. Unconfined
   // there is nothing to check and the syscall is skipped entirely; call sites
   // short-circuit on `confine` first so no promise is even allocated.
-  async function isRealPathWithinRoot(absolutePath: string): Promise<boolean> {
+  async function isRealPathWithinRoot(
+    absolutePath: string,
+    counters?: ListingCounters,
+  ): Promise<boolean> {
     if (!confine) return true
+    if (counters !== undefined) counters.realpathCount++
     try {
       return isPathWithin(rootRealPath!, await realpath(absolutePath))
     } catch {
@@ -200,29 +255,66 @@ export function createFilesystemService(options: {
     return { ignoreChain, isWithinIgnoredDirectory }
   }
 
-  async function describeEntry(
-    parentAbsolutePath: string,
-    entryName: string,
+  // Describes one entry of a listing from the dirent its parent's `readdir`
+  // produced. Every syscall past that `readdir` is issued only where the
+  // dirent cannot answer the question:
+  //
+  //   - a plain directory needs no `stat` at all — the dirent already says
+  //     `directory`, and a listing reports neither size nor mode for one;
+  //   - a plain file needs one `stat`, for its size and execute bit;
+  //   - `other` (socket, FIFO, device) needs none: the listing reports nothing
+  //     about it beyond its kind;
+  //   - only a *symlink* needs following, because what a listing shows for one
+  //     is what it points at.
+  //
+  // Before this took its kinds from the dirent, every entry paid an `lstat`
+  // *and* a `stat` — see `docs/requirements/013-large-directory-listing-performance.md`.
+  //
+  // One race narrowed rather than widened: an entry deleted between its parent's
+  // `readdir` and this call used to fall through to `other`, and a directory now
+  // reports as the directory the `readdir` saw, with a null `childCount`. That
+  // is the more faithful of the two answers — it existed when the directory was
+  // read — and `childCount: null` already means "could not be counted".
+  async function describeDirent(
+    dirent: Dirent,
+    absolutePath: string,
+    counters: ListingCounters,
+    // The listing's `.gitignore` verdict, applied here rather than patched onto
+    // the finished entry by the caller: a directory and a file are ignored by
+    // different rules, so the verdict cannot be reached until the kind is
+    // known, and reaching it here saves an async frame per entry — 40 000 of
+    // them on the directory this exists to make fast.
+    isGitignoredEntry: (
+      entryAbsolutePath: string,
+      entryName: string,
+      isDirectory: boolean,
+    ) => boolean,
   ): Promise<DirectoryEntry> {
-    const absolutePath = join(parentAbsolutePath, entryName)
+    const entryName = dirent.name
     const isHidden = entryName.startsWith('.')
 
-    let isSymlink = false
-    try {
-      isSymlink = (await lstat(absolutePath)).isSymbolicLink()
-    } catch {
-      // Entry vanished between readdir and lstat; fall through to `other`.
+    let linkKind = direntLinkKind(dirent)
+    if (linkKind === 'unknown') {
+      try {
+        counters.statCount++
+        linkKind = statsLinkKind(await lstat(absolutePath))
+      } catch {
+        // Entry vanished between readdir and lstat; fall through to `other`.
+        linkKind = 'other'
+      }
     }
+    const isSymlink = linkKind === 'symlink'
 
     // An escaping symlink is described loudly but blankly: the row stays in the
-    // listing (ADR-0025 — never hide a thing to say it is unavailable) while
-    // every fact about its target is withheld, including whether it is a file
-    // or a directory. Stat-ing it would follow the link and leak exactly the
-    // metadata the confinement exists to withhold, so this returns first.
+    // listing (`never-hide-a-control` — never hide a thing to say it is
+    // unavailable) while every fact about its target is withheld, including
+    // whether it is a file or a directory. Stat-ing it would follow the link and
+    // leak exactly the metadata the confinement exists to withhold, so this
+    // returns first, before any call that follows the link.
     //
-    // Costs one `realpath` per symlink, and none at all for ordinary entries:
-    // the `isSymlink` above is read from the `lstat` this function already did.
-    if (confine && isSymlink && !(await isRealPathWithinRoot(absolutePath))) {
+    // Costs one `realpath` per symlink, and nothing at all for ordinary entries:
+    // the `isSymlink` above came free with the parent's `readdir`.
+    if (confine && isSymlink && !(await isRealPathWithinRoot(absolutePath, counters))) {
       return {
         name: entryName,
         kind: 'other',
@@ -231,48 +323,73 @@ export function createFilesystemService(options: {
         isExecutable: false,
         isHidden,
         isSymlink: true,
-        isGitignored: false,
+        isGitignored: isGitignoredEntry(absolutePath, entryName, false),
         escapesRoot: true,
       }
     }
 
-    try {
-      const entryInfo = await stat(absolutePath)
-      if (entryInfo.isDirectory()) {
-        let childCount: number | null = null
+    // A symlink is the only kind whose dirent does not answer the question:
+    // what a listing shows for one is what it points at. Everything else is
+    // already known, so the `stat` is skipped.
+    let targetKind = linkKind
+    let targetInfo: Stats | null = null
+    if (isSymlink) {
+      try {
+        counters.statCount++
+        targetInfo = await stat(absolutePath)
+        targetKind = statsLinkKind(targetInfo)
+      } catch {
+        // Broken link: reported as `other`, exactly as before.
+        targetKind = 'other'
+      }
+    }
+
+    if (targetKind === 'directory') {
+      let childCount: number | null = null
+      try {
+        counters.childReaddirCount++
+        childCount = (await readdir(absolutePath)).length
+      } catch {
+        // Unreadable directory (permissions): childCount stays null.
+      }
+      return {
+        name: entryName,
+        kind: 'directory',
+        sizeBytes: null,
+        childCount,
+        isExecutable: false,
+        isHidden,
+        isSymlink,
+        isGitignored: isGitignoredEntry(absolutePath, entryName, true),
+        escapesRoot: false,
+      }
+    }
+
+    if (targetKind === 'file') {
+      if (targetInfo === null) {
         try {
-          childCount = (await readdir(absolutePath)).length
+          counters.statCount++
+          targetInfo = await stat(absolutePath)
         } catch {
-          // Unreadable directory (permissions): childCount stays null.
-        }
-        return {
-          name: entryName,
-          kind: 'directory',
-          sizeBytes: null,
-          childCount,
-          isExecutable: false,
-          isHidden,
-          isSymlink,
-          isGitignored: false,
-          escapesRoot: false,
+          // Vanished between its parent's readdir and here: `other` below.
+          targetInfo = null
         }
       }
-      if (entryInfo.isFile()) {
+      if (targetInfo !== null) {
         return {
           name: entryName,
           kind: 'file',
-          sizeBytes: entryInfo.size,
+          sizeBytes: targetInfo.size,
           childCount: null,
-          isExecutable: (entryInfo.mode & 0o111) !== 0,
+          isExecutable: (targetInfo.mode & 0o111) !== 0,
           isHidden,
           isSymlink,
-          isGitignored: false,
+          isGitignored: isGitignoredEntry(absolutePath, entryName, false),
           escapesRoot: false,
         }
       }
-    } catch {
-      // Broken symlink or stat failure: report as `other` below.
     }
+
     return {
       name: entryName,
       kind: 'other',
@@ -281,39 +398,57 @@ export function createFilesystemService(options: {
       isExecutable: false,
       isHidden,
       isSymlink,
-      isGitignored: false,
+      isGitignored: isGitignoredEntry(absolutePath, entryName, false),
       escapesRoot: false,
     }
   }
 
   async function listDirectory(requestedRelativePath: string): Promise<ListDirectoryResult> {
+    const startedAt = performance.now()
+    const counters = createListingCounters()
+
     const absolutePath = resolveWithinRoot(requestedRelativePath)
     if (absolutePath === null) return { ok: false, reason: 'outside-root' }
 
-    let entryNames: string[]
+    // With dirent kinds, so the per-entry work below can skip the `lstat` that
+    // used to precede every single entry, and the `stat` that used to follow
+    // it for everything but a plain file. This is the shape the recursive
+    // search walk has always used; the listing path predated it.
+    let dirents: Dirent[]
     try {
-      entryNames = await readdir(absolutePath)
+      dirents = await readdir(absolutePath, { withFileTypes: true })
     } catch (readError) {
       const errorCode = (readError as NodeJS.ErrnoException).code
       if (errorCode === 'ENOENT') return { ok: false, reason: 'not-found' }
       if (errorCode === 'ENOTDIR') return { ok: false, reason: 'not-a-directory' }
       return { ok: false, reason: 'not-readable' }
     }
-    if (confine && !(await isRealPathWithinRoot(absolutePath)))
+    if (confine && !(await isRealPathWithinRoot(absolutePath, counters)))
       return { ok: false, reason: 'symlink-escapes-root' }
+    const readdirFinishedAt = performance.now()
 
     const { ignoreChain, isWithinIgnoredDirectory } = await buildIgnoreContext(absolutePath)
+    const ignoreFinishedAt = performance.now()
+
+    // The chain is the same for every entry of this listing, so the verdict is
+    // closed over once here and handed down, rather than rebuilt per entry.
+    const isGitignoredEntry = (
+      entryAbsolutePath: string,
+      entryName: string,
+      isDirectory: boolean,
+    ): boolean =>
+      isWithinIgnoredDirectory ||
+      (entryName === '.git' && isDirectory) ||
+      isPathIgnored(ignoreChain, entryAbsolutePath, isDirectory)
+
+    const entryPathPrefix = entryPathPrefixOf(absolutePath)
     const entries = await Promise.all(
-      entryNames.map(async (entryName) => {
-        const described = await describeEntry(absolutePath, entryName)
-        const isDirectory = described.kind === 'directory'
-        described.isGitignored =
-          isWithinIgnoredDirectory ||
-          (entryName === '.git' && isDirectory) ||
-          isPathIgnored(ignoreChain, join(absolutePath, entryName), isDirectory)
-        return described
-      }),
+      dirents.map((dirent) =>
+        describeDirent(dirent, entryPathPrefix + dirent.name, counters, isGitignoredEntry),
+      ),
     )
+    const finishedAt = performance.now()
+
     return {
       ok: true,
       listing: {
@@ -321,6 +456,20 @@ export function createFilesystemService(options: {
         relativePath: pathFromRoot(absolutePath),
         entries,
         confined: confine,
+      },
+      timing: {
+        totalMilliseconds: finishedAt - startedAt,
+        readdirMilliseconds: readdirFinishedAt - startedAt,
+        ignoreMilliseconds: ignoreFinishedAt - readdirFinishedAt,
+        describeMilliseconds: finishedAt - ignoreFinishedAt,
+        entryCount: entries.length,
+        directoryCount: entries.reduce(
+          (runningCount, entry) => runningCount + (entry.kind === 'directory' ? 1 : 0),
+          0,
+        ),
+        statCount: counters.statCount,
+        childReaddirCount: counters.childReaddirCount,
+        realpathCount: counters.realpathCount,
       },
     }
   }

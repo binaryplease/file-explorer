@@ -254,3 +254,60 @@ describe('attachmentDispositionFor', () => {
     expect(disposition).toContain('filename="injectX-Evil: yes.txt"')
   })
 })
+
+// The reporting half of the optimization gate in
+// `docs/requirements/101-performance-budgets.md`: every listing says what it
+// cost, on the response itself, so a budget miss is visible in a browser's
+// network panel without restarting the server behind a flag.
+describe('GET /api/fs/list reports its own timing', () => {
+  function requestListing(relativePath: string): Promise<Response> {
+    return application.handle(
+      new Request(`http://localhost/api/fs/list?path=${encodeURIComponent(relativePath)}`),
+    )
+  }
+
+  test('carries a Server-Timing header naming the phases and the syscalls', async () => {
+    const response = await requestListing('')
+    expect(response.status).toBe(200)
+    const serverTiming = response.headers.get('Server-Timing') ?? ''
+    for (const metricName of ['list', 'readdir', 'ignore', 'describe']) {
+      expect(serverTiming).toMatch(new RegExp(`\\b${metricName};dur=\\d`))
+    }
+    for (const metricName of ['entries', 'dirs', 'stats', 'childreaddirs', 'realpaths']) {
+      expect(serverTiming).toMatch(new RegExp(`\\b${metricName};desc="\\d+"`))
+    }
+  })
+
+  test('reports the entry count the listing actually returned', async () => {
+    const response = await requestListing('')
+    const listing = await response.json()
+    const entriesMetric = /\bentries;desc="(\d+)"/.exec(
+      response.headers.get('Server-Timing') ?? '',
+    )
+    expect(entriesMetric).not.toBeNull()
+    expect(Number(entriesMetric![1])).toBe(listing.entries.length)
+  })
+
+  test('a refused listing carries no timing, having done no work to report', async () => {
+    const response = await requestListing('../escape')
+    expect(response.status).toBe(400)
+    expect(response.headers.get('Server-Timing')).toBeNull()
+  })
+
+  test('the timing log is off unless a writer is supplied', async () => {
+    const loggedLines: string[] = []
+    const loggingApplication = new Elysia().use(
+      createFilesystemRoutes({
+        filesystemService: createFilesystemService({ rootAbsolutePath: servedRoot }),
+        listingTimingLog: (line) => loggedLines.push(line),
+      }),
+    )
+    await application.handle(new Request('http://localhost/api/fs/list?path='))
+    expect(loggedLines).toHaveLength(0)
+
+    await loggingApplication.handle(new Request('http://localhost/api/fs/list?path='))
+    expect(loggedLines).toHaveLength(1)
+    expect(loggedLines[0]).toContain('list . ')
+    expect(loggedLines[0]).toContain('entries')
+  })
+})

@@ -55,6 +55,17 @@ const EnvironmentSchema = z.object({
     .enum(['strict', 'auto'])
     .default('strict')
     .describe('Port selection: `strict` binds PORT exactly (fail loud); `auto` walks to a free one.'),
+  // Log one line per directory listing with what it cost — the per-listing
+  // server timing the optimization gate in
+  // `docs/requirements/101-performance-budgets.md` requires. Off by default
+  // (a local browsing tool that printed a line per keystroke-driven listing
+  // would be unusable), and an explicit purpose-named flag rather than
+  // anything inferred from the environment. The same numbers ride on every
+  // listing's `Server-Timing` header regardless of this setting.
+  EXPLORER_TIMING: z
+    .stringbool()
+    .default(false)
+    .describe('Log one line per directory listing with its phase timings and syscall counts.'),
   // When set, the server writes the port it actually bound to this file the
   // instant it starts listening. The CLI passes a private path here so it can
   // learn an auto-assigned port (and confirm a strict one) without parsing
@@ -78,6 +89,7 @@ export const config: Config = EnvironmentSchema.parse({
   EXPLORER_ALLOWED_HOSTS: process.env.EXPLORER_ALLOWED_HOSTS || undefined,
   EXPLORER_ALLOWED_ORIGINS: process.env.EXPLORER_ALLOWED_ORIGINS || undefined,
   EXPLORER_PORT_STRATEGY: process.env.EXPLORER_PORT_STRATEGY || undefined,
+  EXPLORER_TIMING: process.env.EXPLORER_TIMING || undefined,
   EXPLORER_READY_FILE: process.env.EXPLORER_READY_FILE || undefined,
 })
 

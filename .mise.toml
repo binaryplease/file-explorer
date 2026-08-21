@@ -21,6 +21,14 @@ EXPLORER_ROOT = "{{config_root}}"
 # hosted surface, together with an EXPLORER_ROOT worth confining to.
 # EXPLORER_CONFINE = "true"
 
+# Log one line per directory listing with its phase timings and syscall counts
+# — the per-listing server timing the optimization gate in
+# docs/requirements/101-performance-budgets.md requires. Off by default: a local
+# browsing tool that printed a line per keystroke-driven listing would be
+# unusable. The same numbers ride on every listing's Server-Timing response
+# header regardless, so this is only for watching a terminal instead of devtools.
+# EXPLORER_TIMING = "true"
+
 # Extra Host header values to answer for, beyond loopback names. Empty means
 # loopback only, which is what closes DNS rebinding — see the security model in
 # README.md. Only needed for a HOST=0.0.0.0-behind-Caddy deployment — and there
@@ -66,6 +74,14 @@ run = "NODE_ENV=production bun dist/server/index.js"
 [tasks.cli]
 description = "Run the explorer CLI (bfe) from source"
 run = "bun server/cli.ts"
+
+[tasks."stress:fixture"]
+description = "Generate the large-directory stress fixture (the gate every perf claim passes)"
+run = "bun scripts/stress-fixture.ts"
+
+[tasks."bench:list"]
+description = "Measure GET /api/fs/list against the stress fixture, against its budget"
+run = "bun scripts/bench-listing.ts"
 
 [tasks.typecheck]
 description = "Type-check all TypeScript"

@@ -2,6 +2,11 @@ import { Elysia } from 'elysia'
 import { basename } from 'node:path'
 import { Readable } from 'node:stream'
 import type { FilesystemService } from '../services/filesystem'
+import {
+  formatListingTimingLine,
+  toServerTimingHeader,
+  type ListingTiming,
+} from '../services/listing-timing'
 import { failureStatusAndMessage } from './failures'
 import {
   DirectoryListingSchema,
@@ -127,18 +132,41 @@ function rawResponseHeadersFor(entryBasename: string): Record<string, string> {
 // anchor a plugin instance at any root without reconstructing the server.
 // `server/index.ts` passes the config-wired singleton; standalone behaviour is
 // unchanged.
-export function createFilesystemRoutes(options: { filesystemService: FilesystemService }) {
+export function createFilesystemRoutes(options: {
+  filesystemService: FilesystemService
+  // Where a per-listing timing line goes, or null for no logging — the second
+  // half of the optimization gate in
+  // `docs/requirements/101-performance-budgets.md`. A callback rather than a
+  // config read, so the routes stay mountable by a host app that has no say
+  // over this process's environment. `server/index.ts` supplies the console
+  // writer when `EXPLORER_TIMING` is set.
+  listingTimingLog?: ((line: string) => void) | null
+}) {
   const { filesystemService } = options
+  const listingTimingLog = options.listingTimingLog ?? null
+
+  // Every listing reports what it cost, logged or not: `Server-Timing` is read
+  // natively by browser devtools, so the budget is observable from the network
+  // panel without restarting the server behind a flag.
+  const reportListingTiming = (
+    relativePath: string,
+    timing: ListingTiming,
+    responseHeaders: Record<string, string | number | undefined>,
+  ): void => {
+    responseHeaders['Server-Timing'] = toServerTimingHeader(timing)
+    if (listingTimingLog !== null) listingTimingLog(formatListingTimingLine(relativePath, timing))
+  }
 
   return new Elysia()
     .get(
       '/api/fs/list',
-      async ({ query, status }) => {
+      async ({ query, status, set }) => {
         const result = await filesystemService.listDirectory(query.path)
         if (!result.ok) {
           const { statusCode, message } = failureStatusAndMessage(result.reason, query.path)
           return status(statusCode, { error: message })
         }
+        reportListingTiming(result.listing.relativePath, result.timing, set.headers)
         return result.listing
       },
       {
@@ -155,7 +183,10 @@ export function createFilesystemRoutes(options: { filesystemService: FilesystemS
           description:
             'Lists one directory of the served filesystem, relative to the served root ' +
             '(`EXPLORER_ROOT`, defaulting to the home directory of the user running the ' +
-            `server). ${CONFINEMENT_NOTE}`,
+            'server). Every listing carries a `Server-Timing` header reporting what it cost — ' +
+            'the `readdir`, `.gitignore` and per-entry phases, plus the number of entries, ' +
+            'stats, child readdirs and realpaths behind them — so a listing that misses its ' +
+            `budget says why. ${CONFINEMENT_NOTE}`,
         },
       },
     )

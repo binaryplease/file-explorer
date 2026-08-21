@@ -86,6 +86,8 @@ Via mise (`.mise.toml`):
 | `mise run dev:client` | Vite only. |
 | `mise run build` | Build client (Vite → `dist/client/`) + server (Bun → `dist/server/`). |
 | `mise run start` | Production server. |
+| `mise run stress:fixture` | Generate the large-directory stress fixture, outside the repo and idempotently. The gate below. |
+| `mise run bench:list` | Measure `GET /api/fs/list` against that fixture and report it against its budget. |
 | `mise run typecheck` | `tsc --noEmit`. |
 | `mise run deps:hash` | Refresh the vendored-dependency hash in `flake.nix`. Run after **any** dependency change. |
 
@@ -145,6 +147,14 @@ has painted, is cancellable when the user navigates away, and degrades to
 absent rather than delaying the core. If a feature cannot be built this way,
 it does not ship. Perf budgets live in
 [`docs/requirements/101-performance-budgets.md`](docs/requirements/101-performance-budgets.md).
+
+**No fixture, no optimization** — and the fixture now exists, so that is a
+command rather than an intention. Before optimizing anything on the listing
+path, reproduce the miss with `mise run stress:fixture` + `mise run bench:list`,
+and quote a before *and* an after from it. Every listing already reports its own
+phase timings and syscall counts on a `Server-Timing` response header
+(`EXPLORER_TIMING=true` logs them to stdout as well), so there is no
+instrumenting to do first.
 
 ## Structure
 

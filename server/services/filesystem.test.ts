@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -280,5 +280,124 @@ describe('unconfined mode — the root is a display anchor, not a boundary', () 
     const escapingFile = result.listing.entries.find((entry) => entry.name === 'escaping-file')!
     expect(escapingFile.kind).toBe('file')
     expect(escapingFile.sizeBytes).toBe('secret'.length)
+  })
+})
+
+// The syscall budget of a listing, asserted directly rather than inferred from
+// wall clock. `docs/requirements/013-large-directory-listing-performance.md`
+// cut the per-entry cost by taking entry kinds from the parent's `readdir`
+// instead of an `lstat` + `stat` pair each; a change that quietly reintroduces
+// either shows up here as a count, on a three-entry directory, with no
+// benchmark to run and nothing timing-dependent to flake on.
+describe('listing syscall budget', () => {
+  let countedRoot: string
+  let countedService: ReturnType<typeof createFilesystemService>
+
+  beforeAll(async () => {
+    countedRoot = await realpath(await mkdtemp(join(tmpdir(), 'bfe-counted-')))
+    await mkdir(join(countedRoot, 'a-directory'))
+    await writeFile(join(countedRoot, 'a-directory', 'child.txt'), 'child')
+    await writeFile(join(countedRoot, 'a-file.txt'), 'file')
+    await symlink(join(countedRoot, 'missing'), join(countedRoot, 'broken-link'))
+    countedService = createFilesystemService({ rootAbsolutePath: countedRoot, confine: false })
+  })
+
+  afterAll(async () => {
+    await rm(countedRoot, { recursive: true, force: true })
+  })
+
+  test('stats plain files only, and reads only the directories it counts', async () => {
+    const result = await countedService.listDirectory('')
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    expect(result.timing.entryCount).toBe(3)
+    expect(result.timing.directoryCount).toBe(1)
+    // One for the plain file, one for the symlink that has to be followed to
+    // learn what it points at. The directory needs none: its dirent said so.
+    expect(result.timing.statCount).toBe(2)
+    // Exactly one: the `childCount` of `a-directory`.
+    expect(result.timing.childReaddirCount).toBe(1)
+    // Unconfined, containment is not checked, so no path is ever resolved.
+    expect(result.timing.realpathCount).toBe(0)
+  })
+
+  test('a broken symlink is reported as `other` without a kind of its own', async () => {
+    const result = await countedService.listDirectory('')
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    const brokenLink = result.listing.entries.find((entry) => entry.name === 'broken-link')!
+    expect(brokenLink.kind).toBe('other')
+    expect(brokenLink.isSymlink).toBe(true)
+    expect(brokenLink.sizeBytes).toBeNull()
+    expect(brokenLink.childCount).toBeNull()
+  })
+
+  test('reports the phases that make up the listing', async () => {
+    const result = await countedService.listDirectory('')
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    const { timing } = result
+    expect(timing.totalMilliseconds).toBeGreaterThanOrEqual(0)
+    for (const phase of [
+      timing.readdirMilliseconds,
+      timing.ignoreMilliseconds,
+      timing.describeMilliseconds,
+    ]) {
+      expect(phase).toBeGreaterThanOrEqual(0)
+      expect(phase).toBeLessThanOrEqual(timing.totalMilliseconds + 1)
+    }
+  })
+})
+
+// The security half of the same counters: confinement's promise is not merely
+// that an escaping link's metadata is absent from the response, but that the
+// server never asked for it. A root holding nothing but escaping links must
+// therefore complete its listing with zero stats and zero child readdirs — if a
+// future refactor follows a link first and withholds afterwards, the target has
+// already been read, and this fails.
+describe('an escaping symlink is never followed', () => {
+  let linkOnlyRoot: string
+  let linkOnlyService: ReturnType<typeof createFilesystemService>
+
+  beforeAll(async () => {
+    const scratchDirectory = await realpath(await mkdtemp(join(tmpdir(), 'bfe-links-')))
+    linkOnlyRoot = join(scratchDirectory, 'served')
+    const outside = join(scratchDirectory, 'outside')
+    await mkdir(linkOnlyRoot, { recursive: true })
+    await mkdir(join(outside, 'a-directory'), { recursive: true })
+    await writeFile(join(outside, 'an-executable'), 'x')
+    await chmod(join(outside, 'an-executable'), 0o755)
+
+    await symlink(join(outside, 'a-directory'), join(linkOnlyRoot, 'to-a-directory'))
+    await symlink(join(outside, 'an-executable'), join(linkOnlyRoot, 'to-an-executable'))
+    linkOnlyService = createFilesystemService({ rootAbsolutePath: linkOnlyRoot })
+  })
+
+  afterAll(async () => {
+    await rm(join(linkOnlyRoot, '..'), { recursive: true, force: true })
+  })
+
+  test('issues no stat and no child readdir for a listing of nothing but escaping links', async () => {
+    const result = await linkOnlyService.listDirectory('')
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    expect(result.timing.entryCount).toBe(2)
+    expect(result.timing.statCount).toBe(0)
+    expect(result.timing.childReaddirCount).toBe(0)
+    // One containment check for the listed root, one per symlink.
+    expect(result.timing.realpathCount).toBe(3)
+  })
+
+  test('still lists both links, with every fact about their targets withheld', async () => {
+    const result = await linkOnlyService.listDirectory('')
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    expect(result.listing.entries.map((entry) => entry.name).sort()).toEqual([
+      'to-a-directory',
+      'to-an-executable',
+    ])
+    for (const entry of result.listing.entries) {
+      expect(entry.escapesRoot).toBe(true)
+      expect(entry.isSymlink).toBe(true)
+      expect(entry.kind).toBe('other')
+      expect(entry.sizeBytes).toBeNull()
+      expect(entry.childCount).toBeNull()
+      expect(entry.isExecutable).toBe(false)
+    }
   })
 })

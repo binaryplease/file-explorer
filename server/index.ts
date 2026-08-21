@@ -162,7 +162,14 @@ const app = new Elysia()
       },
     },
   )
-  .use(createFilesystemRoutes({ filesystemService }))
+  .use(
+    createFilesystemRoutes({
+      filesystemService,
+      // Per-listing timing to stdout only when asked for; the Server-Timing
+      // header carries the same numbers on every listing either way.
+      listingTimingLog: config.EXPLORER_TIMING ? (line) => console.log(line) : null,
+    }),
+  )
   .use(createPreviewRoutes({ previewService }))
 
 // In production the built client is served from dist/client (this file runs as
