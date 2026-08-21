@@ -73,11 +73,26 @@ export function toServerTimingHeader(timing: ListingTiming): string {
 }
 
 /**
+ * A path is filesystem data, and on Linux a directory name may legally contain
+ * a newline — which in a one-line-per-listing log is a second, forged line that
+ * reads exactly like one this server wrote. Every C0 control character and DEL
+ * is therefore escaped to its `\xNN` form before the path reaches the log, so a
+ * crafted name is visible as a name rather than executed as formatting.
+ *
+ * Only the log form needs this. `toServerTimingHeader` emits no path at all.
+ */
+function escapeControlCharacters(pathText: string): string {
+  return pathText.replace(/[\u0000-\u001f\u007f]/g, (controlCharacter) =>
+    `\\x${controlCharacter.charCodeAt(0).toString(16).padStart(2, '0')}`,
+  )
+}
+
+/**
  * One-line log form, for the `EXPLORER_TIMING` opt-in. Names the listed path so
  * a log of many listings is readable without correlating request ids.
  */
 export function formatListingTimingLine(relativePath: string, timing: ListingTiming): string {
-  const displayPath = relativePath === '' ? '.' : relativePath
+  const displayPath = relativePath === '' ? '.' : escapeControlCharacters(relativePath)
   return (
     `list ${displayPath} ${timing.totalMilliseconds.toFixed(1)}ms ` +
     `(readdir ${timing.readdirMilliseconds.toFixed(1)}ms, ` +

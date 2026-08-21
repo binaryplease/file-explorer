@@ -401,3 +401,70 @@ describe('an escaping symlink is never followed', () => {
     }
   })
 })
+
+// An escaping symlink's row participates in `.gitignore` filtering like any
+// other entry, so a rule such as `*-link` marks it ignored and the client's
+// default view drops it. Pinned here because it looks like something the dirent
+// refactor introduced and is not: before that change `describeEntry` returned a
+// hardcoded `isGitignored: false` for this branch, and `listDirectory` then
+// overwrote it for *every* entry with exactly the verdict below — verified
+// identical at the parent commit. The tension with `never-hide-a-control` (the
+// row confinement keeps visible precisely to say why a target is unavailable
+// can be filtered out of the default view) is therefore pre-existing, and
+// changing it is a decision rather than a refactor.
+describe('gitignore rules apply to an escaping symlink row', () => {
+  let ignoredLinkRoot: string
+  let ignoredLinkService: ReturnType<typeof createFilesystemService>
+
+  beforeAll(async () => {
+    const scratchDirectory = await realpath(await mkdtemp(join(tmpdir(), 'bfe-ignored-link-')))
+    ignoredLinkRoot = join(scratchDirectory, 'served')
+    const outside = join(scratchDirectory, 'outside')
+    await mkdir(ignoredLinkRoot, { recursive: true })
+    await mkdir(outside, { recursive: true })
+    await writeFile(join(ignoredLinkRoot, '.gitignore'), '*-link\n')
+    await symlink(outside, join(ignoredLinkRoot, 'escaping-link'))
+    await symlink(ignoredLinkRoot, join(ignoredLinkRoot, 'contained-link'))
+    ignoredLinkService = createFilesystemService({ rootAbsolutePath: ignoredLinkRoot })
+  })
+
+  afterAll(async () => {
+    await rm(join(ignoredLinkRoot, '..'), { recursive: true, force: true })
+  })
+
+  test('an ignored escaping link is still listed, and still withholds its target', async () => {
+    const result = await ignoredLinkService.listDirectory('')
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    const escapingLink = result.listing.entries.find((entry) => entry.name === 'escaping-link')!
+    // The row is present and blank whatever the gitignore verdict says: the
+    // withholding is confinement's job, and it is decided before this one.
+    expect(escapingLink.escapesRoot).toBe(true)
+    expect(escapingLink.kind).toBe('other')
+    expect(escapingLink.childCount).toBeNull()
+    expect(escapingLink.sizeBytes).toBeNull()
+    // And the verdict itself is emitted rather than assumed, per `emit-nullish`.
+    expect(escapingLink.isGitignored).toBe(true)
+  })
+
+  test('following the link is still refused whether or not it is ignored', async () => {
+    expect(await ignoredLinkService.listDirectory('escaping-link')).toEqual({
+      ok: false,
+      reason: 'symlink-escapes-root',
+    })
+  })
+
+  test('a contained link matched by the same rule is marked ignored too', async () => {
+    const result = await ignoredLinkService.listDirectory('')
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    const containedLink = result.listing.entries.find((entry) => entry.name === 'contained-link')!
+    expect(containedLink.escapesRoot).toBe(false)
+    expect(containedLink.isGitignored).toBe(true)
+  })
+
+  test('an entry no rule matches is not marked ignored', async () => {
+    const result = await ignoredLinkService.listDirectory('')
+    if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
+    const ignoreFile = result.listing.entries.find((entry) => entry.name === '.gitignore')!
+    expect(ignoreFile.isGitignored).toBe(false)
+  })
+})

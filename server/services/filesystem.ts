@@ -270,11 +270,26 @@ export function createFilesystemService(options: {
   // Before this took its kinds from the dirent, every entry paid an `lstat`
   // *and* a `stat` — see `docs/requirements/013-large-directory-listing-performance.md`.
   //
-  // One race narrowed rather than widened: an entry deleted between its parent's
-  // `readdir` and this call used to fall through to `other`, and a directory now
-  // reports as the directory the `readdir` saw, with a null `childCount`. That
-  // is the more faithful of the two answers — it existed when the directory was
-  // read — and `childCount: null` already means "could not be counted".
+  // One race narrowed: an entry deleted between its parent's `readdir` and this
+  // call used to fall through to `other`, and a directory now reports as the
+  // directory the `readdir` saw, with a null `childCount`. That is the more
+  // faithful of the two answers — it existed when the directory was read — and
+  // `childCount: null` already means "could not be counted".
+  //
+  // One race WIDENED, and it is the one to know about. The kind below is a
+  // *snapshot*, taken by the parent's `readdir`, and the escaping-symlink guard
+  // fires on the snapshot: an entry that was a real directory when the directory
+  // was read and is a symlink out of the root by the time it is described is
+  // followed with no containment check, reporting the new target's `childCount`
+  // (or, on the file branch, its size and execute bit) with `escapesRoot: false`.
+  // The check itself is not new — the non-symlink path never had one — but it
+  // used to sit an `lstat` away from the syscall that followed the path, and now
+  // sits a whole describe phase away (~76ms on a 40 000-entry directory), which
+  // is a window a hostile writer inside a confined root can hit by looping.
+  // Metadata only; no bytes cross. Closing it means resolving each entry through
+  // a descriptor rather than a path, as `openReadableFile` does — a syscall per
+  // entry, so it is a design against this budget, not a patch. Recorded in
+  // `docs/requirements/013-large-directory-listing-performance.md`.
   async function describeDirent(
     dirent: Dirent,
     absolutePath: string,

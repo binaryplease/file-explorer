@@ -84,3 +84,46 @@ describe('timing log line', () => {
     expect(formatListingTimingLine('', sampleTiming)).toStartWith('list . ')
   })
 })
+
+// A path is filesystem data. On Linux a directory name may legally contain a
+// newline, and this line is written one-per-listing to stdout — so an unescaped
+// name forges a second line that reads exactly like one the server wrote.
+describe('log line treats the path as data, not as formatting', () => {
+  const NEWLINE = String.fromCharCode(10)
+  const CARRIAGE_RETURN = String.fromCharCode(13)
+  const TAB = String.fromCharCode(9)
+  const DELETE_CHARACTER = String.fromCharCode(127)
+
+  test('escapes a newline in a directory name instead of ending the line', () => {
+    const forgedLine = `evil${NEWLINE}list /etc 0.1ms (readdir 0.0ms,`
+    const line = formatListingTimingLine(forgedLine, sampleTiming)
+    expect(line).not.toContain(NEWLINE)
+    expect(line).toContain('evil\\x0a')
+    // Still exactly one line, so a log reader still counts one listing.
+    expect(line.split(NEWLINE)).toHaveLength(1)
+  })
+
+  test('escapes carriage return, tab and DEL the same way', () => {
+    const line = formatListingTimingLine(
+      `a${CARRIAGE_RETURN}b${TAB}c${DELETE_CHARACTER}d`,
+      sampleTiming,
+    )
+    expect(line).toContain('a\\x0db\\x09c\\x7fd')
+  })
+
+  test('leaves ordinary and non-ASCII path characters alone', () => {
+    const line = formatListingTimingLine('projects/rapport-café/ünicode dir', sampleTiming)
+    expect(line).toContain('projects/rapport-café/ünicode dir')
+    expect(line).not.toContain('\\x')
+  })
+
+  // The header carries no path at all, so it has nothing to inject into —
+  // asserted so that stays true if a path is ever added to it.
+  test('the Server-Timing header carries no path to inject into', () => {
+    const header = toServerTimingHeader(sampleTiming)
+    expect(header).not.toContain(NEWLINE)
+    expect(header).not.toContain(CARRIAGE_RETURN)
+    // Printable ASCII only: nothing in it comes from the filesystem.
+    expect(/^[ -~]+$/.test(header)).toBe(true)
+  })
+})

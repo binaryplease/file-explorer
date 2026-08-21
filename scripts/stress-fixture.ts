@@ -41,6 +41,7 @@
  */
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -240,6 +241,37 @@ function markerMatches(marker: FixtureMarker | null, plan: StressFixturePlan): b
 }
 
 /**
+ * Whether this script is allowed to recursively delete `rootAbsolutePath`.
+ *
+ * Both the rebuild path and `--remove` call `rmSync(root, { recursive: true })`,
+ * and `--root` is an arbitrary operator-supplied path — so a typo, a stray tab
+ * completion, or a shell that expanded something unexpected would otherwise
+ * delete a real directory without a word. The marker file is what makes a
+ * directory *ours*: nothing else in the tree is addressed by name, and a
+ * directory this script wrote always has one at its top level.
+ *
+ * A path that does not exist is fine to "delete" (the rebuild starts there).
+ * Anything else that exists without a marker is refused, loudly, rather than
+ * guessed at — including a fixture whose generation was interrupted before the
+ * marker was written, which the operator removes by hand once they have read
+ * the path in the error and agreed with it.
+ */
+export function isRemovableFixtureRoot(rootAbsolutePath: string): boolean {
+  if (!existsSync(rootAbsolutePath)) return true
+  return existsSync(join(rootAbsolutePath, MARKER_FILE_NAME))
+}
+
+/** Fail loud at the boundary, naming the offending path, before anything is unlinked. */
+function assertRemovableFixtureRoot(rootAbsolutePath: string): void {
+  if (isRemovableFixtureRoot(rootAbsolutePath)) return
+  throw new Error(
+    `refusing to delete ${rootAbsolutePath}: it exists and holds no ${MARKER_FILE_NAME}, ` +
+      `so this script did not generate it. Pass --root a path that is either absent or a ` +
+      `fixture this script built, or remove that directory by hand if you meant it.`,
+  )
+}
+
+/**
  * Zero-padded so directory order on disk and lexical order agree — a listing
  * that sorts by name should not also be measuring a pathological sort input.
  */
@@ -344,12 +376,14 @@ if (import.meta.main) {
   const plan = stressFixturePlan(fixtureArguments)
 
   if (fixtureArguments.remove) {
+    assertRemovableFixtureRoot(plan.rootAbsolutePath)
     rmSync(plan.rootAbsolutePath, { recursive: true, force: true })
     console.log(`removed ${plan.rootAbsolutePath}`)
   } else {
     const alreadyBuilt = markerMatches(readMarker(plan.rootAbsolutePath), plan)
     const mustRebuild = fixtureArguments.force === true || !alreadyBuilt
     if (mustRebuild) {
+      assertRemovableFixtureRoot(plan.rootAbsolutePath)
       rmSync(plan.rootAbsolutePath, { recursive: true, force: true })
       const startedAt = performance.now()
       generateStressFixture(plan)

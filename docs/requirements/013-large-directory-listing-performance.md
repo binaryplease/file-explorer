@@ -1,7 +1,7 @@
 ---
 id: 013-large-directory-listing-performance
 title: A very large directory lists inside the budget
-summary: "The stress fixture and per-listing timing that gate every optimization here are built, and the per-entry `lstat`+`stat` pair is gone: 40 000 entries went from ~243ms to ~98ms, and the budget's own few-thousand-entry scale is met. The 10× stretch is not — `childCount` costs one `readdir` per subdirectory, ~61ms of what is left."
+summary: "The stress fixture and per-listing timing that gate every optimization here are built, and the per-entry `lstat`+`stat` pair is gone: 40 000 entries went from ~243ms to ~98ms — a real ~2.4× cut that still misses the budget at ~2×. The few-thousand-entry scale the budget is written for already met it before this change and still does. What is left is `childCount`: one `readdir` per subdirectory, ~61ms of the remainder."
 status: in-progress
 rank: 13
 tags: [perf, server, tree]
@@ -71,31 +71,60 @@ one warm-up, warm cache:
 
 | Case | Entries | Before | After | Budget |
 |---|---|---|---|---|
-| `few-thousand` | 4 000 (3 720 dirs) | ~29ms | **~21ms** | **met** |
-| `wide-mixed` | 40 000 (37 200 dirs) | ~243ms | ~98ms | 2.0× |
-| `wide-mixed`, confined | 40 000 | ~249ms | ~100ms | 2.0× |
-| `wide-files` | 40 000 (0 dirs) | ~177ms | ~79ms | 1.6× |
+| `few-thousand` | 4 000 (3 720 dirs) | ~29ms | ~21ms | met before *and* after |
+| `wide-mixed` | 40 000 (37 200 dirs) | ~243ms | **~98ms** | 2.0× |
+| `wide-mixed`, confined | 40 000 | ~249ms | **~100ms** | 2.0× |
+| `wide-files` | 40 000 (0 dirs) | ~177ms | **~79ms** | 1.6× |
+
+Read the first row honestly: **the budget as written was already met before this
+change** (~29ms against ~50ms), and the improvement there is within run-to-run
+variance on some machines — 3 720 child readdirs dominate at that scale, and
+this change did not touch them. The result worth quoting is the 40 000-entry
+row: a real ~2.4× cut that still misses at ~2× budget.
 
 Syscalls for `wide-mixed` went from **80 000 stat/lstat + 37 200 child readdir**
 to **2 802 stat + 37 200 child readdir**. Payload is unchanged at 6.45 MiB: every
 entry is still listed, and every property is still emitted
 ([`emit-nullish`](103-engineering-conventions.md)).
 
-Confinement is untouched and measurably so. An escaping symlink is still a row
-with every fact about its target withheld, and its target is still never
-stat-ed — now asserted by counting: a listing of nothing but escaping links
-completes with **zero** stats and zero child readdirs, and one `realpath` each
-purely for the containment check
+Confinement's *response* behaviour is untouched and measurably so. An escaping
+symlink is still a row with every fact about its target withheld, and for an
+entry that is a symlink when the directory is read, that target is never
+stat-ed — now asserted by counting rather than by inspecting the response: a
+listing of nothing but escaping links completes with **zero** stats and zero
+child readdirs, and one `realpath` each purely for the containment check
 ([`../../server/services/filesystem.test.ts`](../../server/services/filesystem.test.ts)).
 That is a stronger claim than the previous tests made, which asserted only that
 the response withheld the metadata — not that the server never asked for it.
 
+**That is a steady-state property, and the qualifier is load-bearing.** Every
+entry's kind is snapshotted once, from the parent's single
+`readdir(…, { withFileTypes: true })`, and the confinement guard fires on the
+*snapshot*. An entry that was a real directory when the directory was read, and
+becomes a symlink out of the root before it is described, is followed without a
+containment check — `childCount` for the new target, emitted with
+`escapesRoot: false`. The same shape applies to the file branch's size and
+execute bit. Metadata only; no file content crosses the boundary; and it needs a
+writer inside a confined root, which is not the default posture.
+
+This race is **not new** — the previous code had no containment check on the
+non-symlink path either. What is new is its width. The check used to be an
+`lstat` microseconds before the `stat` that followed the path; it is now the
+parent `readdir`, and because all entries are described through one
+`Promise.all`, that is the whole describe phase ahead of the following syscall —
+~76ms on the 40 000-entry fixture rather than microseconds. Closing it properly
+means resolving each entry through a descriptor rather than a path (the shape
+`openReadableFile` already uses for file reads), which costs a syscall per entry
+and so has to be designed against this record's budget rather than bolted on.
+Not attempted here; recorded so the next reader does not have to rediscover it
+from a benchmark.
+
 ## What remains
 
-**The budget as written is met; the 10× stretch this record asks for is not.**
-[101](101-performance-budgets.md) budgets `< ~50ms for a few-thousand-entry
-directory`, and 4 000 entries now serve in ~21ms. A 40 000-entry directory
-serves in ~98ms.
+**The budget as written is met — it already was — and the 10× stretch this
+record asks for is not.** [101](101-performance-budgets.md) budgets
+`< ~50ms for a few-thousand-entry directory`; 4 000 entries served in ~29ms
+before this change and ~21ms after. A 40 000-entry directory serves in ~98ms.
 
 Where those ~98ms go — measured, not apportioned:
 

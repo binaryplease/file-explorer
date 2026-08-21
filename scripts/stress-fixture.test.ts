@@ -1,10 +1,12 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import {
   DEFAULT_ENTRY_COUNT,
   FEW_THOUSAND_ENTRY_COUNT,
   defaultFixtureRoot,
+  isRemovableFixtureRoot,
   mixedCaseShape,
   parseStressFixtureArguments,
   stressFixturePlan,
@@ -121,5 +123,54 @@ describe('argument parsing', () => {
 
   test('refuses a non-integer count', () => {
     expect(() => parseStressFixtureArguments(['--entries', 'lots'])).toThrow('needs an integer')
+  })
+})
+
+// Both the rebuild path and `--remove` recursively delete whatever `--root`
+// names, and `--root` is arbitrary operator input. The regression case is a
+// mistyped or tab-completed path — the repository checkout itself is the one
+// that hurts — landing on `rmSync(root, { recursive: true })` with no marker,
+// no confirmation, and no test in the way.
+describe('deleting a fixture root', () => {
+  let scratchDirectory: string
+
+  beforeAll(async () => {
+    scratchDirectory = await realpath(await mkdtemp(join(tmpdir(), 'bfe-fixture-guard-')))
+  })
+
+  afterAll(async () => {
+    await rm(scratchDirectory, { recursive: true, force: true })
+  })
+
+  test('a path that does not exist is removable — the rebuild starts there', () => {
+    expect(isRemovableFixtureRoot(join(scratchDirectory, 'never-created'))).toBe(true)
+  })
+
+  test('a directory this script generated is removable, identified by its marker', async () => {
+    const generatedRoot = join(scratchDirectory, 'generated')
+    await mkdir(generatedRoot, { recursive: true })
+    await writeFile(join(generatedRoot, 'fixture.json'), '{}')
+    expect(isRemovableFixtureRoot(generatedRoot)).toBe(true)
+  })
+
+  test('a directory with no marker is refused, however plausible the path looks', async () => {
+    const precious = join(scratchDirectory, 'binp-file-explorer')
+    await mkdir(join(precious, 'server'), { recursive: true })
+    await writeFile(join(precious, 'package.json'), '{}')
+    expect(isRemovableFixtureRoot(precious)).toBe(false)
+  })
+
+  // A run interrupted before the marker was written leaves a real tree behind.
+  // Refusing it is the safe answer: the operator reads the path and decides.
+  test('a half-built fixture is refused rather than guessed at', async () => {
+    const halfBuilt = join(scratchDirectory, 'half-built')
+    await mkdir(join(halfBuilt, 'wide-mixed', 'dir-00000'), { recursive: true })
+    expect(isRemovableFixtureRoot(halfBuilt)).toBe(false)
+  })
+
+  test('a file where a fixture root was expected is refused', async () => {
+    const notADirectory = join(scratchDirectory, 'a-file')
+    await writeFile(notADirectory, 'not a fixture')
+    expect(isRemovableFixtureRoot(notADirectory)).toBe(false)
   })
 })
