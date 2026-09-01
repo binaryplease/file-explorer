@@ -438,6 +438,12 @@ type PreviewPanelProps = {
   isFullTextRequested: boolean
   onLoadFullText: () => void
   onFocusChange: (isFocused: boolean) => void
+  // The served root, and the verb that opens a path in the explorer. A relative
+  // link in a rendered markdown document resolves against the previewed file's
+  // own directory and is handed back through here, so the reader lands on the
+  // linked entry rather than the page navigating away from the app.
+  rootPath: string | null
+  onOpenTreePath: (treePath: string) => void
 }
 
 // A markdown text preview is the one text kind that can render two ways. The
@@ -518,6 +524,8 @@ export function PreviewPanel({
   isFullTextRequested,
   onLoadFullText,
   onFocusChange,
+  rootPath,
+  onOpenTreePath,
 }: PreviewPanelProps) {
   // The image `<img src>` is a server-built path (`/api/fs/raw?...`); like every
   // other request it resolves against the configured API base, so an embedded
@@ -713,7 +721,17 @@ export function PreviewPanel({
             )}
             {showingRenderedMarkdown ? (
               <>
-                <MarkdownPreview source={preview.lines.map((line) => line.text).join('\n')} />
+                {/* The document is told which file it is: a relative link in it
+                    means nothing without the directory it was written in. The
+                    server's own address for the previewed entry is used, so the
+                    path a link resolves against is the path the text came
+                    from. */}
+                <MarkdownPreview
+                  source={preview.lines.map((line) => line.text).join('\n')}
+                  documentPath={preview.path}
+                  rootPath={rootPath}
+                  onOpenTreePath={onOpenTreePath}
+                />
                 {preview.isTruncated && <TruncationEndMarker preview={preview} />}
               </>
             ) : (

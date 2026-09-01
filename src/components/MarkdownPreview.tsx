@@ -1,7 +1,13 @@
-import { useMemo, type AnchorHTMLAttributes, type ReactNode } from 'react'
+import {
+  useMemo,
+  type AnchorHTMLAttributes,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { parse as parseYaml } from 'yaml'
+import { resolveMarkdownLinkTarget } from '../lib/markdownLinkTarget'
 import { mermaidDiagramSource } from '../lib/mermaid'
 import { MermaidDiagram } from './MermaidDiagram'
 
@@ -21,18 +27,52 @@ import { MermaidDiagram } from './MermaidDiagram'
 // markup or script. GitHub-flavored extensions (tables, task lists,
 // strikethrough, autolinks) come from `remark-gfm`.
 
+// What a link needs beyond its own href to be resolvable: the document it sits
+// in, where the served root is, and the verb that opens a path. Handed down as
+// props — this renderer stays a presentational leaf that knows nothing about the
+// app's state.
+type MarkdownLinkContext = {
+  documentPath: string
+  rootPath: string | null
+  onOpenTreePath: (treePath: string) => void
+}
+
 // External links open in a new tab and are severed from `window.opener`; the
 // url transform already blocked dangerous protocols, this just hardens the
-// navigation. Relative links (bare file paths) render as anchors too — inert
-// here, but honest about what the source wrote.
-function MarkdownLink({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement>) {
-  const isExternal = href !== undefined && /^https?:\/\//i.test(href)
+// navigation. A link naming a path — a bare `LICENSE`, a `docs/…` — resolves
+// against the previewed file's own directory and opens *in the explorer*: the
+// click belongs to the app, so the reader lands on the linked entry instead of
+// the browser navigating the page away from it. The href stays on the anchor
+// exactly as the document wrote it, and every href the resolver cannot address
+// (an empty one, any other scheme, a protocol-relative URL) keeps the plain,
+// uninterrupted anchor it has always had.
+function MarkdownLink({
+  href,
+  children,
+  documentPath,
+  rootPath,
+  onOpenTreePath,
+  ...rest
+}: AnchorHTMLAttributes<HTMLAnchorElement> & MarkdownLinkContext) {
+  const linkTarget = resolveMarkdownLinkTarget({ href, documentPath, rootPath })
+  function openInExplorer(clickEvent: ReactMouseEvent<HTMLAnchorElement>) {
+    if (linkTarget.kind !== 'entry') return
+    clickEvent.preventDefault()
+    onOpenTreePath(linkTarget.path)
+  }
   return (
     <a
       href={href}
-      {...(isExternal ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
+      {...(linkTarget.kind === 'external' ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
       className="text-accent underline decoration-line underline-offset-2 hover:text-dir"
       {...rest}
+      // After `rest`, so a document can never write over the interception.
+      {...(linkTarget.kind === 'entry'
+        ? {
+            title: `Open ${linkTarget.path === '' ? '/' : linkTarget.path} in the explorer`,
+            onClick: openInExplorer,
+          }
+        : {})}
     >
       {children}
     </a>
@@ -40,7 +80,9 @@ function MarkdownLink({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnch
 }
 
 // One element → one set of grove-token utilities. Kept as a module constant so
-// the map is built once, not per render.
+// the map is built once, not per render. The anchor is the one element that
+// needs this document's link context, so it is added on top of this map in
+// `MarkdownPreview` rather than being frozen in here.
 const MARKDOWN_COMPONENTS: Components = {
   h1: ({ children }) => (
     <h1 className="mt-4 mb-2 border-b border-line-2 pb-1 text-[16px] font-semibold text-fg first:mt-0">
@@ -65,7 +107,6 @@ const MARKDOWN_COMPONENTS: Components = {
     <h6 className="mt-3 mb-1 text-[12.5px] font-semibold text-dim first:mt-0">{children}</h6>
   ),
   p: ({ children }) => <p className="my-2 text-[13.5px] leading-relaxed text-file">{children}</p>,
-  a: MarkdownLink,
   strong: ({ children }) => <strong className="font-semibold text-fg">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,
   del: ({ children }) => <del className="text-dim line-through">{children}</del>,
@@ -232,12 +273,34 @@ function FrontmatterCard({ data }: { data: FrontmatterData }) {
   )
 }
 
-export function MarkdownPreview({ source }: { source: string }): ReactNode {
+export function MarkdownPreview({
+  source,
+  documentPath,
+  rootPath,
+  onOpenTreePath,
+}: { source: string } & MarkdownLinkContext): ReactNode {
   const { data, body } = useMemo(() => extractFrontmatter(source), [source])
+  // The static map plus this document's anchor. Memoised on the link context so
+  // the anchor keeps one component identity across renders — a fresh function
+  // each render would remount every link in the document.
+  const components = useMemo<Components>(
+    () => ({
+      ...MARKDOWN_COMPONENTS,
+      a: (anchorProps: AnchorHTMLAttributes<HTMLAnchorElement>) => (
+        <MarkdownLink
+          {...anchorProps}
+          documentPath={documentPath}
+          rootPath={rootPath}
+          onOpenTreePath={onOpenTreePath}
+        />
+      ),
+    }),
+    [documentPath, rootPath, onOpenTreePath],
+  )
   return (
     <div className="px-4 py-2 font-sans">
       {data !== null && <FrontmatterCard data={data} />}
-      <Markdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+      <Markdown remarkPlugins={[remarkGfm]} components={components}>
         {body}
       </Markdown>
     </div>

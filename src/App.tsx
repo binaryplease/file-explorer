@@ -389,6 +389,40 @@ export function App({
     setSelectedPath(ROOT_LINE_PATH)
   }, [focusPath, focusDirectory, isConfined, rootPath])
 
+  // Open a path named from outside the tree — today, a relative link in a
+  // rendered markdown preview. The entry is revealed the way the tree reveals
+  // anything: its directory becomes the focus and the entry itself the
+  // selection, which is what aims the preview at it (the preview is the viewer,
+  // docs/decisions/2026-07-20-the-preview-is-the-viewer.md). One verb for every
+  // surface that can name a path, composed from the focus and selection the
+  // tree's own clicks already use rather than a second navigation path beside
+  // them (`share-the-invariant`).
+  //
+  // Files and directories are revealed identically, without asking the server
+  // which it is: a directory lands selected, with its summary in the panel, one
+  // Enter from being focused. A target the current view filters hide — a
+  // dotfile, a gitignored build directory — lands on its parent directory
+  // instead, since the selection can only rest on a row the tree is showing.
+  const openTreePath = useCallback(
+    (targetPath: string) => {
+      // The served root has no row of its own; the tree's first line is where
+      // it lives.
+      if (targetPath === '') {
+        focusDirectory('')
+        setSelectedPath(ROOT_LINE_PATH)
+        return
+      }
+      const parentPath = parentTreePath(targetPath)
+      // The selection is set last either way: focusing clears it.
+      if (parentPath !== focusPath) focusDirectory(parentPath)
+      // Already in the right directory — but an active filter would hide the
+      // row we are aiming at, so it goes the way a focus change would drop it.
+      else setPattern('')
+      setSelectedPath(targetPath)
+    },
+    [focusDirectory, focusPath],
+  )
+
   const isSearching = pattern !== ''
 
   // The tree the user actually sees: the fill's auto-opens plus the user's
@@ -945,6 +979,8 @@ export function App({
               isFullTextRequested={isFullTextRequested}
               onLoadFullText={() => setFullTextPath(previewTargetPath)}
               onFocusChange={setIsPreviewFocused}
+              rootPath={rootPath}
+              onOpenTreePath={openTreePath}
             />
           </>
         )}
