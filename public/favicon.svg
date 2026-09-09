@@ -1,28 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="binp-file-explorer">
   <title>binp-file-explorer</title>
-  <!-- The mark is a lowercase b built from the file-tree glyph the explorer
-       draws on every row. The stem is the tree guide line, entering from the
-       top edge of the tile because the tree continues above the viewport; the
-       bowl is the last-child connector turning right and closing on itself; the
-       counter inside the bowl is the block cursor sitting on the found row.
-       Read it as a letter and it is the initial of the product; read it as a
-       glyph and it is one listing row with the cursor on it.
+  <!-- The mark is the broot loop drawn as one gesture: the tree connectors the
+       explorer prints on every row, stepping down and to the right into the
+       tree, and ending on the block cursor sitting on the found row. Two steps
+       of guide line and last-child connector, then the cursor. Read fast it is
+       a staircase going down; read slowly it is a listing you have just
+       descended and the item you landed on.
 
-       Colours are grove tokens, not new values: the tile is color-match, the
-       ink is color-term (src/theme.css, custom properties named here without
-       their leading hyphens because an XML comment may not contain that pair).
-       Amber is the colour a real listing uses for a search hit, so the tab
-       reads as the found row among the other tabs; ink on amber measures
-       13.2:1. A warm tile is also rare in a strip of dark developer-tool tabs,
-       which is what makes it findable at a glance.
+       Colours are grove tokens, not new values (src/theme.css, custom
+       properties named here without their leading hyphens because an XML
+       comment may not contain that pair). The tile is the light-theme
+       color-dir blue, the same blue a directory is named in; the stairs are the
+       light-theme color-chrome cream; the cursor is color-match amber, the
+       colour a real listing uses for a search hit. Cream on the tile measures
+       5.6:1 and the amber block is also the heaviest shape, so the emphasis
+       survives greyscale and a single colour without the tile.
 
        Built to survive the worst context first. Geometry is on a 32-unit grid
-       with every edge on an even unit, so at a 16px tab each stroke is exactly
-       two whole pixels and the counter is a clean 5 by 4 block. One solid shape
-       with one hole: it holds in greyscale, in a single colour without the
-       tile, and blurred. The optical centre sits a unit right of the geometric
-       one because the mass of a b lives in its bowl. -->
-  <clipPath id="tile"><rect width="32" height="32" rx="7"/></clipPath>
-  <rect width="32" height="32" rx="7" fill="#ffd16b"/>
-  <path clip-path="url(#tile)" fill="#0e1119" fill-rule="evenodd" d="M8 -2h4v14h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4ZM12 16v8h10v-8Z"/>
+       with every stroke edge on an even unit, so at a 16px tab each run of the
+       stair is exactly two whole pixels and the cursor is a clean 4 by 5 block.
+       Saturated blue holds against both light and dark browser chrome, which
+       is where a favicon lives. -->
+  <rect width="32" height="32" rx="7" fill="#2563eb"/>
+  <path d="M6 5V12H14V20H20" fill="none" stroke="#f6f8fc" stroke-width="4" stroke-linejoin="miter"/>
+  <rect x="20" y="16" width="8" height="10" fill="#ffd16b"/>
 </svg>
