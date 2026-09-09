@@ -6,7 +6,7 @@
 vulnerability reporting instead:
 
 > Go to the repository's **Security** tab → **Report a vulnerability**, or open
-> <https://github.com/binaryplease/binp-file-explorer/security/advisories/new>
+> <https://github.com/binaryplease/file-explorer/security/advisories/new>
 > directly.
 
 That form is private between you and the maintainers until an advisory is

@@ -9,7 +9,7 @@ body:
 
         **Security problems do not go here.** If the bug lets a web page, another
         machine, or a crafted filename do something it should not, close this and
-        follow [`SECURITY.md`](https://github.com/binaryplease/binp-file-explorer/blob/main/SECURITY.md)
+        follow [`SECURITY.md`](https://github.com/binaryplease/file-explorer/blob/main/SECURITY.md)
         instead — that path is private.
 
   - type: checkboxes

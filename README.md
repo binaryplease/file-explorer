@@ -61,9 +61,9 @@ in your browser, broot-style: run it wherever you are in a terminal and it opens
 the explorer on the current directory.
 
 ```sh
-nix run github:binaryplease/binp-file-explorer          # serve the current dir, open the browser
-nix run github:binaryplease/binp-file-explorer -- ~/src # serve a specific dir
-nix profile install github:binaryplease/binp-file-explorer   # then just: bfe
+nix run github:binaryplease/file-explorer          # serve the current dir, open the browser
+nix run github:binaryplease/file-explorer -- ~/src # serve a specific dir
+nix profile install github:binaryplease/file-explorer   # then just: bfe
 ```
 
 `bfe` **auto-assigns a free port** before launching, so any number of instances
