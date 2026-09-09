@@ -31,7 +31,8 @@ result
 # Brand/logo scratch (creative explorations)
 brand
 
-# Local dev notebook: a chronological working log, run logs, and ideas not yet
-# promoted. Local-only scratch; nothing committed may depend on it. Requirements,
-# decisions and research are NOT here — they live in the committed docs/.
-.nightshift
+# Per-developer scratch — a working notebook, run logs, ideas not yet promoted,
+# whatever your own tooling drops in the tree — is deliberately NOT listed here.
+# It belongs to one clone, not to the project, so put it in that clone's own
+# .git/info/exclude. Nothing committed may depend on any of it, and the
+# committed record lives in docs/: requirements, decisions and research.

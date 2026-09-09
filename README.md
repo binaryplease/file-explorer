@@ -191,6 +191,28 @@ files through two independent toggles (`:toggle_hidden` / `:toggle_git_ignore`,
 Alt-h / Alt-i by default). We add `alt+a` on top of those — a one-stroke
 "reveal everything" that flips both views together (both on / both off).
 
+## Contributing
+
+Patches welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup, the three
+gates every pull request must pass, and the one rule most likely to send a patch
+back — everything beyond the core navigation loop must be async and
+non-blocking. [`AGENTS.md`](AGENTS.md) is the full build manual, and
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) applies to everyone taking part.
+
+## Security
+
+Found a way for a web page, another machine, or a crafted filename to do
+something it should not? **Do not open an issue.**
+[`SECURITY.md`](SECURITY.md) has the private reporting path, plus what is in
+scope — worth reading first, because the two most commonly reported behaviours
+(no authentication, and reading outside the served root) are documented design
+rather than bugs. See [Security model](#security-model) above for why.
+
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT — see [`LICENSE`](LICENSE). Copyright (c) 2026 Enrico Scherlies.
+
+Dependencies are permissively licensed throughout, and the bundled Inter font is
+under the SIL Open Font License 1.1 — its notice, and everything else that must
+travel with a build of this project, is in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

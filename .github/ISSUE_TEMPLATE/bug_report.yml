@@ -1,0 +1,103 @@
+name: Bug report
+description: Something behaves differently from what the docs say it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this.
+
+        **Security problems do not go here.** If the bug lets a web page, another
+        machine, or a crafted filename do something it should not, close this and
+        follow [`SECURITY.md`](https://github.com/binaryplease/binp-file-explorer/blob/main/SECURITY.md)
+        instead — that path is private.
+
+  - type: checkboxes
+    id: not-security
+    attributes:
+      label: This is not a security issue
+      options:
+        - label: I have read SECURITY.md and this report does not belong there.
+          required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw. Paste errors verbatim rather than paraphrasing them.
+      placeholder: |
+        Pressing ↵ on a file inside a symlinked directory returned a 404 instead
+        of opening it. Server log: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      description: If a document says otherwise, link to it — README, AGENTS.md, or a file under docs/.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Numbered, from a fresh start. Include the directory shape if it matters —
+        a filename with a newline in it, a broken symlink, a 40 GB log.
+      placeholder: |
+        1. mise run dev
+        2. Navigate to a directory containing a symlink to /tmp
+        3. Select the symlink and press ↵
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Output of `git rev-parse --short HEAD`, or the tag you installed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Run `bun --version` and paste it with your OS. Say whether you are on the
+        dev server (`mise run dev`), the production server (`mise run start`), the
+        `bfe` CLI, or the Nix package — they differ.
+      placeholder: |
+        OS: NixOS 25.05 / macOS 15.2 / Ubuntu 24.04
+        Bun: 1.2.x
+        Running via: mise run dev
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant configuration
+      description: |
+        `EXPLORER_ROOT`, `EXPLORER_CONFINE`, `EXPLORER_ALLOWED_HOSTS`,
+        `EXPLORER_ALLOWED_ORIGINS`, `HOST`, `PORT` — whichever you set.
+        **Redact real paths and hostnames** if they are sensitive; the shape is
+        usually what matters.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: timing
+    attributes:
+      label: Server-Timing header (performance reports only)
+      description: |
+        Every listing reports its phase timings and syscall counts on a
+        `Server-Timing` response header. If this is about slowness, paste it from
+        devtools, or run with `EXPLORER_TIMING=true` and paste the stdout line.
+      render: text
+    validations:
+      required: false

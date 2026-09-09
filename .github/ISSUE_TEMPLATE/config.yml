@@ -1,0 +1,17 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/binaryplease/binp-file-explorer/security/advisories/new
+    about: >-
+      Report it privately, never as an issue. Read SECURITY.md first — it says
+      what is in scope, and two of the most-reported behaviours are documented
+      design rather than bugs.
+  - name: Code of conduct concern
+    url: https://github.com/binaryplease/binp-file-explorer/blob/main/CODE_OF_CONDUCT.md
+    about: How to raise a conduct concern, including the routes that stay private.
+  - name: How this project is built
+    url: https://github.com/binaryplease/binp-file-explorer/blob/main/AGENTS.md
+    about: >-
+      Stack, dev commands, layout and the binding responsiveness principle. Most
+      "why is it done this way" questions are answered here or in
+      docs/requirements/103-engineering-conventions.md.

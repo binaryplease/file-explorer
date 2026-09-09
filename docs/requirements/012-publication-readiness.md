@@ -1,7 +1,7 @@
 ---
 id: 012-publication-readiness
 title: The repository is publishable by a stranger, and safe to have published
-summary: "Publication is blocked on git history and on the remote's object store — not the tip: commits carry a sibling service's name (one in a subject line), a deleted file maps an outside decision corpus, and an unreferenced commit is still served by SHA after a reset. The route is settled: a new repository, never a rewrite. The tip is now clean and the finish line is a public repository only; what remains is the publication surface and the export itself."
+summary: "Publication is blocked on git history and on the remote's object store — not the tip: commits carry a sibling service's name (one in a subject line), a deleted file maps an outside decision corpus, and an unreferenced commit is still served by SHA after a reset. The route is settled: a new repository, never a rewrite. The tip is now clean, licensed, documented for a stranger and carries its third-party notices; only the export itself remains."
 status: in-progress
 rank: 12
 tags: [packaging, config]
@@ -22,8 +22,8 @@ cloned, forked and indexed within minutes, and re-privatising it detaches
 existing forks into their own network rather than withdrawing them. So every
 item below is checked *before* the flip, not after.
 
-This requirement is the checklist. It is `in-progress`, not `standing` — B3, B6
-and B8 have landed and the rest is named below; it closes when the repository is
+This requirement is the checklist. It is `in-progress`, not `standing` — B3 and
+B5–B8 have landed and the rest is named below; it closes when the repository is
 public and a stranger has built it from a fresh clone.
 
 ## What is already true
@@ -39,16 +39,22 @@ public and a stranger has built it from a fresh clone.
 - **One copyright holder.** All 74 commits are authored and committed by the
   same person under one address, so there is no contractor, prior-employer or
   personal-account provenance question to resolve.
-- **Dependency licences are permissive throughout.** 256 MIT, 40 ISC, 8
-  BSD-3-Clause, 4 Apache-2.0, 3 MPL-2.0 (a CSS transformer used at build time),
-  one OFL-1.1 (the variable font), one Unlicense, one 0BSD. Nothing reciprocal
-  reaches the shipped code.
+- **Dependency licences are permissive throughout, and the notices ship.**
+  [`THIRD-PARTY-NOTICES.md`](../../THIRD-PARTY-NOTICES.md) is the single source
+  for the inventory and carries the per-licence counts, the reconciliation of
+  the two packages an automated scan cannot classify, and the command to
+  re-measure. Nothing reciprocal reaches the shipped artifact. See B7.
 - **The repo's own gate is green.** `mise run typecheck` passes; `mise run test`
   runs 328 tests across 25 files, all passing (re-measured 2026-09-09).
-- **The tracked tree names nothing outside itself.** The clean-up landed: the
-  sibling-service requirement is now stated as a generic share service, and no
-  outside name survives in any tracked file at the tip. The source-comment half
-  of it landed on 2026-09-09 — see B3 below.
+- **The tracked tree names nothing outside itself.** True as of 2026-09-09, on
+  every surface `AGENTS.md` binds *and* on the one it does not. The
+  sibling-service requirement is stated as a generic share service; the source
+  comments cite convention slugs rather than outside record numbers (B3); the
+  last three sites — a commit subject quoted verbatim in a decision file, the
+  local notebook named in this file, and the ignore pattern that named the same
+  notebook — are gone. `git grep` over the tracked tree for every outside name
+  in the inventory returns only this repository's own owner in README install
+  commands, which is where the repository actually lives.
 - **The finish line is written down.** A public repository only, no registry
   version, per
   the finish-line decision.
@@ -126,16 +132,38 @@ target than a slug:
 The same sweep took three non-`ADR` outside names the grep would have missed: a
 sibling repository named in `shared/language.ts` and its test, an outside
 concept number in `src/theme.css` and `README.md`, and the local notebook named
-in `.gitignore` and `AGENTS.md`. Three of those four mentions are gone.
+in `.gitignore` and `AGENTS.md`. Three of those four mentions went then; the
+fourth was left open for a sign-off.
 
-**One survives and needs an explicit sign-off before the flip:** the bare
-`.nightshift` pattern at `.gitignore:37`. `AGENTS.md` scopes its no-outside-names
-rule to `docs/`, source comments and itself, and offers "make it configuration"
-as the escape — which an ignore pattern is. But it is the one place a stranger
-still meets a name they cannot resolve, in a tree that becomes a public
-repository's first commit and cannot be withdrawn. Keeping it is defensible, not
-automatic; it is the mandate holder's call, not the builder's, and it is
-recorded here unresolved rather than assumed.
+**That sign-off is now given, and the pattern is gone** (2026-09-09). The bare
+notebook pattern has moved out of the tracked `.gitignore` into this clone's own
+`.git/info/exclude`, which is git's home for an ignore rule that belongs to one
+developer rather than to the project — untracked by construction, so it never
+travels. `.gitignore` keeps a comment saying per-developer scratch is
+deliberately not listed and where it goes instead: the instruction survives, the
+name does not, and `git check-ignore` confirms the directory is still ignored
+here. The reasoning, and the three arguments for keeping it that did not
+survive, are in
+the ignore-file decision.
+
+**Two more sites were found and fixed on the same day**, both pre-existing and
+both on surfaces `AGENTS.md` binds explicitly, which is why the claim above
+needed correcting rather than merely extending:
+
+- The publication-route decision
+  quoted a commit **subject line** verbatim in order to prove that a
+  content-only rewrite would not be enough — and that subject names the sibling
+  service. The proof is unchanged and the name is gone: it now reads as a
+  clean-up commit whose subject names the service it was removing. The deleted
+  requirements file it cites by name in the next sentence is described rather
+  than named for the same reason.
+- This file named the local notebook directory while arguing about the ignore
+  pattern above. Same surface, same rule; the paragraph is rewritten without it.
+
+Unlike `OPEN_SOURCING_PROGRESS.md`, which the extraction drops as a sidecar,
+everything under `docs/` **crosses into the new repository's first commit**. A
+name that survives there is published irreversibly, which is why these were
+precondition work rather than follow-ups.
 
 `AGENTS.md`'s "Known gap, 2026-08-15" block described this pass as pending and
 has been removed; the rule it guarded — cite the slug, never a number — is now
@@ -147,12 +175,48 @@ The description carried on the hosting platform is not part of the tree and is
 published with the repository. It currently names the sibling service and a
 record number from the outside corpus. Same for topics, which are empty.
 
-### B5 — The publication surface does not exist
+### B5 — The publication surface did not exist — **resolved 2026-09-09**
 
-Present: `README.md`, `LICENSE`. Absent: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-`SECURITY.md` with a live reporting path, and issue/PR templates. A security
-reporting path and private vulnerability reporting are **preconditions**, not
-follow-ups: publication creates an inbound obligation on day one.
+Present then: `README.md`, `LICENSE`. Everything else is now written, in the
+tree, and addressed to a stranger who has only this repository:
+
+| File | What it carries |
+| --- | --- |
+| `CONTRIBUTING.md` | Setup without mise or Nix, the three gates, the fixture rule for any listing-path change, the two-file dependency change, and the responsiveness principle stated as the reason most patches come back. |
+| `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1, with the enforcement section rewritten around the channels that actually exist. |
+| `SECURITY.md` | The private reporting path, response times a one-person project can keep, and an explicit in-scope / out-of-scope list. |
+| `.github/ISSUE_TEMPLATE/bug_report.yml` | Version, Bun version, which of the four run modes, the relevant `EXPLORER_*` variables, and the `Server-Timing` header for performance reports. |
+| `.github/ISSUE_TEMPLATE/feature_request.yml` | Leads with the responsiveness principle and asks how the proposal stays off the navigation path. |
+| `.github/ISSUE_TEMPLATE/config.yml` | Routes security reports away from the issue tracker before one is opened. |
+| `.github/PULL_REQUEST_TEMPLATE.md` | The gates, the before/after benchmark, `deps:hash`, and the "leave the index markers alone" checkbox. |
+
+`CONTRIBUTING.md` carries B6's answer in full: index regeneration is a
+maintainer step, a contributor writes the file and leaves the marker block
+untouched, and the pull-request template has a checkbox that says so.
+
+**Two gaps stay open deliberately, and both belong to the mandate holder.**
+
+- **The security path depends on a setting that does not exist yet.**
+  `SECURITY.md` points at GitHub's private vulnerability reporting — the
+  repository's Security tab, "Report a vulnerability". That is a per-repository
+  setting, it can only be enabled on the *new* repository, and it is only
+  available once that repository is public. Until it is switched on, the link in
+  `SECURITY.md` is dead. Enabling it is therefore not a follow-up but part of the
+  publication step itself, immediately after the visibility flip and before the
+  repository is announced anywhere. `SECURITY.md` also gives a fallback that
+  works with no settings at all: open an issue saying only that a private channel
+  is needed, with no details.
+- **No contact address is published anywhere**, because none has been designated
+  for this project and inventing one is not the builder's call. `SECURITY.md`,
+  `CODE_OF_CONDUCT.md` and the issue templates are all written to work without
+  one, and `CODE_OF_CONDUCT.md` names the absence rather than hiding it. If the
+  mandate holder wants a real address on any of the three, it is a one-line edit
+  before the export.
+
+There are **no workflow files** in `.github/`, only templates. That matters at
+the flip: a new repository's Actions history goes public with it, and a workflow
+carried across in the exported tree could have run while the repository was
+private. Nothing here can have run.
 
 ### B6 — `AGENTS.md` instructed contributors to run a tool they cannot have — **resolved 2026-09-09**
 
@@ -177,12 +241,41 @@ A contributor who wants the table rebuilt in their own branch can still do it by
 hand — the format is plain markdown between two marker comments, one row per
 non-hidden file, documented in the index file itself — but nothing asks them to.
 
-### B7 — Attribution obligation for the bundled font
+### B7 — Attribution obligation for the bundled font — **resolved 2026-09-09**
 
-The variable font is OFL-1.1. Its copyright and licence notice must travel with
-any artifact that embeds the font files, which the client build does. A
-`THIRD-PARTY-NOTICES` file covering it (and any other notice-bearing dependency)
-is part of the licence claim, not an optional extra.
+The variable font is OFL-1.1, and its copyright and licence notice must travel
+with any artifact that embeds the font files. The client build does exactly
+that: `mise run build` copies **14 `.woff2` files** into `dist/client/assets/`,
+and the Nix flake packages the same output into the `bfe` executable. So does
+`dist/server/`, by serving it.
+
+[`THIRD-PARTY-NOTICES.md`](../../THIRD-PARTY-NOTICES.md) discharges it. It
+reproduces the Inter copyright line and the full OFL-1.1 text — which is what
+§2 asks for, a stand-alone text file accompanying the distribution — and names
+the two further conditions that bind anyone redistributing a build of this
+project: the font may not be sold on its own, and a modified font may not keep
+the name.
+
+The same file covers every other dependency, because the licence claim is over
+the whole tree and not just the one obligation that is hardest. Measured over
+the full resolved dependency set on 2026-09-09: 308 packages, overwhelmingly MIT
+and ISC, with five BSD-3-Clause, five Apache-2.0, three MPL-2.0, one 0BSD and
+one Unlicense. Four entries needed judgement rather than a table row and each
+has its reasoning written down:
+
+- **None of the Apache-2.0 packages ships a `NOTICE` file** — checked on disk,
+  not assumed — so nothing further is owed under its §4(d).
+- **`dompurify` is dual-licensed `MPL-2.0 OR Apache-2.0`** and does reach the
+  client bundle through `mermaid`. This project **elects Apache-2.0**, so no
+  copyleft reaches the artifact.
+- **The three MPL-2.0 packages** are a CSS transformer and two of its native
+  binaries, used during the build and emitted into nothing.
+- **`khroma` publishes no `license` field** in its `package.json`, so a scanner
+  reports it unknown. Its shipped `license` file and README both say MIT. A
+  metadata gap, not an unlicensed dependency.
+
+Nothing in the tree is GPL, LGPL, AGPL, source-available or non-commercial, and
+nothing conflicts with this project's own MIT licence.
 
 ### B8 — Packaging was a fork in the finish line — **answered 2026-09-09**
 
@@ -209,10 +302,13 @@ it stays `"private": true` at `0.0.0`, which is what the ruling calls for.
    "history starts here" commit, with this repository parked private under a
    legacy name. A history rewrite is not an option — B2b puts objects beyond
    the reach of one.
-2. B3 and B5–B7 landed **in the tree, before the export.** Extraction copies a
-   tree; it does not clean one, so a tip that still cites the outside corpus
-   would simply be carried across into the new repository's first commit.
-   **B3 and B6 are done** (2026-09-09); B5 and B7 remain.
+2. ~~B3 and B5–B7 landed **in the tree, before the export.**~~ **Done**
+   (2026-09-09). Extraction copies a tree; it does not clean one, so anything
+   left here is carried into the new repository's first commit and published
+   irreversibly. That made all four preconditions of the export rather than
+   follow-ups to it. Two items remain outstanding but are **not** tree work:
+   enabling private vulnerability reporting on the new repository (B5, only
+   possible once it is public) and writing its description and topics (B4).
 3. ~~B8 answered by whoever holds the mandate; the finish line written down.~~
    **Done** (2026-09-09): a public repository only, no registry version.
 4. Public, and verified from a fresh clone in a clean environment with no
