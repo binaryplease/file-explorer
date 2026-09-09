@@ -1,9 +1,9 @@
 /**
  * Pure command-line parsing for the CLI — argv in, a typed intent out, no I/O
  * and no `process.exit`. Keeping this separate from the effect-running entry
- * (server/cli.ts) is the ADR-0010 split: the routing and flag rules are a pure
- * function the orchestrator dispatches on, which is also what makes them
- * testable without spawning anything.
+ * (server/cli.ts) is the `composable-design` split: the routing and flag rules
+ * are a pure function the orchestrator dispatches on, which is also what makes
+ * them testable without spawning anything.
  */
 
 export type DaemonAction = 'start' | 'stop' | 'restart' | 'status' | 'logs'

@@ -10,7 +10,7 @@ import { SearchSubtreeResultSchema, type SearchSubtreeResult } from '../../share
 import { withApiBase } from './apiBase'
 
 // The client-side seam to the server: fetch and parse through the same Zod
-// schemas the routes validate with (ADR-0013).
+// schemas the routes validate with (`zod-single-source`).
 //
 // Every request is built from a `baseUrl` the caller threads in (from
 // `useApiBase()`): '' keeps the request same-origin (the standalone app), an

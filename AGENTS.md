@@ -27,29 +27,30 @@ slug that requirements cite in frontmatter and in prose. Read it once; the
 **Keeping the docs current is part of the change.** A change that ships a
 requirement moves its `status`/`updated` frontmatter and says in its body what
 landed. A change that settles a genuine either/or adds a file to
-`docs/decisions/`. After adding or renaming any file under `docs/`, run
-`index build` and commit the regenerated index alongside it — `index check`
-exits non-zero when an index is stale.
+`docs/decisions/`.
+
+**Regenerating an index is a maintainer step.** Each index table is generated
+from the directory beside it and lives between `<!-- index:start … -->` and
+`<!-- index:end -->` markers; the generator is maintainer-side tooling and is
+not part of this repository, so nothing you are asked to do here requires it.
+If you add, rename or remove a file under `docs/`, or change a `summary` in a
+file's frontmatter, write the file and **leave the marker block alone** — say in
+your change description that the index needs regenerating and a maintainer will
+rebuild it. Never hand-edit the rows between the markers. The prose outside them
+is ordinary documentation: edit it freely.
 
 **This repo names nothing outside itself.** No sibling project, no record number
 from another repository, no private hostname, no service name — in `docs/`, in
 source comments, or here. Where such a fact is load-bearing, restate the
 *constraint* without it, or make it configuration. A reader with only this
-repository must be able to build it.
+repository must be able to build it. Source comments cite a convention by the
+**slug** it carries in
+[`103-engineering-conventions`](docs/requirements/103-engineering-conventions.md)
+— never by a record number from anywhere else.
 
-> **Known gap, 2026-08-15.** `docs/`, this file, `README.md`, `.mise.toml` and
-> `.gitignore` satisfy that rule. **Source comments do not yet**: roughly 120 of
-> them across `src/`, `server/`, `shared/`, `scripts/`, `vite.config.ts` and
-> `flake.nix` still cite `ADR-NNNN` numbers from a corpus outside this repo.
-> The mapping to the slugs in `103-engineering-conventions` is complete, so the
-> pass is mechanical — but many of those comments weave the number into prose
-> (`ADR-0015 §5`, `ADR-0026's one-guard rule`), so it is a real edit per site,
-> not a search-and-replace. Do it as its own change. Until then: cite the slug,
-> never a number, in anything you write.
-
-`.nightshift/` is a gitignored local notebook (chronological log, ideas not yet
-promoted). Nothing in it is required to build or understand this repo, and
-nothing committed may depend on it.
+Anything gitignored — a local scratch notebook, run logs, editor state — is
+local-only by definition: nothing committed may depend on it, and a fresh clone
+must build without it.
 
 ## Tech stack
 
@@ -177,7 +178,6 @@ binp-file-explorer/
     decisions/        #   YYYY-MM-DD-<slug>.md — the call, and what was rejected
     Research.md       #   generated index + frontmatter schema
     research/         #   YYYY-MM-DD-<topic>.md — dated deep-dives, reference specs
-  .nightshift/        # local dev notebook (gitignored, nothing depends on it)
 ```
 
 ## Deployment

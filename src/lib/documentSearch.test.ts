@@ -33,7 +33,8 @@ describe('searchDocument', () => {
       .map((character, index) => (lineMatch!.matchedIndexes.has(index) ? character : ''))
       .join('')
     // Only the characters the best-scoring fuzzy match used are highlighted, in
-    // order — not the whole word (ADR-0019 shows *why* it matched).
+    // order — not the whole word (`highlight-what-matched` shows *why* it
+    // matched).
     expect(matched.toLowerCase()).toBe('pconfig')
   })
 

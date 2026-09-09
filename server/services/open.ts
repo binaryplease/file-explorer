@@ -3,8 +3,8 @@
 // local-only, loopback tool, so that machine is the user's own). Each platform
 // has its own launcher; the launched process is detached so it outlives the
 // request that triggered it. This capability depends only on the platform and
-// Bun's process spawner, so per ADR-0032 it lives in its own module rather than
-// inside the filesystem service.
+// Bun's process spawner, so per `code-lives-with-dependencies` it lives in its
+// own module rather than inside the filesystem service.
 
 type OpenerInvocation = { command: string; commandArguments: string[] }
 

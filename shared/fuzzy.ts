@@ -111,7 +111,8 @@ export function fuzzyScore(pattern: string, candidate: string): FuzzyScore | nul
 }
 
 // Splits the candidate into contiguous matched/unmatched segments so the UI
-// can highlight exactly the characters the best-scoring match used (ADR-0019).
+// can highlight exactly the characters the best-scoring match used
+// (`highlight-what-matched`).
 export function fuzzyMatch(pattern: string, candidate: string): FuzzyResult {
   const unmatchedSegments: FuzzySegment[] =
     candidate === '' ? [] : [{ text: candidate, matched: false }]

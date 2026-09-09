@@ -1,11 +1,11 @@
 // Filename/extension → Shiki grammar identifier for a served-root-relative
-// path. Pure and dependency-free, so both ends of the seam (ADR-0013) agree on
-// the language without a round trip: the server stamps it onto a text preview,
-// the client tokenizes with it.
+// path. Pure and dependency-free, so both ends of the seam (`zod-single-source`)
+// agree on the language without a round trip: the server stamps it onto a text
+// preview, the client tokenizes with it.
 //
-// Extract-and-transplant from binp-git-graph's `shared/fileDiff.ts`
-// `languageForPath` (ADR-0006), retargeted from `@git-diff-view/shiki`'s naming
-// (`c++`, `c#`) to standalone Shiki's bundled grammar IDs (`cpp`, `csharp`).
+// The table started life against `@git-diff-view/shiki`'s naming (`c++`, `c#`)
+// and was retargeted here to standalone Shiki's bundled grammar IDs (`cpp`,
+// `csharp`).
 // The `'txt'` default is Shiki's own "no grammar" convention: the client
 // renders it as plain text rather than failing.
 

@@ -1,6 +1,6 @@
 /**
- * Background-daemon lifecycle for the CLI (ADR-0015): probe, start, stop,
- * restart, and log tail for a single detached explorer server.
+ * The CLI's `daemon-lifecycle` implementation: probe, start, stop, restart, and
+ * log tail for a single detached explorer server.
  *
  * The daemon is a singleton per user — one background server on a recorded
  * port. Running many explorers at once is the *foreground* command's job
@@ -9,8 +9,8 @@
  * instance mechanism. `daemon start` is idempotent: it restarts a daemon that
  * is already up rather than colliding with it.
  *
- * Spawn/kill hygiene follows ADR-0015 exactly: `process.execPath` (not the
- * string "bun") so the right runtime is used regardless of install path,
+ * Spawn/kill hygiene follows that convention exactly: `process.execPath` (not
+ * the string "bun") so the right runtime is used regardless of install path,
  * `detached: true` + `unref()` so the daemon outlives the terminal, and signals
  * sent to the whole process group so any grandchildren the server spawned
  * (openers, previews) go down with it.

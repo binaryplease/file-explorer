@@ -30,9 +30,10 @@ Code that ports one of those specs cites the file it was ported from.
 
 ## Index
 
-The table below is **generated** by `index build` and is the only listing of
+The table below is **generated** from `research/` and is the only listing of
 this directory that exists. Do not edit it by hand, and do not copy it
-elsewhere — point at it instead.
+elsewhere — point at it instead. Rebuilding it is a maintainer step (see
+`AGENTS.md`): add your file and leave the marker block below untouched.
 
 <!-- index:start fields=researched,subject -->
 | File | Summary | Researched | Subject |

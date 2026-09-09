@@ -1,9 +1,10 @@
 import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from 'react'
 
-// The draggable tree/preview split. Extracted here (ADR-0032) because its
-// dependencies are its own — a measured container width, the persisted ratio,
-// and the min-width geometry — none of which App otherwise carries. The pure
-// width resolver is exported so the geometry is unit-testable without a DOM.
+// The draggable tree/preview split. Extracted here
+// (`code-lives-with-dependencies`) because its dependencies are its own — a
+// measured container width, the persisted ratio, and the min-width geometry —
+// none of which App otherwise carries. The pure width resolver is exported so
+// the geometry is unit-testable without a DOM.
 
 // Neither pane may be squeezed below these: the tree stops being a usable list
 // and the preview stops showing readable content past them.

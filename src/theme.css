@@ -1,9 +1,11 @@
-/* Design tokens from concept CON009 (grove). Single source of truth — all
-   styling is done with Tailwind utilities over these tokens.
+/* The grove design tokens. Single source of truth — all styling is done with
+   Tailwind utilities over these tokens. The token model is documented in
+   docs/requirements/102-theme-token-model.md.
 
    Kept in its own file (no `@import "tailwindcss"` here) so it can be shared two
-   ways over one definition (ADR-0027): the standalone app pulls it in after
-   Tailwind via `index.css`, and an embedding host imports
+   ways over one definition — the palette is the invariant
+   (`share-the-invariant`): the standalone app pulls it in after Tailwind via
+   `index.css`, and an embedding host imports
    `binp-file-explorer/theme.css` into *its* Tailwind build so the mounted
    surface reads with the identical palette. The token names are grove-specific
    (`--color-void/term/fg/dir/…`) and deliberately disjoint from a host app's
@@ -47,9 +49,10 @@
   --color-prompt: #57e0a0;
   --color-accent: #6fb7ff;
 
-  /* Interaction-state / surface overlays shared across surfaces (ADR-0028):
-     row hover and inset chips. Baked alpha over the current surface, so they
-     flip polarity per theme (light-on-dark → dark-on-light). */
+  /* Interaction-state / surface overlays shared across surfaces
+     (`interaction-token`): row hover and inset chips. Baked alpha over the
+     current surface, so they flip polarity per theme
+     (light-on-dark → dark-on-light). */
   --color-hover: rgb(255 255 255 / 0.04);
   --color-inset: rgb(255 255 255 / 0.05);
 

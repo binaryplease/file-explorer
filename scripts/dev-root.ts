@@ -7,7 +7,7 @@
  * `EXPLORER_ROOT` to this repo for the mise tasks, but `bun dev` never loads
  * that file, so the same decision has to live in the dev entry point too. This
  * module is where it lives, so both entry points land on the same tree
- * (ADR-0032).
+ * (`code-lives-with-dependencies`).
  *
  * It only ever fills a gap: an `EXPLORER_ROOT` already in the environment —
  * mise's, or one a developer exported to browse elsewhere — is left alone.
@@ -18,8 +18,8 @@ import { fileURLToPath } from 'node:url'
 /**
  * Absolute path of the repository checkout. Derived from this file's own
  * location (it lives in `./scripts`) rather than the cwd, so it holds however
- * the dev task was invoked (ADR-0011). `resolve` drops the trailing separator
- * `fileURLToPath` leaves on a directory URL.
+ * the dev task was invoked (`location-agnostic-cli`). `resolve` drops the
+ * trailing separator `fileURLToPath` leaves on a directory URL.
  */
 export const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 

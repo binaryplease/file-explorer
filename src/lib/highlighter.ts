@@ -1,15 +1,17 @@
 import { createHighlighter, type Highlighter, type ThemedToken } from 'shiki'
 
-// The one syntax highlighter for the app (ADR-0026: one wrapper, one guard).
-// It is a whole-window tokenizer — Shiki's `codeToTokens` returns one token
-// array per line, which maps 1:1 onto the preview panel's existing per-line
-// gutter renderer, so no HTML re-splitting is needed.
+// The one syntax highlighter for the app — one wrapper and one guard, per
+// `one-descriptor-one-wrapper-one-guard`. It is a whole-window tokenizer:
+// Shiki's `codeToTokens` returns one token array per line, which maps 1:1 onto
+// the preview panel's existing per-line gutter renderer, so no HTML
+// re-splitting is needed.
 //
 // Highlighting is enrichment (AGENTS.md responsiveness principle): the panel
 // paints plain text first and decorates from these tokens after, the singleton
 // loads grammars lazily and off the main paint, and an unknown grammar degrades
-// to plain text rather than throwing. ADR-0016: grammars and the engine are
-// bundled and code-split by Vite, never fetched from a CDN at runtime.
+// to plain text rather than throwing. Per `bundled-never-cdn`, grammars and the
+// engine are bundled and code-split by Vite, never fetched from a CDN at
+// runtime.
 
 // Dual themes so a single tokenization serves both app themes: every token
 // carries `--shiki-light` / `--shiki-dark` custom properties (defaultColor
@@ -73,7 +75,7 @@ export function warmHighlighter(): void {
 // the window: past this many lines it would hold the main thread long enough to
 // be felt, and a reader who asked to see a 40 000-line file whole asked for its
 // *text*, not its colours. Above it the panel renders plain and says so, rather
-// than dropping the colours silently (ADR-0025).
+// than dropping the colours silently (`never-hide-a-control`).
 export const HIGHLIGHT_MAX_LINES = 10_000
 
 // Tokenizes one preview window into per-line `ThemedToken` arrays, or `null`

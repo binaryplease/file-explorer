@@ -23,8 +23,8 @@ export default defineConfig({
     // result into VITE_PORT / VITE_API_TARGET. Absent that, the canonical ports
     // apply.
     port: Number(process.env.VITE_PORT) || 5173,
-    // ADR-0018: never migrate to another port at bind time. Any reassignment is
-    // decided up front by the pre-dev setup, not silently here.
+    // `fail-loud-ports`: never migrate to another port at bind time. Any
+    // reassignment is decided up front by the pre-dev setup, not silently here.
     strictPort: true,
     proxy: {
       // Dev: Vite serves the client, Elysia serves the API on :3000.

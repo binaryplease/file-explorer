@@ -1,8 +1,9 @@
 import { z } from 'zod/v4'
 import { DirectoryEntrySchema } from './filesystem.schema'
 
-// Shared seam schema (ADR-0013) for the recursive fuzzy search endpoint. The
-// Elysia route validates with these and the client parses through them.
+// Shared seam schema (`zod-single-source`) for the recursive fuzzy search
+// endpoint. The Elysia route validates with these and the client parses through
+// them.
 
 export const SearchNodeSchema = z.object({
   path: z
@@ -89,8 +90,8 @@ export const SearchSubtreeQuerySchema = z.object({
     .string()
     .default('')
     .describe('Directory to search under, relative to the served root. Defaults to the root itself.'),
-  // Required input, deliberately defaultless (ADR-0029): an empty pattern is a
-  // caller bug, not a searchable value.
+  // Required input, deliberately exempt from `zod-defaults`: an empty pattern
+  // is a caller bug, not a searchable value.
   pattern: z
     .string()
     .min(1)

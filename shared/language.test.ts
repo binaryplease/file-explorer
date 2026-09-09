@@ -10,8 +10,8 @@ describe('languageForPath', () => {
   })
 
   test('retargets git-diff-view names to standalone Shiki IDs', () => {
-    // binp-git-graph mapped these to `c++` / `c#`; standalone Shiki uses `cpp` /
-    // `csharp`, the whole point of the extract-and-transplant retarget.
+    // `@git-diff-view/shiki` names these `c++` / `c#`; standalone Shiki uses
+    // `cpp` / `csharp`, which is the whole point of the retarget.
     expect(languageForPath('engine.cpp')).toBe('cpp')
     expect(languageForPath('Program.cs')).toBe('csharp')
   })

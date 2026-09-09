@@ -1,9 +1,9 @@
 import { z } from 'zod/v4'
 import { DirectoryEntrySchema } from './filesystem.schema'
 
-// Shared seam schema (ADR-0013) for the preview panel: the Elysia route
-// validates its response with these, and the client parses the payload through
-// the very same objects.
+// Shared seam schema (`zod-single-source`) for the preview panel: the Elysia
+// route validates its response with these, and the client parses the payload
+// through the very same objects.
 
 export const PreviewKindSchema = z.enum([
   'text',

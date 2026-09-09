@@ -192,7 +192,7 @@ describe('forwarded protocol', () => {
   })
 })
 
-describe('resolver factory (ADR-0007) reads the headers off a real Request', () => {
+describe('the `factory-services` resolver reads the headers off a real Request', () => {
   test('loopback resolver ignores the forwarded headers', () => {
     const resolver = createPublicOriginResolver({ additionalAllowedHosts: [] })
     const request = new Request('http://localhost:3000/api', {

@@ -4,9 +4,9 @@ import { PreviewQuerySchema, PreviewSchema } from '../../shared/preview.schema'
 import type { PreviewService } from '../services/preview'
 import { failureStatusAndMessage } from './failures'
 
-// Factory per ADR-0007, for the same reason as `createFilesystemRoutes`: a host
-// app mounts these as a plugin with its own preview service rather than
-// inheriting this process's singleton.
+// Factory per `factory-services`, for the same reason as
+// `createFilesystemRoutes`: a host app mounts these as a plugin with its own
+// preview service rather than inheriting this process's singleton.
 export function createPreviewRoutes(options: { previewService: PreviewService }) {
   const { previewService } = options
 

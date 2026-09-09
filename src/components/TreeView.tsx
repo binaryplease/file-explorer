@@ -58,9 +58,10 @@ function railIndentCh(connector: TreeConnector): number {
 // height (`inset-y-0`, padding included), so a rail meets its neighbour exactly
 // and the tree reads as one continuous set of rails.
 //
-// Rendered once here and composed by every row kind (ADR-0026/0028) — entries,
-// the pruning line and the filter tally all draw the same rails from the same
-// descriptor, so they can never drift apart.
+// Rendered once here and composed by every row kind — one descriptor and one
+// shared token (`one-descriptor-one-wrapper-one-guard`, `interaction-token`).
+// Entries, the pruning line and the filter tally all draw the same rails from
+// the same descriptor, so they can never drift apart.
 function TreeRails({ connector }: { connector: TreeConnector }) {
   const ownLevel = connector.ancestorRailsContinue.length
   const ownRailLeftCh = ownLevel * RAIL_CELLS_PER_LEVEL + RAIL_CENTRE_CH
@@ -145,10 +146,10 @@ function EntryRowView({
   const isBlocked = isConfinementBlocked(row.entry)
   const blockedExplanation = isBlocked ? confinementRefusalMessage(row.entry.name) : undefined
   // The reason appears as soon as the row is *selected*, not when an action is
-  // refused (ADR-0031: it belongs beside the row it describes, and the panel's
-  // error strip is scoped to the whole listing). Showing it on selection also
-  // means acting on the row never moves the rows underneath the cursor — the
-  // explanation is already on screen before the keypress.
+  // refused (`affordances-adjacent`: it belongs beside the row it describes,
+  // and the panel's error strip is scoped to the whole listing). Showing it on
+  // selection also means acting on the row never moves the rows underneath the
+  // cursor — the explanation is already on screen before the keypress.
   const showReasonLine = isBlocked && isSelected
   const reasonLineId = `blocked-reason-${encodeURIComponent(row.path)}`
 
@@ -381,8 +382,8 @@ export function TreeView({
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* View-mode chips ride a slim strip on the tree panel's header, above
-          the rows they reconfigure (ADR-0031) — off the tree lines themselves,
-          so the root line reads as an ordinary line. */}
+          the rows they reconfigure (`affordances-adjacent`) — off the tree
+          lines themselves, so the root line reads as an ordinary line. */}
       <div className="flex flex-none items-center justify-end px-4 py-1.5">
         <ViewChips
           showSizes={showSizes}

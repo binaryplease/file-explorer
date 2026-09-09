@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { z } from 'zod/v4'
 
-// Persisted-client-state schema (ADR-0013/0029): the mode the user picked,
-// validated on read so a stale/garbage localStorage value falls back cleanly
-// to the default rather than throwing. `system` follows the OS preference.
+// Persisted-client-state schema (`zod-single-source`, `zod-defaults`): the mode
+// the user picked, validated on read so a stale/garbage localStorage value
+// falls back cleanly to the default rather than throwing. `system` follows the
+// OS preference.
 export const THEME_MODES = ['system', 'light', 'dark'] as const
 export const ThemeModeSchema = z.enum(THEME_MODES).default('system').catch('system')
 export type ThemeMode = z.infer<typeof ThemeModeSchema>

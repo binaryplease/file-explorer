@@ -161,8 +161,9 @@ navigation with broot's default keys — `↵`/`→` open, `←`/`esc` back thro
 history, `h`/`⌫` parent, `j`/`k` move, `ctrl-d`/`ctrl-u` page,
 `tab`/`shift-tab` walk matches — size bars, hidden and gitignored toggles,
 deep-linkable focus via `?path=` with natural back-button history), styled
-after concept CON009. Typing fuzzy-searches the whole focused subtree
-server-side with broot's scored-match algorithms re-engineered in TypeScript
+with the grove token palette (`src/theme.css`). Typing fuzzy-searches the whole
+focused subtree server-side with broot's scored-match algorithms re-engineered
+in TypeScript
 (bounded best-first walk, gitignore-aware pruning, results ranked by score
 with the best match pre-selected). Pressing `↵`/`→` on a file opens it with the
 operating system's default application on the host machine (via

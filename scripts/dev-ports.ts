@@ -1,7 +1,7 @@
 /**
  * Pre-dev port setup.
  *
- * ADR-0018 keeps port conflicts fatal *at bind time*: neither Elysia nor Vite
+ * `fail-loud-ports` keeps conflicts fatal *at bind time*: neither Elysia nor Vite
  * may migrate to another port behind the developer's back. This module runs
  * strictly *before* either process starts — it probes the canonical ports,
  * announces every conflict it finds, and picks explicit replacements that are
@@ -13,7 +13,8 @@
 import { findAvailablePort, isPortAvailable } from '../server/services/port'
 
 // Re-exported so scripts/dev-ports.test.ts keeps exercising them through this
-// module; the implementations now live in the general port service (ADR-0032).
+// module; the implementations now live in the general port service, which is
+// where their own dependencies are (`code-lives-with-dependencies`).
 export { findAvailablePort, isPortAvailable }
 
 export const CANONICAL_SERVER_PORT = 3000

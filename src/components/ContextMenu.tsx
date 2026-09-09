@@ -24,11 +24,12 @@ type ContextMenuProps = {
 // Margin kept between the menu and the viewport edge when it would overflow.
 const VIEWPORT_MARGIN = 8
 
-// A floating menu pinned at the cursor. Generic on purpose (ADR-0027): it knows
-// positioning, viewport clamping, and dismissal, but nothing about paths — the
-// caller supplies labelled items with their own actions. It closes on any
-// outside pointer press, Escape, scroll, resize, or selecting an item, so it
-// never lingers after the context that summoned it has moved.
+// A floating menu pinned at the cursor. Generic on purpose — positioning is the
+// invariant it shares (`share-the-invariant`): it knows positioning, viewport
+// clamping, and dismissal, but nothing about paths, and the caller supplies
+// labelled items with their own actions. It closes on any outside pointer
+// press, Escape, scroll, resize, or selecting an item, so it never lingers
+// after the context that summoned it has moved.
 export function ContextMenu({ anchor, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [position, setPosition] = useState({ left: anchor.clientX, top: anchor.clientY })

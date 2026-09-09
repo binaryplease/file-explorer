@@ -1,4 +1,4 @@
-// Which origin the ADR-0020 discovery document should advertise.
+// Which origin the `discovery-routes` document should advertise.
 //
 // `GET /api` must return absolute URLs, so it has to name an origin. The
 // tempting source is `x-forwarded-proto` / `x-forwarded-host` — a proxy sets
@@ -51,8 +51,9 @@ function isAllowedHostname(hostname: string, additionalAllowedHosts: string[]): 
   )
 }
 
-// Pure decision (ADR-0010), mirroring services/bind-exposure.ts: no request
-// object, no Elysia, so the trust rule can be tested without a live server.
+// Pure decision (`composable-design`), mirroring services/bind-exposure.ts: no
+// request object, no Elysia, so the trust rule can be tested without a live
+// server.
 export function resolvePublicOrigin(options: {
   requestUrl: string
   hostHeader: string | null
@@ -96,8 +97,8 @@ export function resolvePublicOrigin(options: {
   return `${mayTrustForwardedProtocol ? forwardedProtocol : ownProtocol}://${authority}`
 }
 
-// Factory per ADR-0007. Binds the operator's allow-list once at startup so the
-// request path only supplies request-shaped inputs.
+// Factory per `factory-services`. Binds the operator's allow-list once at
+// startup so the request path only supplies request-shaped inputs.
 export function createPublicOriginResolver(options: { additionalAllowedHosts: string[] }) {
   const { additionalAllowedHosts } = options
   return {

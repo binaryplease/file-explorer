@@ -1,15 +1,16 @@
 import type { ResolvedTheme } from './theme'
 
-// The one Mermaid renderer for the app (ADR-0026: one wrapper, one guard). It
-// turns the text of a ```mermaid fenced block into an SVG string that the
-// markdown preview paints.
+// The one Mermaid renderer for the app — one wrapper and one guard, per
+// `one-descriptor-one-wrapper-one-guard`. It turns the text of a ```mermaid
+// fenced block into an SVG string that the markdown preview paints.
 //
 // Diagrams are enrichment (AGENTS.md responsiveness principle): the fenced
 // source paints first as an ordinary code block, the Mermaid engine is
 // dynamically imported so none of its weight is in the app's entry chunk, and a
 // diagram that fails to parse degrades to that same code block plus an
-// explanation rather than throwing or blanking the document. ADR-0016: the
-// engine is bundled and code-split by Vite, never fetched from a CDN.
+// explanation rather than throwing or blanking the document. Per
+// `bundled-never-cdn`, the engine is bundled and code-split by Vite, never
+// fetched from a CDN.
 
 export const MERMAID_LANGUAGE = 'mermaid'
 

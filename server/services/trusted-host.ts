@@ -60,10 +60,10 @@ export function isTrustedHostHeader(
   )
 }
 
-// Factory per ADR-0007. `additionalAllowedHosts` is the escape hatch for the
-// documented non-local deployment (`HOST=0.0.0.0` behind Caddy on the same
-// box): that operator has to name the domain, because we cannot guess it and
-// will not accept anything.
+// Factory per `factory-services`. `additionalAllowedHosts` is the escape hatch
+// for the documented non-local deployment (`HOST=0.0.0.0` behind Caddy on the
+// same box): that operator has to name the domain, because we cannot guess it
+// and will not accept anything.
 export function createTrustedHostGuard(options: { additionalAllowedHosts: string[] }) {
   const { additionalAllowedHosts } = options
   return {

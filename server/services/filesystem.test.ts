@@ -117,8 +117,9 @@ describe('escaping symlinks are listed loudly, without leaking their target', ()
   }
 
   test('an escaping symlink stays visible in the listing rather than being hidden', async () => {
-    // ADR-0025: the row is shown and refused, not quietly dropped — a missing
-    // entry would read as "nothing is there", which is a different lie.
+    // `never-hide-a-control`: the row is shown and refused, not quietly
+    // dropped — a missing entry would read as "nothing is there", which is a
+    // different lie.
     const result = await filesystemService.listDirectory('')
     if (!result.ok) throw new Error(`listing the root failed: ${result.reason}`)
     const entryNames = result.listing.entries.map((entry) => entry.name)

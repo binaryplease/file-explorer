@@ -6,8 +6,9 @@ import { useResolvedTheme } from '../lib/theme'
 // One ```mermaid fenced block, painted as a diagram. Presentational: the
 // diagram source in, an SVG out — it knows nothing about files or previews, and
 // the caller hands it the very code block it would otherwise have rendered
-// (`sourceFallback`), so the fenced-block frame has exactly one definition
-// (ADR-0027) and this component owns only the diagram/error states.
+// (`sourceFallback`), so the fenced-block frame has exactly one definition —
+// the frame is the invariant (`share-the-invariant`) — and this component owns
+// only the diagram/error states.
 //
 // Three states, and the source is visible in two of them:
 //   pending — the fenced source, already on screen, unchanged. The engine is

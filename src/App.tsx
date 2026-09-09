@@ -923,8 +923,9 @@ export function App({
         <TitleBar rootPath={rootPath} themeMode={themeMode} onSelectThemeMode={setThemeMode} />
       )}
       {/* Tree and preview share one row; the preview is a column beside the
-          rows it describes (ADR-0031), never a modal over them. A draggable
-          divider between them sizes the split — measured against this row. */}
+          rows it describes (`affordances-adjacent`), never a modal over them. A
+          draggable divider between them sizes the split — measured against this
+          row. */}
       <div ref={containerRef} className="flex min-h-0 flex-1">
         <TreeView
           rootFullPath={focusFullPath}
@@ -952,9 +953,9 @@ export function App({
         {showPreview && (
           <>
             {/* The resize handle owns the split. It also carries the focus
-                accent on the edge it occupies between the two panes (ADR-0028's
-                shared interaction token), lighting up when the preview holds the
-                keyboard. */}
+                accent on the edge it occupies between the two panes (the shared
+                `interaction-token` focus accent), lighting up when the preview
+                holds the keyboard. */}
             <div
               role="separator"
               aria-orientation="vertical"

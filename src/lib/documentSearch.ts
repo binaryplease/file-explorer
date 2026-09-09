@@ -8,8 +8,8 @@ const WORD_CHARACTER = /[\p{L}\p{N}_]/u
 
 // One line's search result: which code-point indexes within the line the
 // pattern matched (the union across every matching word on the line, so the
-// renderer can highlight exactly the matched characters — ADR-0019), and how
-// many of the line's words matched.
+// renderer can highlight exactly the matched characters, per
+// `highlight-what-matched`), and how many of the line's words matched.
 export type DocumentLineMatch = {
   matchedIndexes: ReadonlySet<number>
   wordMatchCount: number
@@ -34,9 +34,10 @@ function isWordCharacter(character: string): boolean {
 
 // Fuzzy-searches every line's words for `pattern`, broot-style, returning the
 // matched character positions so the preview can highlight which words matched
-// and why (ADR-0019). Matching is per word — a document's searchable unit — so a
-// short pattern lands on whole identifiers rather than scattering matched holes
-// across an entire line. The work is bounded only by the preview window the
+// and why (`highlight-what-matched`). Matching is per word — a document's
+// searchable unit — so a short pattern lands on whole identifiers rather than
+// scattering matched holes across an entire line. The work is bounded only by
+// the preview window the
 // panel already holds — 4000 lines / 1 MiB for an ordinary selection, but 40 000
 // lines / 8 MiB once the reader takes the full-text opt-in — and this runs on
 // every keystroke, so the ceiling is the reader's, not a few hundred lines as it

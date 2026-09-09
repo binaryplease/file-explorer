@@ -1,8 +1,9 @@
 import { homedir } from 'node:os'
 import { z } from 'zod/v4'
 
-// Boundary validation of the process environment (ADR-0013). Parsed once at
-// startup; a malformed env fails loud here rather than deep in a request path.
+// Boundary validation of the process environment (`zod-single-source`). Parsed
+// once at startup; a malformed env fails loud here rather than deep in a
+// request path.
 const EnvironmentSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   // Loopback by default even in prod — Caddy on the same host is the only thing
@@ -46,11 +47,11 @@ const EnvironmentSchema = z.object({
     .describe('Comma-separated exact Origins granted cross-origin (CORS) read access.'),
   // How the server chooses its listen port. `strict` (the default, and what
   // `mise run start` / a direct launch uses) binds PORT exactly and dies loudly
-  // on a conflict — ADR-0018. `auto` walks upward from PORT to the first free
-  // port, announcing each skip; it is the opt-in the `bfe` CLI sets so any
-  // number of instances land on distinct ports without colliding. Auto never
-  // fails silently — every reassignment is printed — and it is only ever
-  // enabled deliberately, so the ADR-0018 default posture is unchanged.
+  // on a conflict (`fail-loud-ports`). `auto` walks upward from PORT to the
+  // first free port, announcing each skip; it is the opt-in the `bfe` CLI sets
+  // so any number of instances land on distinct ports without colliding. Auto
+  // never fails silently — every reassignment is printed — and it is only ever
+  // enabled deliberately, so the fail-loud default posture is unchanged.
   EXPLORER_PORT_STRATEGY: z
     .enum(['strict', 'auto'])
     .default('strict')

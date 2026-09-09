@@ -49,7 +49,7 @@ export type ResolveFileResult =
 // Confined, `handle` is an open descriptor whose containment has been verified
 // and which the caller must read the bytes from, then close. Unconfined there
 // is nothing to confine, so `handle` is null and the caller reads by path
-// exactly as before (ADR-0024: the property is emitted either way).
+// exactly as before (`emit-nullish`: the property is emitted either way).
 export type OpenReadableFileResult =
   | { ok: true; absolutePath: string; sizeBytes: number; handle: FileHandle | null }
   | { ok: false; reason: ReadFileFailureReason }
@@ -145,7 +145,7 @@ function isPathWithin(containerAbsolutePath: string, absolutePath: string): bool
   return pathFromContainer !== '..' && !pathFromContainer.startsWith('../')
 }
 
-// Factory per ADR-0007.
+// Factory per `factory-services`.
 //
 // `confine` decides what the root *is*. Confined (the default, and what any
 // hosted surface must use), the root is a security boundary: a request that

@@ -27,8 +27,9 @@
           # as an unresolvable import in the middle of the vite build. Stamping
           # the lockfile digest into the derivation name changes the store path
           # whenever the dependency set changes, forcing a refetch that fails
-          # loudly with a hash mismatch (ADR-0018) instead of building against
-          # yesterday's node_modules.
+          # loudly with a hash mismatch instead of building against yesterday's
+          # node_modules — the same fail-on-conflict posture the server takes at
+          # bind time, applied to the dependency tree.
           lockDigest = builtins.substring 0 12 (builtins.hashFile "sha256" ./bun.lock);
 
           # Vendored dependencies as a fixed-output derivation: `bun install`
@@ -131,9 +132,10 @@
               # The single on-demand executable. `bfe` from anywhere in a
               # terminal serves the current directory (broot-style); the wrapper
               # resolves the built CLI bundle beside the server bundle so the
-              # ADR-0011 sibling lookup and the '../client' static-asset path
-              # both hold. `binp-file-explorer` is provided as a spelled-out
-              # alias (ADR-0008: package name = repo name).
+              # `location-agnostic-cli` sibling lookup and the '../client'
+              # static-asset path both hold. `binp-file-explorer` is provided as
+              # a spelled-out alias, since the published artifact's name matches
+              # the repository name exactly (`package-name-matches-repo`).
               makeWrapper ${pkgs.bun}/bin/bun "$out/bin/bfe" \
                 --add-flags "$out/lib/${pname}/server/cli.js"
               ln -s bfe "$out/bin/${pname}"
