@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- ICO first as the legacy fallback, SVG second so browsers that can take
+         it prefer it; the touch icon is the full-bleed raster iOS masks itself. -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>binp-file-explorer</title>
     <!-- Resolve the theme before first paint to avoid a flash of the wrong

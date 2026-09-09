@@ -1,28 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="binp-file-explorer">
   <title>binp-file-explorer</title>
-  <!-- The mark is the core loop drawn as a glyph: a tree guide with two sibling
-       rows, and one row nested a level deeper, narrowed to by search and
-       carrying the block cursor. Colours are grove tokens, not new values — the
-       tile is the color-term token, the guide and sibling rows are color-dir,
-       the found row and its cursor are color-match (src/theme.css). Those are
-       CSS custom properties, named here without their leading double hyphen
-       because an XML comment may not contain one — restore it and this file
-       stops parsing, so the icon renders nowhere. That is the
-       same blue/amber pairing a real listing uses for directories and search
-       hits, so the icon is a sample of the palette rather than a decoration on
-       top of it.
+  <!-- The mark is a lowercase b built from the file-tree glyph the explorer
+       draws on every row. The stem is the tree guide line, entering from the
+       top edge of the tile because the tree continues above the viewport; the
+       bowl is the last-child connector turning right and closing on itself; the
+       counter inside the bowl is the block cursor sitting on the found row.
+       Read it as a letter and it is the initial of the product; read it as a
+       glyph and it is one listing row with the cursor on it.
 
-       Built to survive the worst context first. At a 16px tab it holds because
-       there are only five strokes on a 7.6-unit row pitch; the found row stays
-       distinguishable in greyscale and in one colour because it is also the
-       deepest and the longest, so the accent never carries the meaning alone.
-       Contrast on the tile is 8.9:1 for the guide and 13.2:1 for the found row.
-       Geometry is on a 32-unit grid, optically centred rather than
-       bounding-box centred, with round caps and joins throughout. -->
-  <rect width="32" height="32" rx="7" fill="#0e1119"/>
-  <g fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M16.5 8.4 H7.5 V23.6 H15.3" stroke="#6fb7ff"/>
-    <path d="M12.3 8.4 V16 H18.9" stroke="#ffd16b"/>
-  </g>
-  <rect x="21.9" y="14.1" width="3.8" height="3.8" rx="1.1" fill="#ffd16b"/>
+       Colours are grove tokens, not new values: the tile is color-match, the
+       ink is color-term (src/theme.css, custom properties named here without
+       their leading hyphens because an XML comment may not contain that pair).
+       Amber is the colour a real listing uses for a search hit, so the tab
+       reads as the found row among the other tabs; ink on amber measures
+       13.2:1. A warm tile is also rare in a strip of dark developer-tool tabs,
+       which is what makes it findable at a glance.
+
+       Built to survive the worst context first. Geometry is on a 32-unit grid
+       with every edge on an even unit, so at a 16px tab each stroke is exactly
+       two whole pixels and the counter is a clean 5 by 4 block. One solid shape
+       with one hole: it holds in greyscale, in a single colour without the
+       tile, and blurred. The optical centre sits a unit right of the geometric
+       one because the mass of a b lives in its bowl. -->
+  <clipPath id="tile"><rect width="32" height="32" rx="7"/></clipPath>
+  <rect width="32" height="32" rx="7" fill="#ffd16b"/>
+  <path clip-path="url(#tile)" fill="#0e1119" fill-rule="evenodd" d="M8 -2h4v14h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4ZM12 16v8h10v-8Z"/>
 </svg>
