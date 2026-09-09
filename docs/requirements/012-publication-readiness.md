@@ -2,7 +2,7 @@
 id: 012-publication-readiness
 title: The repository is publishable by a stranger, and safe to have published
 summary: "Publication is blocked on git history and on the remote's object store — not the tip: commits carry a sibling service's name (one in a subject line), a deleted file maps an outside decision corpus, and an unreferenced commit is still served by SHA after a reset. The route is settled: a new repository, never a rewrite. The tip is now clean and the finish line is a public repository only; what remains is the publication surface and the export itself."
-status: planned
+status: in-progress
 rank: 12
 tags: [packaging, config]
 blocks: []
@@ -22,8 +22,9 @@ cloned, forked and indexed within minutes, and re-privatising it detaches
 existing forks into their own network rather than withdrawing them. So every
 item below is checked *before* the flip, not after.
 
-This requirement is the checklist. It is `planned`, not `standing` — it closes
-when the repository is public and a stranger has built it from a fresh clone.
+This requirement is the checklist. It is `in-progress`, not `standing` — B3, B6
+and B8 have landed and the rest is named below; it closes when the repository is
+public and a stranger has built it from a fresh clone.
 
 ## What is already true
 
@@ -43,7 +44,7 @@ when the repository is public and a stranger has built it from a fresh clone.
   one OFL-1.1 (the variable font), one Unlicense, one 0BSD. Nothing reciprocal
   reaches the shipped code.
 - **The repo's own gate is green.** `mise run typecheck` passes; `mise run test`
-  runs 262 tests across 22 files, all passing.
+  runs 328 tests across 25 files, all passing (re-measured 2026-09-09).
 - **The tracked tree names nothing outside itself.** The clean-up landed: the
   sibling-service requirement is now stated as a generic share service, and no
   outside name survives in any tracked file at the tip. The source-comment half
@@ -89,25 +90,52 @@ a rewrite cannot reach an object the server keeps serving by SHA.
 
 There were 118 of them at `3a4907b`, across 56 tracked files in `src/`,
 `server/`, `shared/`, `scripts/`, `vite.config.ts` and `flake.nix`, and a reader
-with only this repository could resolve none. Every one now names the slug
-[`103-engineering-conventions`](103-engineering-conventions.md) carries instead,
-rewritten per site rather than substituted, because most wove the number into
-the sentence. `git grep -E "ADR-[0-9]{4}"` over the tracked tree returns nothing
-outside `OPEN_SOURCING_PROGRESS.md`, which is the open-sourcing run's own
-working file and does not cross into the new repository.
+with only this repository could resolve none. Almost all of them now name the
+slug [`103-engineering-conventions`](103-engineering-conventions.md) carries
+instead, rewritten per site rather than substituted, because most wove the
+number into the sentence. `git grep -E "ADR-[0-9]{4}"` over the tracked tree
+returns nothing outside `OPEN_SOURCING_PROGRESS.md`, which is the open-sourcing
+run's own working file and does not cross into the new repository.
 
 Three rules gained the clause their citing comments leaned on and `103` did not
 yet state — the `zod-defaults` exemptions, `affordances-adjacent`'s
-scope-of-effect clause, and `mise-task-flags`, which had no slug at all. Two
-sites cited rules that are not conventions of this repo (a general fail-loudly
-posture in `flake.nix`, a derived-from-a-sibling note in `shared/language.ts`)
-and now state their constraint in their own words, citing nothing.
+scope-of-effect clause, and `mise-task-flags`, which had no slug at all.
+
+**Six sites end without a slug, deliberately.** Two cited rules that are not
+conventions of this repo at all, and now state their constraint in their own
+words: a general fail-loudly posture in `flake.nix`, and a
+derived-from-a-sibling note in `shared/language.ts`. The other four had a better
+target than a slug:
+
+- `server/index.ts:95` and `:124` are **OpenAPI `description` strings**, served
+  at `/api/openapi.json` and `/api/docs`. A slug in a published spec is no more
+  resolvable to an API consumer than a record number, so the citation is dropped
+  rather than translated. These are the only two non-comment lines this pass
+  changed in shipped output (a `describe()` title in
+  `server/services/public-origin.test.ts` is the third changed non-comment line,
+  and it is test-local).
+- `server/index.ts:197` points at
+  [`100-loopback-only-service`](100-loopback-only-service.md) instead — the
+  requirement that actually governs the loopback bind, which is more specific
+  than any convention slug.
+- `server/services/bind-exposure.ts:15` drops the pointer outright: the number
+  it carried maps to `fail-loud-ports`, but that line is about the **bind
+  address**, not a port conflict, so it was a mis-citation to begin with. The
+  sentence states the rule in full and the module header carries the reasoning.
 
 The same sweep took three non-`ADR` outside names the grep would have missed: a
 sibling repository named in `shared/language.ts` and its test, an outside
 concept number in `src/theme.css` and `README.md`, and the local notebook named
-in `.gitignore` and `AGENTS.md`. The gitignore *entry* stays — it is
-configuration, and it is the one form the rule permits.
+in `.gitignore` and `AGENTS.md`. Three of those four mentions are gone.
+
+**One survives and needs an explicit sign-off before the flip:** the bare
+`.nightshift` pattern at `.gitignore:37`. `AGENTS.md` scopes its no-outside-names
+rule to `docs/`, source comments and itself, and offers "make it configuration"
+as the escape — which an ignore pattern is. But it is the one place a stranger
+still meets a name they cannot resolve, in a tree that becomes a public
+repository's first commit and cannot be withdrawn. Keeping it is defensible, not
+automatic; it is the mandate holder's call, not the builder's, and it is
+recorded here unresolved rather than assumed.
 
 `AGENTS.md`'s "Known gap, 2026-08-15" block described this pass as pending and
 has been removed; the rule it guarded — cite the slug, never a number — is now
