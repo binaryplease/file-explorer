@@ -3,8 +3,11 @@
   <!-- The mark is the core loop drawn as a glyph: a tree guide with two sibling
        rows, and one row nested a level deeper, narrowed to by search and
        carrying the block cursor. Colours are grove tokens, not new values — the
-       tile is --color-term, the guide and sibling rows are --color-dir, the
-       found row and its cursor are --color-match (src/theme.css). That is the
+       tile is the color-term token, the guide and sibling rows are color-dir,
+       the found row and its cursor are color-match (src/theme.css). Those are
+       CSS custom properties, named here without their leading double hyphen
+       because an XML comment may not contain one — restore it and this file
+       stops parsing, so the icon renders nowhere. That is the
        same blue/amber pairing a real listing uses for directories and search
        hits, so the icon is a sample of the palette rather than a decoration on
        top of it.
