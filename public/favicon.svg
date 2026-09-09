@@ -1,27 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="binp-file-explorer">
   <title>binp-file-explorer</title>
-  <!-- The mark is the broot loop drawn as one gesture: the tree connectors the
-       explorer prints on every row, stepping down and to the right into the
-       tree, and ending on the block cursor sitting on the found row. Two steps
-       of guide line and last-child connector, then the cursor. Read fast it is
-       a staircase going down; read slowly it is a listing you have just
-       descended and the item you landed on.
+  <!-- The mark is a boar, face on. A boar roots: it digs through the grove
+       floor with its snout until it finds the one thing it was after, which is
+       what this explorer does to a tree. The snout is the focal shape and the
+       only colour, in color-match amber, the colour a real listing uses for a
+       search hit. It is also a nod to the lineage: the terminal explorer this
+       one is modelled on is fronted by a hand-drawn cow, and a farm animal is
+       the family joke, told with a different animal.
 
-       Colours are grove tokens, not new values (src/theme.css, custom
-       properties named here without their leading hyphens because an XML
-       comment may not contain that pair). The tile is the light-theme
-       color-dir blue, the same blue a directory is named in; the stairs are the
-       light-theme color-chrome cream; the cursor is color-match amber, the
-       colour a real listing uses for a search hit. Cream on the tile measures
-       5.6:1 and the amber block is also the heaviest shape, so the emphasis
-       survives greyscale and a single colour without the tile.
+       No tile. The head is ink on light browser chrome and cream on dark
+       chrome, swapped by the prefers-color-scheme rule in the style block
+       below, which Chromium and Firefox honour for SVG favicons. Eyes and
+       tusks are holes in the head path rather than painted highlights, so they
+       show whatever the tab strip is and contrast with the head in both
+       schemes. The nostrils stay ink in both schemes because they sit on
+       amber, where ink measures 13.2:1.
 
-       Built to survive the worst context first. Geometry is on a 32-unit grid
-       with every stroke edge on an even unit, so at a 16px tab each run of the
-       stair is exactly two whole pixels and the cursor is a clean 4 by 5 block.
-       Saturated blue holds against both light and dark browser chrome, which
-       is where a favicon lives. -->
-  <rect width="32" height="32" rx="7" fill="#2563eb"/>
-  <path d="M6 5V12H14V20H20" fill="none" stroke="#f6f8fc" stroke-width="4" stroke-linejoin="miter"/>
-  <rect x="20" y="16" width="8" height="10" fill="#ffd16b"/>
+       Built to survive the worst context first. At a 16px tab the silhouette
+       is a wide head with a spiked crest and a 7 by 5 amber block; the crest
+       is what keeps it a boar rather than a pig, so it is oversized on
+       purpose. Verified at 16, 32 and 128px on light and dark chrome, and in
+       a single colour with the snout knocked out. The raster fallbacks in
+       this directory cannot swap colour and carry the ink head. -->
+  <style>.head{fill:#1b2130}@media (prefers-color-scheme:dark){.head{fill:#e8ecf3}}</style>
+  <path class="head" fill-rule="evenodd" d="M3 2L10 7Q16 5 22 7L29 2Q31 15 27 23Q23 30 16 30Q9 30 5 23Q1 15 3 2ZM11 6.5l2-5 1.5 5zM14.4 6.2L16 .5l1.6 5.7zM17.5 6.5l1.5-5 2 5zM10.5 11.7a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 1 0 0-3.8ZM21.5 11.7a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 1 0 0-3.8ZM7.6 28C5.2 25.6 4.6 22 6 18.2L9.2 20.6C8.2 22.6 8.3 25 9.2 27.2ZM24.4 28c2.4-2.4 3-6 1.6-9.8l-3.2 2.4c1 2 .9 4.4 0 6.6Z"/>
+  <rect x="9" y="18" width="14" height="9.5" rx="4.5" fill="#ffd16b"/>
+  <ellipse cx="13.2" cy="22.8" rx="1.6" ry="2.1" fill="#1b2130"/>
+  <ellipse cx="18.8" cy="22.8" rx="1.6" ry="2.1" fill="#1b2130"/>
 </svg>
