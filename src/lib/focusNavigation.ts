@@ -1,6 +1,6 @@
 // The explorer's "which directory is focused" history — factored out as a seam
-// so the same App drives it two ways (ADR-0007 factories, ADR-0010 one job
-// each):
+// so the same App drives it two ways (`factory-services` factories,
+// `composable-design` one job each):
 //
 //   - standalone: the focus lives in the page URL (`?path=`), so it is
 //     deep-linkable and the browser's own back/forward walk it. This is the

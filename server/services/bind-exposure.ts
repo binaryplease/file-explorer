@@ -12,7 +12,7 @@
 // `EXPLORER_CONFINE` off, everything else the server's user can read, because
 // unconfined mode resolves absolute paths.
 //
-// The rule, evaluated once at startup and never per request (ADR-0018):
+// The rule, evaluated once at startup and never per request:
 // non-loopback bind + no named hosts = refuse to start. Naming the served hosts
 // in EXPLORER_ALLOWED_HOSTS is the acknowledgement that a proxy is in front.
 
@@ -53,7 +53,8 @@ const UNCONFINED_WARNING =
   '  Set EXPLORER_CONFINE=true unless the reverse proxy in front is trusted to ' +
   'authenticate every request.'
 
-// Pure decision (ADR-0010): no logging, no exiting, so tests can assert on it.
+// Pure decision (`composable-design`): no logging, no exiting, so tests can
+// assert on it.
 export function evaluateBindExposure(options: {
   bindHost: string
   additionalAllowedHosts: string[]
@@ -70,9 +71,9 @@ export function evaluateBindExposure(options: {
   return { kind: 'exposed', warnings: isConfined ? [] : [UNCONFINED_WARNING] }
 }
 
-// Factory per ADR-0007. Orchestration half: turns the decision into the process
-// outcome — a fatal exit or a warning on stderr. Injectable sinks keep it
-// testable without killing the test runner.
+// Factory per `factory-services`. Orchestration half: turns the decision into
+// the process outcome — a fatal exit or a warning on stderr. Injectable sinks
+// keep it testable without killing the test runner.
 export function createBindExposurePolicy(options: {
   reportWarning?: (message: string) => void
   fail?: (message: string) => never

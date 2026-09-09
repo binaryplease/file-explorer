@@ -3,12 +3,12 @@
  * port actually bound.
  *
  * `strict` binds the requested port exactly and lets Elysia's EADDRINUSE throw
- * (ADR-0018 — a conflict is a fatal startup error). `auto` walks upward from
- * the requested port to the first free one, announcing each skip and binding
+ * (`fail-loud-ports` — a conflict is a fatal startup error). `auto` walks upward
+ * from the requested port to the first free one, announcing each skip and binding
  * in-process — so a fleet of concurrently-launched instances converges on
  * distinct ports in microseconds, without the reload-per-collision cost of
  * probing-then-respawning from outside. Auto is opt-in (the CLI sets it) and
- * never silent, so the ADR-0018 posture holds: nothing falls back quietly, and
+ * never silent, so the fail-loud posture holds: nothing falls back quietly, and
  * a directly-launched server stays strict.
  *
  * The bind stays exclusive either way (`reusePort: false`) — Elysia's Bun

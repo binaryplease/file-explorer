@@ -221,7 +221,7 @@ function baseName(relativePath: string): string {
   return lastSlashIndex === -1 ? relativePath : relativePath.slice(lastSlashIndex + 1)
 }
 
-// Every field is emitted, nullish included (ADR-0024): the panel reads a
+// Every field is emitted, nullish included (`emit-nullish`): the panel reads a
 // complete shape whichever kind came back.
 function emptyPreview(relativePath: string): Preview {
   return {
@@ -241,9 +241,9 @@ function emptyPreview(relativePath: string): Preview {
   }
 }
 
-// Factory per ADR-0007. Confinement is not re-implemented here — it belongs to
-// the filesystem service, and every path this service touches has been resolved
-// through it first.
+// Factory per `factory-services`. Confinement is not re-implemented here — it
+// belongs to the filesystem service, and every path this service touches has
+// been resolved through it first.
 export function createPreviewService(options: { filesystemService: FilesystemService }) {
   const { filesystemService } = options
 

@@ -2,7 +2,8 @@ import type { ListDirectoryFailureReason, ReadFileFailureReason } from '../servi
 import type { PreviewFailureReason } from '../services/preview'
 
 // One mapping from a service failure reason to its HTTP shape, shared by every
-// route that can hit the same reasons (ADR-0026's one-guard rule, in route form).
+// route that can hit the same reasons — the one-guard half of
+// `one-descriptor-one-wrapper-one-guard`, in route form.
 export function failureStatusAndMessage(
   reason: ListDirectoryFailureReason | ReadFileFailureReason | PreviewFailureReason,
   requestedPath: string,

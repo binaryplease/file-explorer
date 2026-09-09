@@ -2,14 +2,14 @@
  * Port probing — "can this process bind here?" and "find the first free port".
  *
  * This capability depends only on `node:net`, not on the dev-server harness or
- * the CLI that use it, so per ADR-0032 it lives in its own module rather than
- * inside `scripts/dev-ports.ts`. Both the dev port resolver and the standalone
- * CLI's auto-port assignment compose these functions.
+ * the CLI that use it, so per `code-lives-with-dependencies` it lives in its own
+ * module rather than inside `scripts/dev-ports.ts`. Both the dev port resolver
+ * and the standalone CLI's auto-port assignment compose these functions.
  *
- * ADR-0018 stays intact: probing never *replaces* a strict bind. A caller that
- * auto-assigns picks a concrete free port *before* startup and announces it;
- * the runtime bind that follows is still exclusive and still dies loudly if the
- * chosen port was stolen between the probe and the bind.
+ * `fail-loud-ports` stays intact: probing never *replaces* a strict bind. A
+ * caller that auto-assigns picks a concrete free port *before* startup and
+ * announces it; the runtime bind that follows is still exclusive and still dies
+ * loudly if the chosen port was stolen between the probe and the bind.
  */
 import { createServer } from 'node:net'
 
@@ -29,7 +29,7 @@ export function isPortAvailable(port: number, host: string): Promise<boolean> {
     probeServer.once('error', () => resolvePromise(false))
     probeServer.once('listening', () => probeServer.close(() => resolvePromise(true)))
     // exclusive: true — never let SO_REUSEPORT-style sharing mask a conflict
-    // (ADR-0018).
+    // (`fail-loud-ports`).
     probeServer.listen({ port, host, exclusive: true })
   })
 }

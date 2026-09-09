@@ -1,6 +1,6 @@
 import { z } from 'zod/v4'
 
-// ADR-0020: GET /api returns this discovery document with absolute URLs.
+// `discovery-routes`: GET /api returns this document, with absolute URLs.
 export const DiscoveryDocSchema = z.object({
   name: z.string().describe('Service name (matches `package.json#name`).'),
   version: z.string().describe('Service version.'),
@@ -15,9 +15,9 @@ export const HealthResponseSchema = z.object({
 })
 export type HealthResponse = z.infer<typeof HealthResponseSchema>
 
-// ADR-0015: the operational snapshot the CLI's `status` view renders. Every
-// field carries a default (ADR-0029) and is emitted even when nullish
-// (ADR-0024) so a consumer always sees the full shape.
+// The operational snapshot the CLI's `daemon-lifecycle` status view renders.
+// Every field carries a default (`zod-defaults`) and is emitted even when
+// nullish (`emit-nullish`), so a consumer always sees the full shape.
 export const StatusResponseSchema = z.object({
   name: z.string().default('binp-file-explorer').describe('Service name.'),
   version: z.string().default('0.0.0').describe('Service version.'),

@@ -31,7 +31,7 @@ result
 # Brand/logo scratch (creative explorations)
 brand
 
-# Local dev notebook: chronological log, ideas not yet promoted, run logs
-# (sole-dev, local-only — see .nightshift/README.md). Requirements, decisions
-# and research are NOT here: they live in the committed docs/.
+# Local dev notebook: a chronological working log, run logs, and ideas not yet
+# promoted. Local-only scratch; nothing committed may depend on it. Requirements,
+# decisions and research are NOT here — they live in the committed docs/.
 .nightshift

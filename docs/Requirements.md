@@ -57,10 +57,11 @@ Status vocabulary:
 
 ## Index
 
-The table below is **generated** by `index build` and is the only listing of
+The table below is **generated** from `requirements/` and is the only listing of
 this directory that exists. Do not edit it by hand, and do not copy it
 elsewhere — point at it instead. `ls -p requirements | grep -v /` and the row
-count are the same number, by construction.
+count are the same number, by construction. Rebuilding it is a maintainer step
+(see `AGENTS.md`): add your file and leave the marker block below untouched.
 
 <!-- index:start fields=status,rank -->
 | File | Summary | Status | Rank |
@@ -76,7 +77,7 @@ count are the same number, by construction.
 | [009-cli-daemon-and-status.md](requirements/009-cli-daemon-and-status.md) | `bfe [path]` serves the working directory in the foreground and `bfe daemon …` runs the singleton; port selection lives in the server and is strict by default. | shipped | 9 |
 | [010-broot-tree-display-and-navigation.md](requirements/010-broot-tree-display-and-navigation.md) | broot's exact connectors, screen-fit auto-open and interleaved alpha order are delivered; vim keys, the back-vs-parent split and the extra columns are open. | in-progress | 10 |
 | [011-command-palette-verbs.md](requirements/011-command-palette-verbs.md) | A keyboard-first verb palette sharing one descriptor per verb with the context menu, now that copy, open and publish are actions worth naming. | proposed | 11 |
-| [012-publication-readiness.md](requirements/012-publication-readiness.md) | Publication is blocked on git history and on the remote's object store — not the tip: commits carry a sibling service's name (one in a subject line), a deleted file maps an outside decision corpus, and an unreferenced commit is still served by SHA after a reset. The route is settled: a new repository, never a rewrite. The tip's own gap is 121 source comments citing record numbers from that corpus. | planned | 12 |
+| [012-publication-readiness.md](requirements/012-publication-readiness.md) | Publication is blocked on git history and on the remote's object store — not the tip: commits carry a sibling service's name (one in a subject line), a deleted file maps an outside decision corpus, and an unreferenced commit is still served by SHA after a reset. The route is settled: a new repository, never a rewrite. The tip is now clean and the finish line is a public repository only; what remains is the publication surface and the export itself. | planned | 12 |
 | [013-large-directory-listing-performance.md](requirements/013-large-directory-listing-performance.md) | The stress fixture and per-listing timing that gate every optimization here are built, and the per-entry `lstat`+`stat` pair is gone: 40 000 entries went from ~243ms to ~98ms — a real ~2.4× cut that still misses the budget at ~2×. The few-thousand-entry scale the budget is written for already met it before this change and still does. What is left is `childCount`: one `readdir` per subdirectory, ~61ms of the remainder. | in-progress | 13 |
 | [014-relative-links-in-rendered-markdown.md](requirements/014-relative-links-in-rendered-markdown.md) | A relative link in a rendered markdown file opens the entry it names, resolved against the previewed file's own directory: the click belongs to the app, so the reader lands on the linked entry instead of the browser navigating away from the explorer. | shipped | 14 |
 | [100-loopback-only-service.md](requirements/100-loopback-only-service.md) | This is an unauthenticated filesystem API: the loopback bind is the boundary, and a non-loopback `HOST` fails closed unless the operator names the served hosts. | standing | — |

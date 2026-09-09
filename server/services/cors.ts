@@ -37,8 +37,8 @@ export function corsHeadersFor(
   }
 }
 
-// Factory per ADR-0007. Closes over the configured allowlist so the request
-// path just asks "headers for this Origin?" without re-reading config.
+// Factory per `factory-services`. Closes over the configured allowlist so the
+// request path just asks "headers for this Origin?" without re-reading config.
 export function createCorsPolicy(options: { allowedOrigins: string[] }) {
   const { allowedOrigins } = options
   return {

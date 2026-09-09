@@ -10,7 +10,7 @@
  *                              assigns a free port so any number of these run at
  *                              once. Ctrl-C stops it.
  *
- *   bfe daemon start [path]    Background daemon lifecycle (ADR-0015): a single
+ *   bfe daemon start [path]    Background `daemon-lifecycle` verbs: a single
  *   bfe daemon stop            keep-it-running server, hardened spawn/kill in
  *   bfe daemon restart         ./cli/daemon.ts.
  *   bfe daemon status
@@ -22,7 +22,7 @@
  * Ports: without an explicit --port the CLI resolves a free port *before*
  * launching (auto-assignment, announced), so multiple instances never collide.
  * With --port the value is strict — the server binds it and dies loudly on a
- * conflict (ADR-0018). Either way the runtime bind stays exclusive.
+ * conflict (`fail-loud-ports`). Either way the runtime bind stays exclusive.
  *
  * Confinement is off by default (a local, on-demand tool: the served root is a
  * starting anchor, not a boundary — you can browse up out of it, matching broot
@@ -84,7 +84,8 @@ async function runServe(invocation: LaunchOptions): Promise<never> {
 
   if (port === null) {
     // Exited before binding — a strict-port conflict or a fatal startup, whose
-    // reason the server already printed on the inherited stderr (ADR-0018).
+    // reason the server already printed on the inherited stderr
+    // (`fail-loud-ports`).
     const exitCode = serverProcess.exitCode
     await discardServerProcess(serverProcess)
     process.exit(exitCode ?? 1)
@@ -111,7 +112,7 @@ async function runServe(invocation: LaunchOptions): Promise<never> {
   process.exit(serverProcess.exitCode ?? 0)
 }
 
-// --- Daemon subcommands (ADR-0015) ---
+// --- Daemon subcommands (the `daemon-lifecycle` verbs) ---
 
 async function runDaemonStart(invocation: LaunchOptions): Promise<never> {
   const root = resolveRoot(invocation.positionals[0])
@@ -211,7 +212,7 @@ function runDaemon(
   }
 }
 
-// --- Top-level status (ADR-0015 §5) ---
+// --- Top-level status (the `daemon-lifecycle` status view) ---
 
 async function runStatus(): Promise<never> {
   const probe = await daemonProbe()

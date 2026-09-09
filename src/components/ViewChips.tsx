@@ -12,8 +12,8 @@ type ViewChipsProps = {
 }
 
 // The view-mode chips that reconfigure the tree. They ride on the tree's root
-// line, directly above the rows they change (ADR-0031). The preview chip sits
-// last, at the edge the preview column opens from.
+// line, directly above the rows they change (`affordances-adjacent`). The
+// preview chip sits last, at the edge the preview column opens from.
 export function ViewChips({
   showSizes,
   showHidden,

@@ -143,7 +143,7 @@ const MARKDOWN_COMPONENTS: Components = {
   // diagram. The block's frame is built here either way and handed to the
   // diagram as its source fallback, so the pending and failed-to-parse states
   // render the identical code block rather than a second copy of its styling
-  // (ADR-0027: the frame is the invariant).
+  // (`share-the-invariant`: the frame is the invariant).
   pre: ({ children, node }) => {
     const codeBlock = (
       <pre className="my-2 overflow-auto rounded border border-line-2 bg-void/50 p-3 font-mono whitespace-pre">
@@ -169,8 +169,8 @@ const MARKDOWN_COMPONENTS: Components = {
 }
 
 // Frontmatter is a mapping of arbitrary keys to arbitrary YAML values; there is
-// no fixed schema to model (so ADR-0013 does not apply here), which is exactly
-// why we lean on a real YAML parser rather than hand-rolling one.
+// no fixed schema to model (so `zod-single-source` does not apply here), which
+// is exactly why we lean on a real YAML parser rather than hand-rolling one.
 type FrontmatterData = Record<string, unknown>
 
 // Split a leading Jekyll-style YAML frontmatter block (a `---` fence on the very

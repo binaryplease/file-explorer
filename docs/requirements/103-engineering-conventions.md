@@ -11,7 +11,7 @@ research: []
 decisions: []
 conventions: []
 shipped: null
-updated: 2026-08-15
+updated: 2026-09-09
 ---
 
 # The engineering conventions binding on this repo
@@ -41,7 +41,10 @@ them.
 schemas double as the OpenAPI spec via `z.toJSONSchema`.
 
 **`zod-defaults`** — Every Zod field declares a default, so adding a field is
-forward-compatible for existing payloads.
+forward-compatible for existing payloads. Two kinds of field are deliberately
+exempt and stay defaultless so a missing value fails loudly instead of resolving
+to a plausible lie: **identity** fields (the pid/host/port of a recorded daemon)
+and **required inputs** (a search pattern).
 
 **`emit-nullish`** — Output completeness: a nullish property is emitted
 explicitly as `null`, never omitted. A reader must be able to tell "absent" from
@@ -81,6 +84,11 @@ recording where the server actually bound.
 artifact, the artifact's name matches the repository name exactly, with no
 suffix.
 
+**`mise-task-flags`** — A `.mise.toml` task's `run` calls its command as
+directly as it can. Signals, watch mode, teardown and exit codes are solved with
+the documented flags of the tools involved (`concurrently -k`, `bun --watch`),
+never with `trap`/PID/`wait` ceremony wrapped around them in shell.
+
 ## Client and UI
 
 **`never-hide-a-control`** — A control is never hidden because it is currently
@@ -89,7 +97,9 @@ removes the user's ability to discover why it is unavailable.
 
 **`affordances-adjacent`** — An affordance lives adjacent to what it changes:
 the toggle for a tree column sits on the tree, not in a settings panel
-elsewhere.
+elsewhere. Scope of placement matches scope of effect, so a control whose effect
+really is app-wide — the theme switch — is the one kind that earns global
+chrome.
 
 **`share-the-invariant`** — The unit of sharing is the invariant, not the
 markup. Two surfaces that must agree share the descriptor that makes them agree,
@@ -151,3 +161,13 @@ This file was `103-binding-adrs`, a table of numbered records held in a separate
 repository. The numbers were an external reference a reader of this repo could
 not resolve, so the rules were restated here in full and the numbering dropped.
 The requirement number `103` is unchanged.
+
+**2026-09-09.** The restatement reached the source. Every citation of one of
+those numbers in `src/`, `server/`, `shared/`, `scripts/`, `vite.config.ts` and
+`flake.nix` now names the slug above instead — 118 sites across 56 files. Three
+rules gained the clause the comments leaned on and this file did not yet state:
+the `zod-defaults` exemptions, the `affordances-adjacent` scope-of-effect
+clause, and `mise-task-flags`, which had no slug here at all. Two sites cited
+rules that are not conventions of this repo — a general fail-loudly posture in
+`flake.nix` and a derived-from-a-sibling note in `shared/language.ts` — and
+those state their constraint in their own words, with no citation.

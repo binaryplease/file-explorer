@@ -164,7 +164,7 @@ describe('previewEntry', () => {
     // An unmapped extension keeps the plain-text default (the client renders it
     // unhighlighted).
     expect(result.preview.language).toBe('txt')
-    // ADR-0024: the shape is complete whichever kind came back.
+    // `emit-nullish`: the shape is complete whichever kind came back.
     expect(result.preview.directory).toBeNull()
     expect(result.preview.mediaUrlPath).toBeNull()
   })

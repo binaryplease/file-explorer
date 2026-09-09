@@ -24,9 +24,9 @@ function decodePathname(pathname: string): string | null {
   }
 }
 
-// Pure (ADR-0010): path arithmetic only, no `stat`, so the containment rule is
-// testable without a dist/ tree. `null` means "not an asset request" — serve
-// the SPA shell.
+// Pure (`composable-design`): path arithmetic only, no `stat`, so the
+// containment rule is testable without a dist/ tree. `null` means "not an asset
+// request" — serve the SPA shell.
 export function resolveClientAssetPath(options: {
   requestUrl: string
   clientDirectory: string

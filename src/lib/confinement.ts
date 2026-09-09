@@ -1,9 +1,10 @@
 import type { DirectoryEntry } from '../../shared/filesystem.schema'
 
-// One descriptor for the confinement refusal (ADR-0026). A blocked symlink is
-// refused on three client surfaces — the tree row's badge, the error strip when
-// the user acts on it, and the preview panel — and they must say the same thing
-// in the same words. The server's 403 body says the same in its own words for
+// One descriptor for the confinement refusal, per
+// `one-descriptor-one-wrapper-one-guard`. A blocked symlink is refused on three
+// client surfaces — the tree row's badge, the error strip when the user acts on
+// it, and the preview panel — and they must say the same thing in the same
+// words. The server's 403 body says the same in its own words for
 // API consumers; this module is the client's copy of that message.
 
 // Short enough to ride on a tree row without pushing the name out of view.

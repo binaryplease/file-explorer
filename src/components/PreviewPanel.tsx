@@ -42,8 +42,9 @@ import { ToggleChip } from './ToggleChip'
 const NO_DOCUMENT_LINES: Preview['lines'] = []
 const EMPTY_MATCHED_INDEXES: ReadonlySet<number> = new Set()
 
-// One descriptor per preview kind (ADR-0026): the icon and the label the header
-// badge and the marker block both read from, so they can never disagree.
+// One descriptor per preview kind (`one-descriptor-one-wrapper-one-guard`): the
+// icon and the label the header badge and the marker block both read from, so
+// they can never disagree.
 const PREVIEW_KIND_DESCRIPTORS: Record<PreviewKind, { label: string; Icon: typeof IconFileText }> = {
   text: { label: 'text', Icon: IconFileText },
   image: { label: 'image', Icon: IconPhoto },
@@ -128,8 +129,9 @@ function DirectorySummaryView({ preview }: { preview: Preview }) {
 // endpoint into a native element (Range-seekable and progressive, so nothing is
 // buffered into the panel) — enrichment, exactly like the image preview. A
 // format the browser cannot decode fires `onError`; we then fall back to a
-// marker that explains why instead of leaving a dead player on screen (ADR-0025:
-// the affordance stays, its unavailable state explained rather than hidden).
+// marker that explains why instead of leaving a dead player on screen
+// (`never-hide-a-control`: the affordance stays, its unavailable state
+// explained rather than hidden).
 function MediaPreviewView({ preview, src }: { preview: Preview; src: string }) {
   const [playbackFailed, setPlaybackFailed] = useState(false)
   // Reset when the selection moves to another media file — otherwise a prior
@@ -189,11 +191,12 @@ function PdfPreviewView({ preview, src }: { preview: Preview; src: string }) {
   )
 }
 
-// The one description of a cut-short preview (ADR-0026): every surface that
-// mentions the boundary — the banner above the document, the marker at its end —
-// reads its numbers from here, so they can never disagree about how much is
-// missing. The panel says it in quantities, never "there is more": the reader
-// can see exactly what fraction of the file they are looking at.
+// The one description of a cut-short preview
+// (`one-descriptor-one-wrapper-one-guard`): every surface that mentions the
+// boundary — the banner above the document, the marker at its end — reads its
+// numbers from here, so they can never disagree about how much is missing. The
+// panel says it in quantities, never "there is more": the reader can see
+// exactly what fraction of the file they are looking at.
 function truncationSummary(preview: Preview): {
   missingBytes: number
   headline: string
@@ -221,7 +224,7 @@ function truncationSummary(preview: Preview): {
 // document, impossible to mistake for content and impossible to scroll away
 // from. It carries the way out, too — one click re-reads the file whole — and
 // when that has already happened the button stays put and explains why it is
-// spent rather than vanishing (ADR-0025).
+// spent rather than vanishing (`never-hide-a-control`).
 function TruncationBanner({
   preview,
   isFullTextRequested,
@@ -277,9 +280,9 @@ function TruncationEndMarker({ preview }: { preview: Preview }) {
 
 // Renders one line's content, overlaying the document-search highlight on top
 // of whatever the line already shows — plain text, or Shiki tokens. Matched
-// character runs get the shared highlight token (ADR-0028); on syntax-coloured
-// lines the unmatched runs keep their token colour, so highlighting a match
-// never strips the surrounding code of its colours. When nothing on the line
+// character runs get the shared highlight token (`interaction-token`); on
+// syntax-coloured lines the unmatched runs keep their token colour, so
+// highlighting a match never strips the surrounding code of its colours. When nothing on the line
 // matched, the untouched fast paths render exactly as before.
 function renderLineContent(
   lineText: string,
@@ -454,10 +457,11 @@ function isMarkdownPreview(preview: Preview | null): boolean {
 }
 
 // The in-document find affordance, on the preview header beside the toggles it
-// keeps company with (ADR-0031 — it governs the document shown right below it).
-// Always present for a searchable text preview so the capability is discoverable
-// (ADR-0025); the search icon hands focus to the document so typing can start,
-// and the match count / clear appear once a query exists.
+// keeps company with (`affordances-adjacent` — it governs the document shown
+// right below it). Always present for a searchable text preview so the
+// capability is discoverable (`never-hide-a-control`); the search icon hands
+// focus to the document so typing can start, and the match count / clear appear
+// once a query exists.
 function DocumentSearchIndicator({
   query,
   matchCount,
@@ -541,7 +545,8 @@ export function PreviewPanel({
   const showingRenderedMarkdown = isMarkdown && renderMarkdown
 
   // In-document fuzzy search: typing while the preview holds the keyboard filters
-  // the source text's words and highlights the matches (ADR-0019). It is offered
+  // the source text's words and highlights the matches
+  // (`highlight-what-matched`). It is offered
   // only for the source text view — the one surface whose characters this can
   // decorate — never the rendered-markdown or media kinds.
   const isSearchableText = preview?.kind === 'text' && !showingRenderedMarkdown
@@ -628,9 +633,10 @@ export function PreviewPanel({
     <div
       // The width comes from the divider beside it (the drag lives there); the
       // panel just fills it. The focus accent lives on the divider's edge
-      // (ADR-0028's shared interaction token) and is echoed by the header row
-      // below — the content surface stays untinted, since darkening the very
-      // text the panel exists to make readable works against the preview.
+      // (the shared `interaction-token` focus accent) and is echoed by the
+      // header row below — the content surface stays untinted, since darkening
+      // the very text the panel exists to make readable works against the
+      // preview.
       style={{ width }}
       className="flex min-h-0 flex-none flex-col"
     >
@@ -654,8 +660,9 @@ export function PreviewPanel({
             onClear={clearDocumentSearch}
           />
         )}
-        {/* Both preview toggles sit on the region they govern (ADR-0031) — the
-            preview itself — beside the size/kind badges, and each rides with the
+        {/* Both preview toggles sit on the region they govern
+            (`affordances-adjacent`) — the preview itself — beside the size/kind
+            badges, and each rides with the
             renderer it controls. The markdown render/source switch shows for a
             markdown file; the wrap switch governs the source-text renderer, so
             it drops out while rendered markdown is on. */}

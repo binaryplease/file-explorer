@@ -35,7 +35,7 @@ const trustedHostGuard = createTrustedHostGuard({ additionalAllowedHosts })
 // Cross-origin read access for the deliberate embedding seam — empty allowlist
 // (the default) means no CORS at all. See services/cors.ts.
 const corsPolicy = createCorsPolicy({ allowedOrigins })
-// Per ADR-0020 the discovery URLs are absolute, so they name an origin. The
+// The `discovery-routes` URLs are absolute, so they name an origin. The
 // forwarded-* headers only get a say where the operator acknowledged a proxy —
 // see services/public-origin.ts.
 const publicOriginResolver = createPublicOriginResolver({ additionalAllowedHosts })
@@ -75,7 +75,8 @@ const app = new Elysia()
       set.headers[headerName] = headerValue
     }
   })
-  // ADR-0020: human docs at /api/docs, machine spec at /api/openapi.json.
+  // `discovery-routes`: human docs at /api/docs, machine spec at
+  // /api/openapi.json.
   .use(
     openapi({
       path: '/api/docs',
@@ -91,7 +92,7 @@ const app = new Elysia()
           version: SERVICE_VERSION,
           description:
             'A high-speed Bun file explorer. Browse a served filesystem.\n\n' +
-            'Discovery entrypoint: `GET /api` (ADR-0020).',
+            'Discovery entrypoint: `GET /api`.',
         },
         tags: [
           { name: 'system', description: 'Discovery, liveness, and metadata endpoints.' },
@@ -100,8 +101,8 @@ const app = new Elysia()
       },
     }),
   )
-  // ADR-0020 §3: GET /api returns the discovery document. Always JSON, never a
-  // redirect to /api/docs. URLs must be absolute.
+  // `discovery-routes`: GET /api returns the discovery document. Always JSON,
+  // never a redirect to /api/docs. URLs must be absolute.
   .get(
     '/api',
     ({ request }) => {
@@ -120,7 +121,7 @@ const app = new Elysia()
         tags: ['system'],
         summary: 'API discovery',
         description:
-          'Canonical discovery entrypoint per ADR-0020. Returns a JSON document naming the docs, OpenAPI spec, and liveness probe. No auth required.',
+          'Canonical discovery entrypoint. Returns a JSON document naming the docs, OpenAPI spec, and liveness probe. No auth required.',
       },
     },
   )
@@ -132,9 +133,10 @@ const app = new Elysia()
       description: 'Returns `{ ok: true }` when the server is up. No auth required.',
     },
   })
-  // ADR-0015: operational snapshot the CLI's `status` view renders. Distinct
-  // from /api/health (liveness only) — this reports the served root, uptime,
-  // and process identity so a background daemon is fully inspectable.
+  // `daemon-lifecycle`: the operational snapshot the CLI's `status` view
+  // renders. Distinct from /api/health (liveness only) — this reports the
+  // served root, uptime, and process identity so a background daemon is fully
+  // inspectable.
   .get(
     '/api/status',
     () => {
@@ -190,9 +192,10 @@ if (!isDev) {
   })
 }
 
-// ADR-0018: binding a non-loopback address publishes an unauthenticated
-// filesystem API, so it is a fatal startup error unless the operator named the
-// served hosts. Decided once, here, before we ever bind — never per request.
+// Binding a non-loopback address publishes an unauthenticated filesystem API,
+// so it is a fatal startup error unless the operator named the served hosts
+// (docs/requirements/100-loopback-only-service.md). Decided once, here, before
+// we ever bind — never per request.
 createBindExposurePolicy().enforce({
   bindHost: config.HOST,
   additionalAllowedHosts,
@@ -200,9 +203,9 @@ createBindExposurePolicy().enforce({
 })
 
 // Bind the listen port. `strict` (the default, and every direct launch) fails
-// loudly on a conflict — ADR-0018; `auto` (the CLI's opt-in) walks to a free
-// port in-process, announcing each skip, so many instances coexist on distinct
-// ports. The bind stays exclusive either way (no SO_REUSEPORT). See
+// loudly on a conflict (`fail-loud-ports`); `auto` (the CLI's opt-in) walks to
+// a free port in-process, announcing each skip, so many instances coexist on
+// distinct ports. The bind stays exclusive either way (no SO_REUSEPORT). See
 // services/listen.ts.
 boundPort = listenWithStrategy(app, {
   host: config.HOST,

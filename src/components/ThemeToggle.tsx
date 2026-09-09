@@ -13,10 +13,11 @@ type ThemeToggleProps = {
   onSelectThemeMode: (nextThemeMode: ThemeMode) => void
 }
 
-// Segmented control for the color theme. Theme is a truly app-global affordance,
-// so it earns global chrome (ADR-0031) — it lives in the title bar. All three
-// options stay visible; the active one is highlighted (ADR-0025). Icon-only
-// buttons carry an aria-label so their meaning reaches assistive tech.
+// Segmented control for the color theme. `affordances-adjacent` puts a control
+// on the region it governs, and theme governs the whole app — so this one
+// genuinely earns global chrome and lives in the title bar. All three options
+// stay visible; the active one is highlighted (`never-hide-a-control`).
+// Icon-only buttons carry an aria-label so their meaning reaches assistive tech.
 export function ThemeToggle({ themeMode, onSelectThemeMode }: ThemeToggleProps) {
   return (
     <div

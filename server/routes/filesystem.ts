@@ -126,8 +126,8 @@ function rawResponseHeadersFor(entryBasename: string): Record<string, string> {
   }
 }
 
-// Factory per ADR-0007, and the seam a host app mounts: the routes take their
-// filesystem service as an argument instead of importing the process-wide
+// Factory per `factory-services`, and the seam a host app mounts: the routes take
+// their filesystem service as an argument instead of importing the process-wide
 // singleton, so `app.use(createFilesystemRoutes({ filesystemService }))` can
 // anchor a plugin instance at any root without reconstructing the server.
 // `server/index.ts` passes the config-wired singleton; standalone behaviour is

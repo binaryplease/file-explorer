@@ -1,17 +1,18 @@
 /**
  * Filesystem locations and on-disk state for the CLI's background daemon.
  *
- * Two ADRs shape this module:
- *   - ADR-0011 — the path to the service script is resolved against the CLI's
- *     own real location (following symlinks), never the shell's cwd, so a
- *     symlinked `bfe` on PATH still finds its sibling `index.{ts,js}`.
- *   - ADR-0015 — the PID/log path conventions, and the "daemon logic lives in
- *     its own module" split (probe/start/stop live in ./daemon.ts).
+ * Two conventions shape this module:
+ *   - `location-agnostic-cli` — the path to the service script is resolved
+ *     against the CLI's own real location (following symlinks), never the
+ *     shell's cwd, so a symlinked `bfe` on PATH still finds its sibling
+ *     `index.{ts,js}`.
+ *   - `daemon-lifecycle` — the PID/log path conventions, and the "daemon logic
+ *     lives in its own module" split (probe/start/stop live in ./daemon.ts).
  *
  * A companion state file sits beside the PID file: the PID file holds only the
- * pid (ADR-0015), while the state file records the port/host/root/startedAt the
- * daemon was launched with, so `status`, `stop`, and `logs` can reach the right
- * server without re-guessing its port.
+ * pid, while the state file records the port/host/root/startedAt the daemon was
+ * launched with, so `status`, `stop`, and `logs` can reach the right server
+ * without re-guessing its port.
  */
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -22,7 +23,8 @@ import { z } from 'zod/v4'
 const DAEMON_NAME = 'binp-file-explorer'
 
 /**
- * Directory of the running CLI file, resolved through any symlink (ADR-0011).
+ * Directory of the running CLI file, resolved through any symlink
+ * (`location-agnostic-cli`).
  * Falls back to this module's own URL when `Bun.argv[1]` cannot be realpath'd
  * (e.g. an odd embedding), so path resolution never throws at startup.
  */
@@ -57,8 +59,9 @@ export function readyFilePathFor(uniqueSuffix: string | number): string {
   return join(runtimeDirectory, `${DAEMON_NAME}.ready.${uniqueSuffix}`)
 }
 
-// Identity fields, no defaults (ADR-0029): a corrupt or partial state file must
-// fail loudly rather than resolve to a bogus zero-port daemon.
+// Identity fields, deliberately exempt from `zod-defaults`: a corrupt or
+// partial state file must fail loudly rather than resolve to a bogus zero-port
+// daemon.
 export const DaemonStateSchema = z.object({
   pid: z.number().int().positive(),
   host: z.string().min(1),
