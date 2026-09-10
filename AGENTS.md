@@ -16,7 +16,7 @@ is the only listing of that directory that exists.
 | Read | For |
 |---|---|
 | [`docs/Requirements.md`](docs/Requirements.md) → [`docs/requirements/`](docs/requirements/) | what the product must **do** or **be**. `001`–`0xx` are delivery requirements in rank order; `1xx` are standing constraints that bind every feature. Frontmatter schema and status vocabulary are in the index file. |
-| [`docs/Decisions.md`](docs/Decisions.md) → [`docs/decisions/`](docs/decisions/) | why we chose one way over another, and **what we rejected**. |
+| [`docs/Decisions.md`](docs/Decisions.md) → [`docs/decisions/`](docs/decisions/) | why we chose one **architecture** over another, and **what we rejected**. Architectural calls only — licensing, publication process and branding belong to the file they bind, not here. |
 | [`docs/Research.md`](docs/Research.md) → [`docs/research/`](docs/research/) | dated deep-dives, two of which are reference specs code is ported against. |
 
 [`docs/requirements/103-engineering-conventions.md`](docs/requirements/103-engineering-conventions.md)
@@ -26,8 +26,9 @@ slug that requirements cite in frontmatter and in prose. Read it once; the
 
 **Keeping the docs current is part of the change.** A change that ships a
 requirement moves its `status`/`updated` frontmatter and says in its body what
-landed. A change that settles a genuine either/or adds a file to
-`docs/decisions/`.
+landed. A change that settles a genuine **architectural** either/or adds a file
+to `docs/decisions/`; one that settles a licence, a release step or a visual
+choice states it in the file it binds instead.
 
 **Regenerating an index is a maintainer step.** Each index table is generated
 from the directory beside it and lives between `<!-- index:start … -->` and

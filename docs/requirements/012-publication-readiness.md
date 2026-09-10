@@ -28,10 +28,10 @@ public and a stranger has built it from a fresh clone.
 
 ## What is already true
 
-- **Licence settled.** MIT, copyright naming the author as a natural person, per
-  the licence decision.
-  `LICENSE`, `package.json`, `flake.nix` `meta.license` and the README section
-  all agree.
+- **Licence settled.** MIT, with the copyright notice naming the author as a
+  natural person rather than a trade name, because a sole proprietorship has no
+  legal personality that could hold the right. `LICENSE`, `package.json`,
+  `flake.nix` `meta.license` and the README section all agree.
 - **No credentials, anywhere.** A full-history secret scan across every ref
   (73 commits, ~865 KB) reports no leaks. The one deploy-key variable that ever
   existed in the tree was always an empty placeholder or a schema field, never a
@@ -55,10 +55,10 @@ public and a stranger has built it from a fresh clone.
   notebook — are gone. `git grep` over the tracked tree for every outside name
   in the inventory returns only this repository's own owner in README install
   commands, which is where the repository actually lives.
-- **The finish line is written down.** A public repository only, no registry
-  version, per
-  the finish-line decision.
-  See B8.
+- **The finish line is written down.** Publication is complete when the reviewed
+  tree is public and a stranger has built it from a fresh clone: a public
+  repository only, no registry version, so the package stays private and
+  unversioned and no artifact scan of the working tree is owed. See B8.
 
 ## Blockers
 
@@ -142,21 +142,20 @@ developer rather than to the project — untracked by construction, so it never
 travels. `.gitignore` keeps a comment saying per-developer scratch is
 deliberately not listed and where it goes instead: the instruction survives, the
 name does not, and `git check-ignore` confirms the directory is still ignored
-here. The reasoning, and the three arguments for keeping it that did not
-survive, are in
-the ignore-file decision.
+here. `.git/info/exclude` is where an ignore rule personal to one developer
+belongs anyway — untracked by construction, so it never travels — which is what
+settled it against the three arguments for keeping the pattern tracked.
 
 **Two more sites were found and fixed on the same day**, both pre-existing and
 both on surfaces `AGENTS.md` binds explicitly, which is why the claim above
 needed correcting rather than merely extending:
 
-- The publication-route decision
-  quoted a commit **subject line** verbatim in order to prove that a
-  content-only rewrite would not be enough — and that subject names the sibling
-  service. The proof is unchanged and the name is gone: it now reads as a
-  clean-up commit whose subject names the service it was removing. The deleted
-  requirements file it cites by name in the next sentence is described rather
-  than named for the same reason.
+- The record of the publication route quoted a commit **subject line** verbatim
+  in order to prove that a content-only rewrite would not be enough — and that
+  subject names the sibling service. The proof is unchanged and the name is
+  gone: it reads as a clean-up commit whose subject names the service it was
+  removing, and the deleted requirements file it cites is described rather than
+  named for the same reason.
 - This file named the local notebook directory while arguing about the ignore
   pattern above. Same surface, same rule; the paragraph is rewritten without it.
 
@@ -285,8 +284,6 @@ as a dependency, a public repository alone would **not** be publication — a
 registry version would be. It was a mandate question, not an engineering one.
 
 **The mandate holder ruled: a public repository only, no registry version.**
-Recorded in
-the finish-line decision.
 
 Two consequences land here. The definition of done below is now closed-ended —
 its last item is the fresh-clone build, with no step after it. And the artifact
@@ -296,12 +293,9 @@ it stays `"private": true` at `0.0.0`, which is what the ruling calls for.
 
 ## Definition of done
 
-1. B1–B4 resolved by the route now recorded in
-   the publication-route decision:
-   a **fresh repository** from the reviewed tree, starting at a single
-   "history starts here" commit, with this repository parked private under a
-   legacy name. A history rewrite is not an option — B2b puts objects beyond
-   the reach of one.
+1. B1–B4 resolved by the settled route: a **fresh repository** from the reviewed
+   tree, with the original parked private under a legacy name. A history rewrite
+   is not an option — B2b puts objects beyond the reach of one.
 2. ~~B3 and B5–B7 landed **in the tree, before the export.**~~ **Done**
    (2026-09-09). Extraction copies a tree; it does not clean one, so anything
    left here is carried into the new repository's first commit and published

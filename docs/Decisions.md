@@ -4,13 +4,22 @@ One file per durable decision in [`decisions/`](decisions/): a question that had
 more than one defensible answer, the answer we took, and **what we rejected and
 why**. Named `YYYY-MM-DD-<slug>.md` for the day it was decided.
 
+**Architecture only.** A file belongs here when the call it records shapes how
+the product is built — an engine, a boundary, a scope, a data seam — and a reader
+changing that code needs to know what was already weighed and turned down.
+Licensing, repository and publication process, branding and visual identity are
+decisions too, but not *architectural* ones, and they do not live here; seven
+such files were removed on 2026-09-10 for that reason. The argument for each is
+restated in the requirement or the file it actually binds.
+
 A decision is not a requirement and not a log entry:
 
 | Kind | Home |
 |---|---|
 | something the product must **do** or **be** | [`requirements/`](requirements/) |
-| why we chose one way over another, and what we turned down | [`decisions/`](decisions/) — here |
+| why we chose one architecture over another, and what we turned down | [`decisions/`](decisions/) — here |
 | the digging that produced the answer | [`research/`](research/) |
+| licence, publication, branding, naming | the file they bind — `LICENSE`, a requirement, the theme tokens |
 | what happened on a given day | the git history |
 
 A requirement links to the decision it rests on rather than restating the
