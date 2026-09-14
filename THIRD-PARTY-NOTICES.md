@@ -1,6 +1,6 @@
 # Third-party notices
 
-`binp-file-explorer` is licensed under the MIT License — see [`LICENSE`](LICENSE).
+`file-explorer` is licensed under the MIT License — see [`LICENSE`](LICENSE).
 This file covers the **other people's work** it depends on, and the notices that
 have to travel with it.
 

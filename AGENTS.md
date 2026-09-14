@@ -1,4 +1,4 @@
-# binp-file-explorer — AGENTS.md
+# file-explorer — AGENTS.md
 
 A **high-speed Bun file explorer**: browse a served filesystem fast,
 broot-style — lazy tree navigation, ranked fuzzy search, in-place previews.
@@ -161,7 +161,7 @@ instrumenting to do first.
 ## Structure
 
 ```
-binp-file-explorer/
+file-explorer/
   .mise.toml          # tool versions, env, tasks
   vite.config.ts      # React + Tailwind; /api proxy → :3000
   package.json        # deps
@@ -173,6 +173,7 @@ binp-file-explorer/
     config.ts         # env parsing (Zod)
     routes/           # route handlers + *.schema.ts (Zod)
   docs/               # committed knowledge, one generated index per directory
+    CHANGELOG.md      #   release notes, newest first; breaking changes marked
     Requirements.md   #   generated index + frontmatter schema + status vocabulary
     requirements/     #   NNN-<slug>.md — 001-0xx delivery (ranked), 1xx standing
     Decisions.md      #   generated index + frontmatter schema

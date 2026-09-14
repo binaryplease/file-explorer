@@ -154,7 +154,7 @@ describe('deleting a fixture root', () => {
   })
 
   test('a directory with no marker is refused, however plausible the path looks', async () => {
-    const precious = join(scratchDirectory, 'binp-file-explorer')
+    const precious = join(scratchDirectory, 'file-explorer')
     await mkdir(join(precious, 'server'), { recursive: true })
     await writeFile(join(precious, 'package.json'), '{}')
     expect(isRemovableFixtureRoot(precious)).toBe(false)

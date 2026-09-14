@@ -25,8 +25,17 @@ updated: 2026-09-14
   browser, and tears down on Ctrl-C with signals forwarded to the spawned server.
 - **`bfe daemon start|stop|restart|status|logs`** follows the daemon-lifecycle
   pattern: detached `process.execPath` spawn, process-group SIGTERM→SIGKILL,
-  PID at `$XDG_RUNTIME_DIR/…pid` plus a companion `…state.json` recording
-  port/host/root so status/stop reach the right server.
+  PID at `$XDG_RUNTIME_DIR/file-explorer.pid` plus a companion
+  `$XDG_RUNTIME_DIR/file-explorer.state.json` recording port/host/root so
+  status/stop reach the right server. Logs are at
+  `~/.local/share/file-explorer/file-explorer.log`, in the log directory
+  `~/.local/share/file-explorer/`. All five derive from the single `DAEMON_NAME`
+  constant in `server/cli/paths.ts`, which
+  [`015-product-identifiers-match-the-repository-name`](015-product-identifiers-match-the-repository-name.md)
+  moved to the repository's name — so a daemon left running under the older
+  `binp-` paths is **adopted** by the first daemon-touching verb after the
+  upgrade (`server/cli/legacy-daemon.ts`) rather than being reported as stopped
+  while it still holds a port.
 - **`GET /api/status`** returns the snapshot `bfe status` renders — served root,
   uptime, pid, port, confine — every field defaulted and emitted
   (emit nullish properties; every Zod field declares a default), plus discovery
@@ -35,14 +44,16 @@ updated: 2026-09-14
   is found via `realpathSync(argv[1])` sibling, and the root travels by env,
   never argv, so a clean spawn can't be mistaken for a subcommand.
 - **Packaging**: `flake.nix` `packages.default` builds client + server + CLI and
-  installs a wrapped `bfe` (alias `binp-file-explorer`); runtime closure is
-  **bun + dist only**. `nixosModules.default` (`services.binp-file-explorer`)
+  installs a wrapped `bfe` (alias `file-explorer`); runtime closure is
+  **bun + dist only**. `nixosModules.default` (`services.file-explorer`)
   runs a hardened systemd unit — loopback + **confine on** by default, because a
-  hosted surface is the case where the boundary matters. The alias, the module
-  and the daemon's pid/state/log paths all still carry the older
-  `binp-` prefix, so the package name does **not** match the repository — see
-  [`015-product-identifiers-match-the-repository-name`](015-product-identifiers-match-the-repository-name.md),
-  which is where that is argued and where those paths move if it ships.
+  hosted surface is the case where the boundary matters. The alias, the module,
+  the derivation and the daemon's pid/state/log paths all carry the repository's
+  own name (`package-name-matches-repo`); `bfe` keeps its short name, because
+  the convention binds the artifact, not the executable. Until
+  [`015-product-identifiers-match-the-repository-name`](015-product-identifiers-match-the-repository-name.md)
+  shipped they carried an older `binp-` prefix and this clause claimed a match
+  the tree did not have.
 
 ## The port rule this locked in
 

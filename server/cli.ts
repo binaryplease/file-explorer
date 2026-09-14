@@ -1,5 +1,5 @@
 /**
- * `binp-file-explorer` command-line entry — the single executable the Nix
+ * `file-explorer` command-line entry — the single executable the Nix
  * package installs as `bfe`.
  *
  * Two surfaces, per the on-demand-plus-daemon design:
@@ -32,6 +32,7 @@ import { rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { openUrlInBrowser } from './cli/browser'
 import { baseUrlForState, readyFilePathFor, serviceScriptPath } from './cli/paths'
+import { adoptLegacyDaemon } from './cli/legacy-daemon'
 import { parseCli, type LaunchOptions } from './cli/args'
 import {
   awaitBoundPort,
@@ -282,6 +283,17 @@ async function main(): Promise<void> {
   }
 
   const { intent } = parsed
+
+  // Take over whatever a pre-rename build left on disk before any verb reads
+  // the daemon's paths, so a daemon still running under the old name is never
+  // reported as stopped (see ./cli/legacy-daemon.ts). Only the verbs that touch
+  // daemon state pay for it; foreground `serve` owns no daemon files.
+  if (intent.kind === 'status' || intent.kind === 'daemon') {
+    for (const reportLine of await adoptLegacyDaemon()) {
+      console.log(`${CLI_NAME}: ${reportLine}`)
+    }
+  }
+
   switch (intent.kind) {
     case 'help':
       printHelp()

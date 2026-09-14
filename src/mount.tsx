@@ -16,7 +16,7 @@ import { createInternalFocusNavigation } from './lib/focusNavigation'
 //     theme read-only so the explorer inherits the host's `[data-theme]`.
 //
 // Styling: the host's own Tailwind build emits the explorer's utilities and
-// ships the grove tokens (`binp-file-explorer/theme.css` + an `@source` over
+// ships the grove tokens (`file-explorer/theme.css` + an `@source` over
 // this `src/`), so this entry imports no CSS of its own — importing `index.css`
 // here would pull a second `@import "tailwindcss"` into the host bundle.
 //

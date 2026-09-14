@@ -33,7 +33,7 @@ export type DaemonProbe =
   | { running: true; pid: number; state: DaemonState | null }
 
 /** True when a process with `pid` exists and we may signal it. */
-function processIsAlive(pid: number): boolean {
+export function processIsAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true
@@ -53,7 +53,8 @@ async function readRecordedState(): Promise<DaemonState | null> {
   }
 }
 
-function removeQuietly(filePath: string): void {
+/** Delete a path if it is there, tolerating every reason it might not be. */
+export function removeQuietly(filePath: string): void {
   try {
     rmSync(filePath, { force: true })
   } catch {

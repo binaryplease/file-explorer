@@ -33,7 +33,7 @@ export type BindExposureDecision =
 const NON_LOOPBACK_REFUSAL = (bindHost: string) =>
   `refusing to start: HOST=${bindHost} is not a loopback address, and ` +
   'EXPLORER_ALLOWED_HOSTS is empty.\n\n' +
-  'binp-file-explorer is an UNAUTHENTICATED filesystem API. Binding a ' +
+  'file-explorer is an UNAUTHENTICATED filesystem API. Binding a ' +
   'non-loopback address publishes it to every peer that can reach this port: ' +
   'the Host-header guard stops browsers being rebound onto it, but any client ' +
   'can simply send `Host: localhost` and read files.\n\n' +

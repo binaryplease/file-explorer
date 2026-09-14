@@ -33,7 +33,7 @@ export const ViewSettingsSchema = z.object({
 })
 export type ViewSettings = z.infer<typeof ViewSettingsSchema>
 
-const VIEW_SETTINGS_STORAGE_KEY = 'binp-file-explorer:view-settings'
+const VIEW_SETTINGS_STORAGE_KEY = 'file-explorer:view-settings'
 
 // Read the persisted toggles, tolerating a missing, malformed, or partial blob:
 // anything that doesn't parse falls back through the schema defaults rather than

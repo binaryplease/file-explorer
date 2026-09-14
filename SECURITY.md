@@ -52,7 +52,7 @@ branches, and fixes are not backported to tags.
 Read this first — it will save you time, because the two most common reports
 about a tool like this are both intended behaviour.
 
-`binp-file-explorer` is a **local-only** tool. It binds to loopback
+`file-explorer` is a **local-only** tool. It binds to loopback
 (`127.0.0.1`) and runs with the full filesystem privileges of the user who
 started it. The threat it is designed against is **the browser**, not the
 network: a page the user visits that tries to reach the local server. The
