@@ -111,16 +111,42 @@ never saw it, because a clone fetches reachable objects and nothing else.
 This is the blocker that made the route in the definition of done a conclusion
 rather than a preference: **a history rewrite cannot reach an object the host
 keeps serving by SHA.** A rewrite moves refs; the orphan stays, and stays
-fetchable by anyone who knows its forty characters.
+fetchable by anyone holding its forty characters — which, on a public
+repository, is anyone at all, for the reason the next paragraphs give.
 
-The same mechanism is now visible on this repository, from the other side, and
-it is recorded here so that a reader who finds it is not surprised: the
-2026-09-10 pass that removed seven non-architectural records from
-`docs/decisions/` rewrote every commit, and the pre-rewrite objects remain
-resolvable by SHA on the host. The removed files are still readable through
-them. Nothing in the published tree names those SHAs, the tree itself did not
-change by a byte, and the mandate holder accepted the residue — the files were
-removed for belonging in another directory, not for anything they said.
+The same mechanism is now visible on this repository, from the other side. It is
+recorded here in full, because a reader who finds it should find it described
+accurately rather than minimised: the 2026-09-10 pass that removed seven
+non-architectural records from `docs/decisions/` rewrote every commit, and the
+pre-rewrite objects remain resolvable by SHA on the host, so the removed files
+are still readable through them. Three things sharpen that, and none of them is
+an obstacle to a reader:
+
+- **The SHAs are published.** No file in the tracked tree names them, which
+  bounds nothing: the host's own activity feed does.
+  `GET /repos/binaryplease/file-explorer/events` returns the force-push of
+  2026-09-10T13:22:33Z with the `before` SHA it replaced, unauthenticated, and
+  the public archive of that feed keeps the record after the API window closes.
+  Reaching the pre-rewrite tree is one request, not forty guessed characters.
+- **The trees did change.** Diffing the tagged commit before the pass against
+  the one after it is 9 files and 526 deleted lines: the seven records, plus
+  `docs/Decisions.md` and this file. Nothing outside `docs/` moved, and no source
+  file did. The `v0.1.0` tag travelled with the rewrite while its release kept
+  its 2026-09-09 timestamp, so a source archive taken from that tag on the day
+  and one taken from it now are two different trees under one name.
+- **They were at the public tip first.** The seven records were published
+  normally, in the tip of a public repository, from 2026-09-09T19:01:36Z until
+  the pass roughly eighteen hours later. Anyone could clone, fork or index them
+  in that window; this is not residue that only a SHA reaches.
+
+The mandate holder accepted all of it, and what makes it acceptable is the
+content rather than the obscurity: the seven files were removed for belonging in
+another directory, not for anything they said. One consequence is worth naming,
+because it is the same lesson twice: one of the seven quotes B2b's unreferenced
+commit by its full forty characters, so taking those SHAs out of *this* file's
+text left them exactly where they were. The pre-rewrite copy of this file still
+carries them too. A rewrite edits what a clone sees; it does not retract a
+published string.
 
 ### B3 — source comments citing record numbers from that corpus — **resolved 2026-09-09**
 
@@ -376,4 +402,6 @@ Recorded once, here, so that nobody re-derives it from the log:
 - **Objects that no ref points at are still served by SHA**, both on the host
   this repository was extracted from (B2b, which is why it was extracted) and on
   this one after the 2026-09-10 `docs/decisions/` pass (B2b again, accepted).
-  Treat a rewrite as a change of what a *clone* sees, never as a deletion.
+  Treat a rewrite as a change of what a *clone* sees, never as a deletion — and
+  on a public repository not even as a change of what a *reader* can reach, since
+  the host's events feed hands out the SHA the rewrite replaced.

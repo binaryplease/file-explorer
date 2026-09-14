@@ -11,7 +11,7 @@ research: []
 decisions: []
 conventions: [package-name-matches-repo, location-agnostic-cli, daemon-lifecycle, fail-loud-ports, emit-nullish, zod-defaults, code-lives-with-dependencies, allocate-before-strict-bind]
 shipped: 2026-07-27
-updated: 2026-07-27
+updated: 2026-09-14
 ---
 
 # On-demand `bfe` CLI, daemon lifecycle, status endpoint
