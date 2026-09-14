@@ -95,12 +95,13 @@ runtime locations are all named after the product:
 | `~/.local/share/file-explorer/` | the log directory |
 | `~/.local/share/file-explorer/file-explorer.log` | the log itself, tailed by `bfe daemon logs` |
 
-Those paths carried a longer, pre-publication name before version 0.1.0. A
-daemon still running under the old ones is **adopted**, not orphaned: the first
-`bfe daemon …` or `bfe status` after the upgrade takes over its pid and state,
-moves the log directory across, and says on stdout that it did. Nothing to run
-by hand, and no daemon that the CLI reports as stopped while it still holds a
-port.
+Those paths carried a longer, pre-publication name through the 0.1.0 release —
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md) records which release moved them, and
+is the only place that says so. A daemon still running under the old names is
+**adopted**, not orphaned: the first `bfe daemon …` or `bfe status` after the
+upgrade takes over its pid and state, moves the log directory across, and says
+on stdout that it did. Nothing to run by hand, and no daemon that the CLI
+reports as stopped while it still holds a port.
 
 For a hosted box, the flake also ships `nixosModules.default`
 (`services.file-explorer`) — a systemd unit with the standard hardening

@@ -127,7 +127,10 @@ describe('adoptLegacyDaemonAt', () => {
 
   test('adopts over a stale record under the current name', async () => {
     await writeLegacyDaemonRecord(4242)
+    // `startDaemon` writes the pid and the state file together, so a crash
+    // leaves both behind — the realistic shape of a stale current record.
     await writeFile(current.pidFilePath, '777\n')
+    await writeFile(current.stateFilePath, JSON.stringify({ ...LIVE_STATE, pid: 777 }))
 
     // Only 4242 is alive; the 777 record is left over from a crashed daemon.
     const report = await adoptLegacyDaemonAt({
@@ -137,6 +140,34 @@ describe('adoptLegacyDaemonAt', () => {
     })
 
     expect(await readFile(current.pidFilePath, 'utf8')).toBe('4242')
+    // The adopted daemon's own state replaces the dead one's, so `daemon
+    // restart` inherits the root that is actually being served.
+    expect(JSON.parse(await readFile(current.stateFilePath, 'utf8'))).toEqual({
+      ...LIVE_STATE,
+      pid: 4242,
+    })
+    expect(report[0]).toContain('adopted')
+  })
+
+  test('never pairs an adopted pid with the state file of a dead daemon', async () => {
+    // The gap this pins: a live legacy pid whose *own* state file is gone, over
+    // a stale current pair. Writing only the pid would leave 777's port and root
+    // on disk beside 4242's pid, and `daemon restart` would serve /var/dead.
+    await writeFile(legacy.pidFilePath, '4242\n')
+    await writeFile(current.pidFilePath, '777\n')
+    await writeFile(
+      current.stateFilePath,
+      JSON.stringify({ ...LIVE_STATE, pid: 777, root: '/var/dead' }),
+    )
+
+    const report = await adoptLegacyDaemonAt({
+      legacy,
+      current,
+      processIsAlive: (pid) => pid === 4242,
+    })
+
+    expect(await readFile(current.pidFilePath, 'utf8')).toBe('4242')
+    expect(existsSync(current.stateFilePath)).toBe(false)
     expect(report[0]).toContain('adopted')
   })
 

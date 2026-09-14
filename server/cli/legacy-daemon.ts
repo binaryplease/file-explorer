@@ -99,9 +99,15 @@ async function adoptProcessState(adoption: LegacyDaemonAdoption): Promise<string
 
   // The state file travels verbatim; `daemonProbe` validates it on read, and a
   // missing or corrupt one already degrades to the "port unknown" status line.
+  // The pair is written as a pair: any state file already sitting under the
+  // current name belongs to whatever stale record we are adopting over, and
+  // leaving it would pair the adopted pid with a dead daemon's port and root —
+  // which `daemon restart` then inherits as the directory to serve.
   await Bun.write(current.pidFilePath, String(legacyPid))
   if (existsSync(legacy.stateFilePath)) {
     await Bun.write(current.stateFilePath, await Bun.file(legacy.stateFilePath).text())
+  } else {
+    removeQuietly(current.stateFilePath)
   }
   removeQuietly(legacy.pidFilePath)
   removeQuietly(legacy.stateFilePath)
@@ -151,8 +157,17 @@ function adoptLogDirectory(adoption: LegacyDaemonAdoption): string[] {
 
 /**
  * Run both adoptions against explicit locations. Returns one report line per
- * thing that happened, and an empty array when there was nothing to adopt —
- * which is the case on every run after the first.
+ * thing that happened, and an empty array when there was nothing to adopt.
+ *
+ * On the normal upgrade path that empty array is what every run after the first
+ * gets: adoption runs before `startDaemon` creates the new log directory, so
+ * the old one renames cleanly and both halves then have nothing left to find.
+ * Two branches are standing reports rather than one-shot ones, by design — the
+ * two "leave it alone and say so" cases (a different live daemon already
+ * recorded under the current name, and a log directory that cannot move because
+ * the new path exists). Those reprint on every invocation until the user
+ * resolves them by hand, which is the point: `015` requires both to be said out
+ * loud rather than resolved silently.
  */
 export async function adoptLegacyDaemonAt(adoption: LegacyDaemonAdoption): Promise<string[]> {
   return [...(await adoptProcessState(adoption)), ...adoptLogDirectory(adoption)]
