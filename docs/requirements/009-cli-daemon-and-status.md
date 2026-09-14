@@ -35,11 +35,14 @@ updated: 2026-07-27
   is found via `realpathSync(argv[1])` sibling, and the root travels by env,
   never argv, so a clean spawn can't be mistaken for a subcommand.
 - **Packaging**: `flake.nix` `packages.default` builds client + server + CLI and
-  installs a wrapped `bfe` (alias `binp-file-explorer`, package name matches the repo); runtime
-  closure is **bun + dist only**. `nixosModules.default`
-  (`services.binp-file-explorer`) runs a hardened systemd unit — loopback +
-  **confine on** by default, because a hosted surface is the case where the
-  boundary matters.
+  installs a wrapped `bfe` (alias `binp-file-explorer`); runtime closure is
+  **bun + dist only**. `nixosModules.default` (`services.binp-file-explorer`)
+  runs a hardened systemd unit — loopback + **confine on** by default, because a
+  hosted surface is the case where the boundary matters. The alias, the module
+  and the daemon's pid/state/log paths all still carry the older
+  `binp-` prefix, so the package name does **not** match the repository — see
+  [`015-product-identifiers-match-the-repository-name`](015-product-identifiers-match-the-repository-name.md),
+  which is where that is argued and where those paths move if it ships.
 
 ## The port rule this locked in
 

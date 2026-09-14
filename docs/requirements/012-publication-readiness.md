@@ -1,8 +1,8 @@
 ---
 id: 012-publication-readiness
 title: The repository is publishable by a stranger, and safe to have published
-summary: "Publication is blocked on git history and on the remote's object store — not the tip: commits carry a sibling service's name (one in a subject line), a deleted file maps an outside decision corpus, and an unreferenced commit is still served by SHA after a reset. The route is settled: a new repository, never a rewrite. The tip is now clean, licensed, documented for a stranger and carries its third-party notices; only the export itself remains."
-status: in-progress
+summary: "The repository is public under MIT and carries its whole history, built from a fresh credential-less clone by a stranger: licence, third-party notices, community surface and a live private reporting path all landed before the flip, and the route was a new repository because the old host kept serving commits no ref pointed at. The history terms the checklist had treated as confidential were ruled public by the mandate holder and crossed unchanged — the lesson being that a sweep hands over names, not verdicts."
+status: shipped
 rank: 12
 tags: [packaging, config]
 blocks: []
@@ -11,20 +11,26 @@ research: []
 decisions: []
 conventions:
   - generated-sibling-index
-shipped: null
-updated: 2026-09-09
+shipped: 2026-09-09
+updated: 2026-09-14
 ---
 
 # Publication readiness
 
-The repository is private. Making it public is **one-way**: a public repo is
-cloned, forked and indexed within minutes, and re-privatising it detaches
-existing forks into their own network rather than withdrawing them. So every
-item below is checked *before* the flip, not after.
+**This shipped on 2026-09-09.** The repository is public under MIT, carries all
+of its history, and has been built from a fresh clone with no credentials. The
+file is kept rather than deleted, because publication is one-way and a reader
+who wants to know what was checked before the flip — or who repeats the exercise
+for another repository — needs the checklist *and* the two things it got wrong:
+B1 inferred confidentiality from the shape of a string, and this file once
+claimed no outside name survived at the tip while two did.
 
-This requirement is the checklist. It is `in-progress`, not `standing` — B3 and
-B5–B8 have landed and the rest is named below; it closes when the repository is
-public and a stranger has built it from a fresh clone.
+Making a repository public is **one-way**: it is cloned, forked and indexed
+within minutes, and re-privatising it detaches existing forks into their own
+network rather than withdrawing them. So every item below was checked *before*
+the flip, not after. The one item that could not be — the private reporting
+path, which is a setting that only exists on a public repository — was made part
+of the flip itself rather than a follow-up to it.
 
 ## What is already true
 
@@ -36,9 +42,10 @@ public and a stranger has built it from a fresh clone.
   (73 commits, ~865 KB) reports no leaks. The one deploy-key variable that ever
   existed in the tree was always an empty placeholder or a schema field, never a
   value.
-- **One copyright holder.** All 74 commits are authored and committed by the
-  same person under one address, so there is no contractor, prior-employer or
-  personal-account provenance question to resolve.
+- **One copyright holder.** Every commit is authored and committed by the same
+  person under one address — 74 of them when this was first measured, all of
+  them since — so there is no contractor, prior-employer or personal-account
+  provenance question to resolve.
 - **Dependency licences are permissive throughout, and the notices ship.**
   [`THIRD-PARTY-NOTICES.md`](../../THIRD-PARTY-NOTICES.md) is the single source
   for the inventory and carries the per-licence counts, the reconciliation of
@@ -57,40 +64,63 @@ public and a stranger has built it from a fresh clone.
   commands, which is where the repository actually lives.
 - **The finish line is written down.** Publication is complete when the reviewed
   tree is public and a stranger has built it from a fresh clone: a public
-  repository only, no registry version, so the package stays private and
-  unversioned and no artifact scan of the working tree is owed. See B8.
+  repository only, no registry version, so the package stays `"private": true`
+  and no artifact scan of the working tree is owed. See B8.
 
-## Blockers
+## Blockers, and how each one closed
 
-### B1 — History still names a sibling service and its private contract
+### B1 — The history names things the tip does not — **resolved 2026-09-09, and this blocker was wrong**
 
-The tip is clean; the history is not. Twenty-one commits carry an outside
-service's name, its upload endpoint and header contract, and its two environment
-variables — in `.mise.toml`, `server/config.ts`, `AGENTS.md`, `README.md`, and a
-requirement file since renamed. One commit **subject line** names it as well, so
-a rewrite of file contents alone would not be enough. Publishing exports all of
-it.
+The tip was cleaned; the history was not. A full-history sweep produced an
+inventory of five term classes that appear in commits but not at the tip: two
+names in file content, on eight commits and on fifteen; two commit subjects
+carrying one of them; an opaque task-id trailer on eighty-six commits; and the
+author line on every commit.
 
-### B2 — A deleted file maps an outside decision corpus
+**This was recorded as a blocker on the sweep's own inference, and the inference
+was wrong.** Nothing in the inventory was confidential: the mandate holder ruled
+every row *may cross*, and the history was published carrying all of it — no
+content rewrite, no subject rewrite, no mailmap. The prose edit this blocker
+implied was never owed.
 
-A requirements file removed from the tip enumerated eleven record numbers from a
+The lesson is the only durable part of B1, and it is worth more than the
+blocker was: **a sweep's job is to hand the mandate holder names, not verdicts.**
+A term that looks internal is not evidence that it is. The mechanical check —
+one `git log --all -i -S<term>` per term, which finds file-content hits a
+tip-and-messages grep misses — is still worth running; what it produces is
+inventory, and inventory is for the mandate holder to rule on.
+
+### B2 — A file deleted from the tip is still in the history — **resolved 2026-09-09**
+
+A requirements file removed from the tip enumerated record numbers from a
 decision corpus that lives outside this repository, each with a one-line summary
-of what it binds. It is reachable in history. Related: an early planning file
-carries an internal system's record identifier and its queueing conventions.
+of what it binds; an early planning file carried a second such identifier and
+its queueing conventions. Both are reachable in history, and both were covered
+by the same ruling as B1: not confidential, and they crossed. The tip names
+neither — [`103-engineering-conventions`](103-engineering-conventions.md) is the
+only corpus this repository cites, and it is its own.
 
-### B2b — The remote serves an unreferenced commit that no scan can see
+### B2b — A host serves unreferenced commits that no clone can see — **the one that settled the route**
 
-Re-verified 2026-08-17. The reflog records two `reset: moving to HEAD~1` moves.
-One of the commits they dropped, `73c0c03`, is reachable from **no ref** — not
-locally, not on the remote — yet the hosting platform still returns the commit
-*and its blobs* when queried by SHA. The full-history secret scan walked 75
-commits and never saw it, because a clone only fetches reachable objects. Its
-message and diff cite five record numbers from the outside corpus. The second
-dropped commit, `be63bb0`, was never pushed and is local-only; its message names
-an outside host application, so it must not travel either.
+Re-verified 2026-08-17. The reflog recorded two `reset: moving to HEAD~1` moves.
+Both dropped commits were reachable from **no ref** — not locally, not on the
+remote — yet the host still returned one of them *and its blobs* when it was
+queried by SHA. The full-history secret scan walked every reachable commit and
+never saw it, because a clone fetches reachable objects and nothing else.
 
-This blocker is why the route in the definition of done is no longer a choice:
-a rewrite cannot reach an object the server keeps serving by SHA.
+This is the blocker that made the route in the definition of done a conclusion
+rather than a preference: **a history rewrite cannot reach an object the host
+keeps serving by SHA.** A rewrite moves refs; the orphan stays, and stays
+fetchable by anyone who knows its forty characters.
+
+The same mechanism is now visible on this repository, from the other side, and
+it is recorded here so that a reader who finds it is not surprised: the
+2026-09-10 pass that removed seven non-architectural records from
+`docs/decisions/` rewrote every commit, and the pre-rewrite objects remain
+resolvable by SHA on the host. The removed files are still readable through
+them. Nothing in the published tree names those SHAs, the tree itself did not
+change by a byte, and the mandate holder accepted the residue — the files were
+removed for belonging in another directory, not for anything they said.
 
 ### B3 — source comments citing record numbers from that corpus — **resolved 2026-09-09**
 
@@ -100,8 +130,8 @@ with only this repository could resolve none. Almost all of them now name the
 slug [`103-engineering-conventions`](103-engineering-conventions.md) carries
 instead, rewritten per site rather than substituted, because most wove the
 number into the sentence. `git grep -E "ADR-[0-9]{4}"` over the tracked tree
-returns nothing outside `OPEN_SOURCING_PROGRESS.md`, which is the open-sourcing
-run's own working file and does not cross into the new repository.
+returns nothing — the run's own working file, the one place that still carried
+such citations, stayed behind as a sidecar and was never extracted.
 
 Three rules gained the clause their citing comments leaned on and `103` did not
 yet state — the `zod-defaults` exemptions, `affordances-adjacent`'s
@@ -159,20 +189,27 @@ needed correcting rather than merely extending:
 - This file named the local notebook directory while arguing about the ignore
   pattern above. Same surface, same rule; the paragraph is rewritten without it.
 
-Unlike `OPEN_SOURCING_PROGRESS.md`, which the extraction drops as a sidecar,
-everything under `docs/` **crosses into the new repository's first commit**. A
-name that survives there is published irreversibly, which is why these were
-precondition work rather than follow-ups.
+The run's own working file was dropped as a sidecar and never extracted, but
+everything under `docs/` **crossed**. A name that survives there is published
+irreversibly, which is why these were precondition work rather than follow-ups.
 
 `AGENTS.md`'s "Known gap, 2026-08-15" block described this pass as pending and
 has been removed; the rule it guarded — cite the slug, never a number — is now
 stated as a standing rule rather than an interim workaround.
 
-### B4 — The published repository description names the same service
+### B4 — The repository description and topics are published but not in the tree — **resolved 2026-09-09**
 
-The description carried on the hosting platform is not part of the tree and is
-published with the repository. It currently names the sibling service and a
-record number from the outside corpus. Same for topics, which are empty.
+The description and topics a host carries are published with the repository and
+are not reviewable in a diff, so nothing in the tree's own gate can catch them.
+The description then named what B1 was about and cited a record number from the
+outside corpus, and there were no topics at all.
+
+Both were rewritten at the flip: the description now says what the product is,
+and eight topics name the stack. Under the B1 ruling the rewrite was not owed —
+it is kept because the description is better prose, not because the old one was
+unsafe. **The general point survives the specific fix:** a repository's
+published metadata is state on the host, it drifts out of step with the tree
+without anything failing, and it is re-checked by looking at it.
 
 ### B5 — The publication surface did not exist — **resolved 2026-09-09**
 
@@ -193,29 +230,34 @@ tree, and addressed to a stranger who has only this repository:
 maintainer step, a contributor writes the file and leaves the marker block
 untouched, and the pull-request template has a checkbox that says so.
 
-**Two gaps stay open deliberately, and both belong to the mandate holder.**
+**Two gaps belonged to the mandate holder. One is closed; one is still open by
+choice.**
 
-- **The security path depends on a setting that does not exist yet.**
-  `SECURITY.md` points at GitHub's private vulnerability reporting — the
+- **The security path depended on a setting that did not exist yet — closed.**
+  `SECURITY.md` points at GitHub's private vulnerability reporting, the
   repository's Security tab, "Report a vulnerability". That is a per-repository
-  setting, it can only be enabled on the *new* repository, and it is only
-  available once that repository is public. Until it is switched on, the link in
-  `SECURITY.md` is dead. Enabling it is therefore not a follow-up but part of the
-  publication step itself, immediately after the visibility flip and before the
-  repository is announced anywhere. `SECURITY.md` also gives a fallback that
-  works with no settings at all: open an issue saying only that a private channel
-  is needed, with no details.
-- **No contact address is published anywhere**, because none has been designated
-  for this project and inventing one is not the builder's call. `SECURITY.md`,
-  `CODE_OF_CONDUCT.md` and the issue templates are all written to work without
-  one, and `CODE_OF_CONDUCT.md` names the absence rather than hiding it. If the
-  mandate holder wants a real address on any of the three, it is a one-line edit
-  before the export.
+  setting and it only becomes available once the repository is public, so until
+  it was switched on the link in `SECURITY.md` was dead. It was therefore not a
+  follow-up but part of the publication step, and it ran in the same sitting as
+  the visibility flip and before the repository was announced anywhere. It is
+  enabled. `SECURITY.md` also gives a fallback that needs no settings at all:
+  open an issue saying only that a private channel is needed, with no details.
+- **No contact address is published anywhere — still true, and still the
+  default.** None has been designated for this project, and inventing one is not
+  the builder's call. `SECURITY.md`, `CODE_OF_CONDUCT.md` and the issue
+  templates are all written to work without one, and `CODE_OF_CONDUCT.md` names
+  the absence rather than hiding it. The cost is one genuinely awkward gap: a
+  conduct report *about* the maintainer has no channel that does not reach the
+  maintainer, and GitHub's own abuse form is the only route around it. Adding an
+  address is a one-line edit at any time; an address once published is scraped
+  within minutes and cannot be withdrawn, which is the asymmetry that keeps the
+  default where it is.
 
-There are **no workflow files** in `.github/`, only templates. That matters at
-the flip: a new repository's Actions history goes public with it, and a workflow
+There are **no workflow files** in `.github/`, only templates. That mattered at
+the flip: a repository's Actions history goes public with it, and a workflow
 carried across in the exported tree could have run while the repository was
-private. Nothing here can have run.
+private. Nothing here can have run, and nothing has: the repository has no
+Actions runs at all.
 
 ### B6 — `AGENTS.md` instructed contributors to run a tool they cannot have — **resolved 2026-09-09**
 
@@ -278,33 +320,60 @@ nothing conflicts with this project's own MIT licence.
 
 ### B8 — Packaging was a fork in the finish line — **answered 2026-09-09**
 
-`package.json` is `"private": true` at version `0.0.0`, yet declares `exports`
+`package.json` was `"private": true` at version `0.0.0`, yet declares `exports`
 subpaths for a host application to mount the render layer. If this were consumed
 as a dependency, a public repository alone would **not** be publication — a
 registry version would be. It was a mandate question, not an engineering one.
 
 **The mandate holder ruled: a public repository only, no registry version.**
 
-Two consequences land here. The definition of done below is now closed-ended —
-its last item is the fresh-clone build, with no step after it. And the artifact
-scan a registry publish would have needed (it packs from the *working tree*, so
-the git-history scan does not cover it) is not owed. `package.json` is untouched:
-it stays `"private": true` at `0.0.0`, which is what the ruling calls for.
+Two consequences land here. The definition of done below is closed-ended — its
+last item is the fresh-clone build, with no step after it. And the artifact scan
+a registry publish would have needed (it packs from the *working tree*, so the
+git-history scan does not cover it) is not owed. `package.json` keeps
+`"private": true`, which is what the ruling calls for; its `version` moved
+`0.0.0` → `0.1.0` for the tag, because a tagged release with no version in the
+manifest reads as an oversight to anyone who checks both.
 
 ## Definition of done
 
-1. B1–B4 resolved by the settled route: a **fresh repository** from the reviewed
-   tree, with the original parked private under a legacy name. A history rewrite
-   is not an option — B2b puts objects beyond the reach of one.
-2. ~~B3 and B5–B7 landed **in the tree, before the export.**~~ **Done**
-   (2026-09-09). Extraction copies a tree; it does not clean one, so anything
-   left here is carried into the new repository's first commit and published
-   irreversibly. That made all four preconditions of the export rather than
-   follow-ups to it. Two items remain outstanding but are **not** tree work:
-   enabling private vulnerability reporting on the new repository (B5, only
-   possible once it is public) and writing its description and topics (B4).
+All four are done, on 2026-09-09.
+
+1. ~~B1–B4 resolved by the settled route: a **fresh repository** from the
+   reviewed tree, with the original parked private under a legacy name. A
+   history rewrite is not an option — B2b puts objects beyond the reach of
+   one.~~ **Done.** The route held: this repository was created fresh from the
+   reviewed tree and the original was parked private, then archived read-only.
+   The *content* of B1 and B2 turned out not to need the route at all — the
+   mandate holder ruled every swept term *may cross* — but B2b did, and one
+   surviving blocker is enough to settle a route.
+2. ~~B3 and B5–B7 landed **in the tree, before the export.**~~ **Done.**
+   Extraction copies a tree; it does not clean one, so anything left here is
+   carried into the first commit and published irreversibly. That made all four
+   preconditions of the export rather than follow-ups to it. The two items that
+   were not tree work are done too: private vulnerability reporting is enabled
+   (B5, possible only once public), and the description and topics are written
+   (B4).
 3. ~~B8 answered by whoever holds the mandate; the finish line written down.~~
-   **Done** (2026-09-09): a public repository only, no registry version.
-4. Public, and verified from a fresh clone in a clean environment with no
-   credentials: install, build, test, run. **This is the last step** — per B8
-   there is no registry publish after it.
+   **Done:** a public repository only, no registry version.
+4. ~~Public, and verified from a fresh clone in a clean environment with no
+   credentials: install, build, test, run.~~ **Done.** Public under MIT, tagged
+   `v0.1.0`, and verified from an unauthenticated clone with the global and
+   system git config and the SSH identity disabled: install against the
+   lockfile, `tsc --noEmit`, the full test suite, both builds, and the server
+   booting and answering its discovery route. **This was the last step** — per
+   B8 there is no registry publish after it.
+
+## What the history carries, and what it does not
+
+Recorded once, here, so that nobody re-derives it from the log:
+
+- **The whole history is public**, back to the root commit. Every commit is
+  authored and committed by one person under one public address.
+- **This repository stands alone.** The tracked tree names no sibling project,
+  no outside record number and no private host; `git grep` is the check, and it
+  is a check anyone can run.
+- **Objects that no ref points at are still served by SHA**, both on the host
+  this repository was extracted from (B2b, which is why it was extracted) and on
+  this one after the 2026-09-10 `docs/decisions/` pass (B2b again, accepted).
+  Treat a rewrite as a change of what a *clone* sees, never as a deletion.
