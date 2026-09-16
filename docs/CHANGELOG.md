@@ -51,6 +51,14 @@ break that check for the sake of a filename convention.
   renamed to match. A host running the module through `nixosModules.default`
   needs its `services.binp-file-explorer.*` options renamed to
   `services.file-explorer.*`.
+- **The third-party notices no longer overstate what the fonts' licence asks of
+  you.** `THIRD-PARTY-NOTICES.md` said an OFL-1.1 §3 Reserved Font Name stopped a
+  modified font from keeping the name "Inter" — and the Fira Code entry inherited
+  the claim. It does not: §3 binds only names "specified as such after the
+  copyright statement(s)", and neither font's `LICENSE` specifies any. Anyone who
+  read the 0.1.0 notices before redistributing a modified Inter was working from
+  a stricter rule than the licence imposes. Corrected in the notices and in the
+  same claim repeated in `docs/requirements/012-publication-readiness.md`.
 
 ## 0.1.0 — 2026-09-09
 
