@@ -136,7 +136,9 @@ const MARKDOWN_COMPONENTS: Components = {
     const isFenced = className?.startsWith('language-') ?? false
     if (isFenced) return <code className="font-mono text-[12.5px] text-file">{children}</code>
     return (
-      <code className="rounded bg-inset px-1 py-0.5 font-mono text-[12.5px] text-fg">{children}</code>
+      <code className="rounded bg-inset px-1 py-0.5 font-mono text-[12.5px] text-fg [font-variant-ligatures:normal]">
+        {children}
+      </code>
     )
   },
   // A fenced block is a code block — unless it is a ```mermaid one, which is a
@@ -146,7 +148,7 @@ const MARKDOWN_COMPONENTS: Components = {
   // (`share-the-invariant`: the frame is the invariant).
   pre: ({ children, node }) => {
     const codeBlock = (
-      <pre className="my-2 overflow-auto rounded border border-line-2 bg-void/50 p-3 font-mono whitespace-pre">
+      <pre className="my-2 overflow-auto rounded border border-line-2 bg-void/50 p-3 font-mono whitespace-pre [font-variant-ligatures:normal]">
         {children}
       </pre>
     )

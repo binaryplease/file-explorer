@@ -69,7 +69,7 @@
             '';
             outputHashMode = "recursive";
             outputHashAlgo = "sha256";
-            outputHash = "sha256-GL1LrQ5FFEfn9oSfkD42KQI15U6aEerkQCQ4L2ZoM7U=";
+            outputHash = "sha256-0GYK9o3LWAIwVrf9zuB3DiodVPay9mVG/oGRxwRe1XQ=";
           };
 
           file-explorer = pkgs.stdenv.mkDerivation {

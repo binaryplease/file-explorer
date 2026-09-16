@@ -1003,14 +1003,23 @@ export function App({
 
   if (embedded) {
     return (
-      <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-term font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
+      <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-term font-mono text-[13.5px] leading-[1.62] text-fg antialiased [font-variant-ligatures:none] selection:bg-accent selection:text-void">
         {explorerBody}
       </div>
     )
   }
 
+  // `[font-variant-ligatures:none]` at the root, on both mounts: Fira Code's
+  // ligatures are a code-reading feature, and everything outside the preview is
+  // literal text — a path, a pattern, a match. Two reasons they are off here.
+  // A name containing `->` or `!=` must read as the characters it is, since the
+  // user types that name back into the search field. And the fuzzy highlight
+  // splits a name into <mark>/<span> runs (FuzzyMatch.tsx), across which a
+  // ligature cannot form — leaving the same filename drawn one way while it
+  // matches and another way while it does not. The code preview turns them back
+  // on where they belong (PreviewPanel, MarkdownPreview).
   return (
-    <div className="grid min-h-screen place-items-center bg-void bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(111,183,255,0.08),transparent_55%),radial-gradient(90%_70%_at_80%_120%,rgba(255,110,199,0.06),transparent_60%)] p-[clamp(14px,3vw,40px)] font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
+    <div className="grid min-h-screen place-items-center bg-void bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(111,183,255,0.08),transparent_55%),radial-gradient(90%_70%_at_80%_120%,rgba(255,110,199,0.06),transparent_60%)] p-[clamp(14px,3vw,40px)] font-mono text-[13.5px] leading-[1.62] text-fg antialiased [font-variant-ligatures:none] selection:bg-accent selection:text-void">
       <div className="flex h-[min(720px,92vh)] w-full max-w-[1080px] flex-col overflow-hidden rounded-[14px] border border-line bg-term shadow-[0_40px_120px_-30px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.05)_inset]">
         {explorerBody}
       </div>

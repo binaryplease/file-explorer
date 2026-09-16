@@ -20,8 +20,11 @@
    embedded, by the host app, which the tokens follow through the same
    [data-theme] selector without the explorer touching the attribute. */
 @theme {
-  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Mono",
-    "Fira Code", monospace;
+  /* Primary face: the whole explorer is drawn in mono. Fira Code is self-hosted
+     via @fontsource-variable (index.css); the system mono stack behind it is the
+     fallback while it loads or when embedded without the import. */
+  --font-mono: "Fira Code Variable", "Fira Code", ui-monospace, "JetBrains Mono",
+    "SF Mono", "Cascadia Mono", monospace;
   /* Proportional face for rendered markdown prose (see MarkdownPreview). Inter
      is self-hosted via @fontsource-variable (index.css); the system sans stack
      is the fallback while it loads or when embedded without the import. */

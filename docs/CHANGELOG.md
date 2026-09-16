@@ -14,6 +14,20 @@ break that check for the sake of a filename convention.
 
 ## Unreleased
 
+- **The monospace face is now Fira Code, self-hosted.** `--font-mono` previously
+  named a stack of fonts the *machine* might have (`ui-monospace`, JetBrains
+  Mono, SF Mono, …), so the explorer's metrics — and its column alignment —
+  differed per viewer. `@fontsource-variable/fira-code` (OFL-1.1, wght axis only,
+  7 `.woff2` subsets, +124K in `dist/client/`) now ships with the build and the
+  old stack stays behind it as the fallback. Fira Code's ligatures are enabled in
+  the file **preview** and in markdown code blocks, and disabled everywhere else:
+  a filename is literal text the user types back into the search field, and the
+  fuzzy highlight splits a name into `<mark>` runs that a ligature cannot cross,
+  which would otherwise draw the same name two ways depending on whether it
+  matched. **Embedding hosts:** importing `file-explorer/theme.css` gives you the
+  token, not the font files — add `@fontsource-variable/fira-code/wght.css` to
+  your own build to get the intended face, or the mounted surface falls back to
+  your system's monospace as before.
 - **Breaking — the package is now named `file-explorer`, matching the
   repository, so the two published import specifiers moved with it:
   `binp-file-explorer/mount` and `binp-file-explorer/theme.css` became

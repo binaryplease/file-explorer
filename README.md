@@ -234,7 +234,8 @@ rather than bugs. See [Security model](#security-model) above for why.
 
 MIT — see [`LICENSE`](LICENSE). Copyright (c) 2026 Enrico Scherlies.
 
-Dependencies are permissively licensed throughout, and the bundled Inter font is
-under the SIL Open Font License 1.1 — its notice, and everything else that must
+Dependencies are permissively licensed throughout, and the two bundled fonts —
+Fira Code (monospace) and Inter (prose) — are under the SIL Open Font License
+1.1 — their notice, and everything else that must
 travel with a build of this project, is in
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
