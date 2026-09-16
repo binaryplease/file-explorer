@@ -20,7 +20,7 @@ export function TitleBar({ rootPath, themeMode, onSelectThemeMode }: TitleBarPro
         <span className="size-[11px] rounded-full border border-white/5 bg-[#28c840]" />
       </div>
       <div className="flex-1 truncate text-center text-xs tracking-[0.02em] text-dim">
-        <b className="font-semibold text-fg">binp-file-explorer</b>
+        <b className="font-semibold text-fg">file-explorer</b>
         {rootPath === null ? '' : ` — ${rootPath}`}
       </div>
       <div className="flex flex-none items-center gap-2.5 text-[11px] text-faint">

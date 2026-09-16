@@ -18,7 +18,7 @@ import { createFilesystemRoutes } from './routes/filesystem'
 import { createPreviewRoutes } from './routes/preview'
 import { filesystemService, previewService } from './services/instances'
 
-const SERVICE_NAME = 'binp-file-explorer'
+const SERVICE_NAME = 'file-explorer'
 const SERVICE_VERSION = '0.1.0'
 
 // Captured once at module load, so `/api/status` can report how long this
@@ -50,7 +50,7 @@ const app = new Elysia()
     set.status = 421
     return {
       error:
-        'refusing to answer for this Host. binp-file-explorer serves loopback origins only; ' +
+        'refusing to answer for this Host. file-explorer serves loopback origins only; ' +
         'set EXPLORER_ALLOWED_HOSTS to serve another name deliberately.',
     }
   })
@@ -160,7 +160,7 @@ const app = new Elysia()
         summary: 'Operational status',
         description:
           'Served root, uptime, and process identity of the running server. Rendered by ' +
-          '`binp-file-explorer status`. No auth required.',
+          '`file-explorer status`. No auth required.',
       },
     },
   )
@@ -223,7 +223,7 @@ if (config.EXPLORER_READY_FILE) {
 }
 
 const localBase = `http://${config.HOST}:${boundPort}`
-console.log(`binp-file-explorer running at ${localBase}`)
+console.log(`file-explorer running at ${localBase}`)
 console.log(
   `Serving ${config.EXPLORER_ROOT} ` +
     (config.EXPLORER_CONFINE

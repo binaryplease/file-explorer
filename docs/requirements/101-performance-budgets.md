@@ -11,7 +11,7 @@ research: [../research/2026-07-17-broot-engine.md]
 decisions: [2026-07-17-re-engineer-the-broot-engine]
 conventions: []
 shipped: null
-updated: 2026-08-21
+updated: 2026-09-16
 ---
 
 # Speed budgets, and when optimization starts
@@ -43,6 +43,34 @@ navigates away, and degrades to *absent* rather than delaying the core. **If a
 feature cannot be built this way, it does not ship** — see
 [005-git-status-column](005-git-status-column.md) and
 [007-directory-sizes](007-directory-sizes.md).
+
+### First paint does not reflow the tree — decided 2026-09-16
+
+Self-hosting the monospace face put a font on the critical path for the first
+time. `@fontsource-variable/*` ships `font-display: swap`, and a `@font-face`
+inside the render-blocking stylesheet is discoverable only *after* that
+stylesheet is fetched and parsed — so the tree painted in the system fallback and
+then reflowed to Fira Code. Mono is the app's primary face (`--font-mono` in
+theme.css draws the whole explorer, not one panel), so that flash crossed every
+row of the core navigation surface.
+
+Two ways to close that: preload the subset, or accept the swap in writing. **We
+preload.** The reflow lands on the list / fuzzy-search / move loop itself, which
+is the one surface this principle says comes first, and the fix costs a single
+`<link rel="preload">` — no dependency, no new asset, ~36K already in the bundle.
+Accepting a visible reflow of the core loop to save one tag would have inverted
+the principle.
+
+The tag cannot be written into `src/index.html` by hand, because the filename is
+content-hashed at build time. `vite.config.ts` carries a `preload-mono-latin-subset`
+plugin that reads the emitted name out of the bundle and injects the link, and
+**throws if no asset matches** — so a future font swap fails the build loudly
+rather than silently restoring the reflow. Only the latin subset is preloaded:
+the other six cuts are `unicode-range`-gated and off the first-paint path.
+
+Fonts beyond the primary face do not get this treatment. Inter is an accent face
+for rendered markdown — enrichment, arriving after the tree has painted — so it
+stays on plain `swap`.
 
 ## Where serious optimization starts
 

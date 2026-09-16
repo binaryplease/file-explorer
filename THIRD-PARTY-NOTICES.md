@@ -1,6 +1,6 @@
 # Third-party notices
 
-`binp-file-explorer` is licensed under the MIT License — see [`LICENSE`](LICENSE).
+`file-explorer` is licensed under the MIT License — see [`LICENSE`](LICENSE).
 This file covers the **other people's work** it depends on, and the notices that
 have to travel with it.
 
@@ -13,31 +13,49 @@ cloning the repository therefore triggers no obligation on you at all.
 Two things do:
 
 - **`mise run build` produces `dist/client/`, and that directory embeds other
-  people's files.** Most visibly the Inter font — 14 `.woff2` files are copied
-  into `dist/client/assets/` — but also the compiled JavaScript of every runtime
-  dependency. If you ship, host or hand someone that build output, you are
-  redistributing those works and their notices must go with it.
+  people's files.** Most visibly the two bundled fonts — 21 `.woff2` files are
+  copied into `dist/client/assets/`, 14 of them Inter and 7 Fira Code — but also
+  the compiled JavaScript of every runtime dependency. If you ship, host or hand
+  someone that build output, you are redistributing those works and their notices
+  must go with it.
 - **The Nix flake packages the same build output** into the `bfe` executable.
   Same obligation, same reason.
 
-The strictest of those obligations is the font's, so it is reproduced in full
+The strictest of those obligations is the fonts', so it is reproduced in full
 first. Everything else is enumerated after it.
 
-## Inter (SIL Open Font License 1.1) — full notice
+## Inter and Fira Code (SIL Open Font License 1.1) — full notice
 
-Delivered by [`@fontsource-variable/inter`](https://www.npmjs.com/package/@fontsource-variable/inter)
-(v5.3.0), imported by `src/index.css` and embedded as `.woff2` files in every
-client build.
+Two fonts ship in every client build, both under OFL-1.1 and therefore both
+covered by the single copy of the licence below:
+
+| Font | Package | Role |
+| --- | --- | --- |
+| Inter | [`@fontsource-variable/inter`](https://www.npmjs.com/package/@fontsource-variable/inter) (v5.3.0) | Proportional face, `--font-sans` — rendered markdown prose. |
+| Fira Code | [`@fontsource-variable/fira-code`](https://www.npmjs.com/package/@fontsource-variable/fira-code) (v5.3.0) | Monospace face, `--font-mono` — the explorer's primary face. |
+
+Both are imported by `src/index.css` and embedded as `.woff2` files.
 
 OFL-1.1 §2 requires that each copy of the Font Software distributed with other
 software carry **the copyright notice and this licence**, either as a stand-alone
 text file or in a machine-readable metadata field a user can view. This section
-is that text file. Two further conditions apply to anyone redistributing this
-project's build output: the font may not be sold on its own (§1), and a modified
-font may not keep the name "Inter" (§3).
+is that text file. One further condition applies to anyone redistributing this
+project's build output: neither font may be sold on its own (§1).
+
+§3's Reserved Font Name restriction does **not** bite here. It only covers names
+"specified as such after the copyright statement(s)", and neither font specifies
+any — `node_modules/@fontsource-variable/inter/LICENSE` and
+`node_modules/@fontsource-variable/fira-code/LICENSE` both open with a bare
+copyright line and no "with Reserved Font Name …" clause. So a modified version
+of either font is free to keep calling itself Inter or Fira Code as far as the
+licence goes. This paragraph exists because an earlier revision of this file
+asserted the opposite; it was wrong in the harmless direction, but a notice that
+overstates what is owed is no more accurate than one that understates it.
 
 > Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
 > Inter-Italic[opsz,wght].ttf: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
+>
+> Copyright 2014-2020 The Fira Code Project Authors (https://github.com/tonsky/FiraCode)
 >
 > This Font Software is licensed under the SIL Open Font License, Version 1.1.
 > This license is copied below, and is also available with a FAQ at:
@@ -134,7 +152,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ## Everything else, by licence
 
-Measured 2026-09-09 over the full resolved tree from `bun.lock` — 308 packages,
+Measured 2026-09-16 over the full resolved tree from `bun.lock` — 309 packages,
 runtime and build-time together. Counts and any drift are reproducible with the
 command in [How to re-check this](#how-to-re-check-this) below.
 
@@ -145,7 +163,7 @@ command in [How to re-check this](#how-to-re-check-this) below.
 | BSD-3-Clause | 5 | Keep the notice; additionally, do not use the contributors' names to endorse a derived product. |
 | Apache-2.0 | 5 | Keep the notice and the licence, state significant changes you made, and pass along any `NOTICE` file. **None of these five ships a `NOTICE` file**, checked on disk, so nothing further is owed under §4(d). |
 | MPL-2.0 | 3 | File-level copyleft: if you *modify* one of these files you must publish that file's source under MPL-2.0. Merely using them imposes nothing. |
-| OFL-1.1 | 1 | The font — full notice above. |
+| OFL-1.1 | 2 | The two fonts — full notice above. |
 | 0BSD | 1 | No conditions at all. |
 | Unlicense | 1 | Public-domain dedication; no conditions. |
 

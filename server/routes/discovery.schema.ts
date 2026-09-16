@@ -19,7 +19,7 @@ export type HealthResponse = z.infer<typeof HealthResponseSchema>
 // Every field carries a default (`zod-defaults`) and is emitted even when
 // nullish (`emit-nullish`), so a consumer always sees the full shape.
 export const StatusResponseSchema = z.object({
-  name: z.string().default('binp-file-explorer').describe('Service name.'),
+  name: z.string().default('file-explorer').describe('Service name.'),
   version: z.string().default('0.0.0').describe('Service version.'),
   pid: z.number().int().default(0).describe('Process id of the running server.'),
   uptimeSeconds: z

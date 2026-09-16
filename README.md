@@ -1,4 +1,4 @@
-# binp-file-explorer
+# file-explorer
 
 A **high-speed Bun file explorer** — a web app for browsing a served filesystem
 fast.
@@ -84,13 +84,29 @@ bfe status                Full operational view (served root, uptime, port) + di
 bfe help                  All commands and flags
 ```
 
-The daemon is a single background server (PID at
-`$XDG_RUNTIME_DIR/binp-file-explorer.pid`, logs at
-`~/.local/share/binp-file-explorer/`); it forks detached, is torn down by
-process-group signal, and reports its full state at `/api/status`. For a hosted
-box, the flake also ships `nixosModules.default` (`services.binp-file-explorer`)
-— a systemd unit with the standard hardening (read-only filesystem, no
-capabilities, restricted syscalls), loopback-bound and confining by default.
+The daemon is a single background server. It forks detached, is torn down by
+process-group signal, and reports its full state at `/api/status`. Its four
+runtime locations are all named after the product:
+
+| Path | What it holds |
+|---|---|
+| `$XDG_RUNTIME_DIR/file-explorer.pid` | the daemon's pid |
+| `$XDG_RUNTIME_DIR/file-explorer.state.json` | the port/host/root/`startedAt` it was launched with, so `status`, `stop` and `logs` reach it without re-guessing its port |
+| `~/.local/share/file-explorer/` | the log directory |
+| `~/.local/share/file-explorer/file-explorer.log` | the log itself, tailed by `bfe daemon logs` |
+
+Those paths carried a longer, pre-publication name through the 0.1.0 release —
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md) records which release moved them, and
+is the only place that says so. A daemon still running under the old names is
+**adopted**, not orphaned: the first `bfe daemon …` or `bfe status` after the
+upgrade takes over its pid and state, moves the log directory across, and says
+on stdout that it did. Nothing to run by hand, and no daemon that the CLI
+reports as stopped while it still holds a port.
+
+For a hosted box, the flake also ships `nixosModules.default`
+(`services.file-explorer`) — a systemd unit with the standard hardening
+(read-only filesystem, no capabilities, restricted syscalls), loopback-bound and
+confining by default.
 
 ## Serving a location
 
@@ -191,6 +207,12 @@ files through two independent toggles (`:toggle_hidden` / `:toggle_git_ignore`,
 Alt-h / Alt-i by default). We add `alt+a` on top of those — a one-stroke
 "reveal everything" that flips both views together (both on / both off).
 
+## Changes
+
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md) is the release-note trail, newest
+first, and marks the changes that break something outside this process — the
+`exports` specifiers a host imports, or a path a running daemon already holds.
+
 ## Contributing
 
 Patches welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup, the three
@@ -212,7 +234,8 @@ rather than bugs. See [Security model](#security-model) above for why.
 
 MIT — see [`LICENSE`](LICENSE). Copyright (c) 2026 Enrico Scherlies.
 
-Dependencies are permissively licensed throughout, and the bundled Inter font is
-under the SIL Open Font License 1.1 — its notice, and everything else that must
+Dependencies are permissively licensed throughout, and the two bundled fonts —
+Fira Code (monospace) and Inter (prose) — are under the SIL Open Font License
+1.1 — their notice, and everything else that must
 travel with a build of this project, is in
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

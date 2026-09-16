@@ -1,5 +1,5 @@
 {
-  description = "binp-file-explorer — a high-speed Bun file explorer, as a single on-demand CLI (bfe)";
+  description = "file-explorer — a high-speed Bun file explorer, as a single on-demand CLI (bfe)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -18,7 +18,7 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
 
-          pname = "binp-file-explorer";
+          pname = "file-explorer";
           version = "0.1.0";
 
           # A fixed-output derivation is addressed by its `outputHash` alone, so
@@ -69,10 +69,10 @@
             '';
             outputHashMode = "recursive";
             outputHashAlgo = "sha256";
-            outputHash = "sha256-GL1LrQ5FFEfn9oSfkD42KQI15U6aEerkQCQ4L2ZoM7U=";
+            outputHash = "sha256-0GYK9o3LWAIwVrf9zuB3DiodVPay9mVG/oGRxwRe1XQ=";
           };
 
-          binp-file-explorer = pkgs.stdenv.mkDerivation {
+          file-explorer = pkgs.stdenv.mkDerivation {
             inherit pname version;
             src = pkgs.lib.fileset.toSource {
               root = ./.;
@@ -133,7 +133,7 @@
               # terminal serves the current directory (broot-style); the wrapper
               # resolves the built CLI bundle beside the server bundle so the
               # `location-agnostic-cli` sibling lookup and the '../client'
-              # static-asset path both hold. `binp-file-explorer` is provided as
+              # static-asset path both hold. `file-explorer` is provided as
               # a spelled-out alias, since the published artifact's name matches
               # the repository name exactly (`package-name-matches-repo`).
               makeWrapper ${pkgs.bun}/bin/bun "$out/bin/bfe" \
@@ -151,14 +151,14 @@
           };
         in
         {
-          packages.default = binp-file-explorer;
-          packages.binp-file-explorer = binp-file-explorer;
+          packages.default = file-explorer;
+          packages.file-explorer = file-explorer;
 
           # `nix run` → serve the current directory on a free port and open the
           # browser. `nix run .# -- daemon start` etc. reach the full CLI.
           apps.default = {
             type = "app";
-            program = "${binp-file-explorer}/bin/bfe";
+            program = "${file-explorer}/bin/bfe";
             meta = {
               description = "Serve the current directory in the browser (bfe)";
               mainProgram = "bfe";
@@ -189,12 +189,12 @@
           ...
         }:
         let
-          cfg = config.services.binp-file-explorer;
+          cfg = config.services.file-explorer;
           package = self.packages.${pkgs.system}.default;
         in
         {
-          options.services.binp-file-explorer = {
-            enable = lib.mkEnableOption "binp-file-explorer filesystem browser";
+          options.services.file-explorer = {
+            enable = lib.mkEnableOption "file-explorer filesystem browser";
 
             port = lib.mkOption {
               type = lib.types.port;
@@ -242,14 +242,14 @@
 
             user = lib.mkOption {
               type = lib.types.str;
-              default = "binp-file-explorer";
+              default = "file-explorer";
               description = "System user the service runs as. Must be able to read `root`.";
             };
           };
 
           config = lib.mkIf cfg.enable {
-            systemd.services.binp-file-explorer = {
-              description = "binp-file-explorer — high-speed filesystem browser";
+            systemd.services.file-explorer = {
+              description = "file-explorer — high-speed filesystem browser";
               wantedBy = [ "multi-user.target" ];
               after = [ "network.target" ];
 
@@ -266,7 +266,7 @@
                 Type = "simple";
                 # The server binary (not the CLI): systemd owns this lifecycle,
                 # so it runs in the foreground and is supervised directly.
-                ExecStart = "${pkgs.bun}/bin/bun ${package}/lib/binp-file-explorer/server/index.js";
+                ExecStart = "${pkgs.bun}/bin/bun ${package}/lib/file-explorer/server/index.js";
                 Restart = "on-failure";
                 RestartSec = 5;
 
@@ -331,7 +331,7 @@
             users.users.${cfg.user} = lib.mkDefault {
               isSystemUser = true;
               group = cfg.user;
-              description = "binp-file-explorer service user";
+              description = "file-explorer service user";
             };
             users.groups.${cfg.user} = lib.mkDefault { };
           };

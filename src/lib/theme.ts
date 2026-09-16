@@ -14,7 +14,7 @@ export type ThemeMode = z.infer<typeof ThemeModeSchema>
 export type ResolvedTheme = 'dark' | 'light'
 
 // Keep this key in sync with the pre-paint shim in index.html.
-const THEME_STORAGE_KEY = 'binp-file-explorer:theme'
+const THEME_STORAGE_KEY = 'file-explorer:theme'
 const DARK_MEDIA_QUERY = '(prefers-color-scheme: dark)'
 
 function readStoredThemeMode(): ThemeMode {

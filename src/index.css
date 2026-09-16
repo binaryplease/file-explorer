@@ -5,6 +5,12 @@
    the bundle. Drives the --font-sans token in theme.css. */
 @import "@fontsource-variable/inter/wght.css";
 @import "@fontsource-variable/inter/wght-italic.css";
+/* Fira Code, self-hosted on the same terms (`bundled-never-cdn`). The tree is
+   drawn in mono end to end, so this is the app's primary face, not an accent:
+   shipping it removes the per-machine lottery the old system-font stack left in
+   the listing's column alignment. Variable wght only — Fira Code has no italic
+   cut. Drives the --font-mono token in theme.css. */
+@import "@fontsource-variable/fira-code/wght.css";
 /* The grove design tokens live in their own file so an embedding host can share
    the exact same palette over one definition — the palette is the invariant
    (`share-the-invariant`), see theme.css. */

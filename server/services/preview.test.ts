@@ -145,7 +145,7 @@ describe('summarizeDirectory', () => {
 
 describe('previewEntry', () => {
   async function createScratchRoot() {
-    const rootPath = await mkdtemp(join(tmpdir(), 'binp-preview-test-'))
+    const rootPath = await mkdtemp(join(tmpdir(), 'file-explorer-preview-test-'))
     const filesystemService = createFilesystemService({ rootAbsolutePath: rootPath })
     const previewService = createPreviewService({ filesystemService })
     return { rootPath, previewService }
@@ -336,7 +336,7 @@ describe('previewEntry', () => {
   // honest to render, the same contract as `empty` or `binary`.
   test('marks a path that escapes the root through a symlink as blocked', async () => {
     const { rootPath, previewService } = await createScratchRoot()
-    const outsidePath = await mkdtemp(join(tmpdir(), 'binp-preview-outside-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'file-explorer-preview-outside-'))
     await writeFile(join(outsidePath, 'secret.txt'), 'secret\n')
     await symlink(outsidePath, join(rootPath, 'escape'))
     const result = await previewService.previewEntry('escape/secret.txt')
@@ -353,7 +353,7 @@ describe('previewEntry', () => {
   // the marker must not reveal by summarising it.
   test('marks an escaping symlink to a directory as blocked, not as a directory', async () => {
     const { rootPath, previewService } = await createScratchRoot()
-    const outsidePath = await mkdtemp(join(tmpdir(), 'binp-preview-outside-'))
+    const outsidePath = await mkdtemp(join(tmpdir(), 'file-explorer-preview-outside-'))
     await writeFile(join(outsidePath, 'secret.txt'), 'secret\n')
     await symlink(outsidePath, join(rootPath, 'escape'))
     const result = await previewService.previewEntry('escape')

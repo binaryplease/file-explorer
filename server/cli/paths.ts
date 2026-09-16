@@ -20,7 +20,12 @@ import { dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod/v4'
 
-const DAEMON_NAME = 'binp-file-explorer'
+/**
+ * The product name the daemon's runtime paths are built from — the repository
+ * name exactly (`package-name-matches-repo`). Renaming this moves all five
+ * paths below at once, which is why ./legacy-daemon.ts exists.
+ */
+export const DAEMON_NAME = 'file-explorer'
 
 /**
  * Directory of the running CLI file, resolved through any symlink
@@ -42,13 +47,42 @@ const cliFilePath = (() => {
 // right one without probing the disk.
 export const serviceScriptPath = join(dirname(cliFilePath), `index${extname(cliFilePath)}`)
 
-const runtimeDirectory = process.env.XDG_RUNTIME_DIR || '/tmp'
-const dataHome = process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share')
+/** The XDG roots the daemon's on-disk state hangs off, read once at load. */
+export const xdgRoots: XdgRoots = {
+  runtimeDirectory: process.env.XDG_RUNTIME_DIR || '/tmp',
+  dataHome: process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'),
+}
 
-export const pidFilePath = join(runtimeDirectory, `${DAEMON_NAME}.pid`)
-export const stateFilePath = join(runtimeDirectory, `${DAEMON_NAME}.state.json`)
-export const logDirectory = join(dataHome, DAEMON_NAME)
-export const logFilePath = join(logDirectory, `${DAEMON_NAME}.log`)
+export type XdgRoots = {
+  runtimeDirectory: string
+  dataHome: string
+}
+
+/** The four persistent locations a daemon of a given product name owns. */
+export type DaemonPaths = {
+  pidFilePath: string
+  stateFilePath: string
+  logDirectory: string
+  logFilePath: string
+}
+
+/**
+ * Derive that set from a product name. Taking the name as an argument — rather
+ * than closing over `DAEMON_NAME` — is what lets ./legacy-daemon.ts address the
+ * paths a pre-rename build left behind without restating the layout.
+ */
+export function daemonPathsFor(daemonName: string, roots: XdgRoots = xdgRoots): DaemonPaths {
+  const logDirectory = join(roots.dataHome, daemonName)
+  return {
+    pidFilePath: join(roots.runtimeDirectory, `${daemonName}.pid`),
+    stateFilePath: join(roots.runtimeDirectory, `${daemonName}.state.json`),
+    logDirectory,
+    logFilePath: join(logDirectory, `${daemonName}.log`),
+  }
+}
+
+export const daemonPaths = daemonPathsFor(DAEMON_NAME)
+export const { pidFilePath, stateFilePath, logDirectory, logFilePath } = daemonPaths
 
 /**
  * A private, per-launch path the server writes its bound port to (the CLI
@@ -56,7 +90,7 @@ export const logFilePath = join(logDirectory, `${DAEMON_NAME}.log`)
  * never read each other's file.
  */
 export function readyFilePathFor(uniqueSuffix: string | number): string {
-  return join(runtimeDirectory, `${DAEMON_NAME}.ready.${uniqueSuffix}`)
+  return join(xdgRoots.runtimeDirectory, `${DAEMON_NAME}.ready.${uniqueSuffix}`)
 }
 
 // Identity fields, deliberately exempt from `zod-defaults`: a corrupt or

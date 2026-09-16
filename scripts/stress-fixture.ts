@@ -118,7 +118,7 @@ export type StressFixtureArguments = {
 
 /** The default fixture root, outside the repo so nothing can be committed by accident. */
 export function defaultFixtureRoot(temporaryDirectory: string = tmpdir()): string {
-  return join(temporaryDirectory, 'binp-file-explorer-stress')
+  return join(temporaryDirectory, 'file-explorer-stress')
 }
 
 /**
