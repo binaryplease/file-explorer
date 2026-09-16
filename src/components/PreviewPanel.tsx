@@ -374,11 +374,8 @@ function TextPreviewView({
   const isPlainByLineCount =
     preview.language !== 'txt' && preview.lines.length > HIGHLIGHT_MAX_LINES
 
-  // Ligatures back on for file *content* — this is the one surface where Fira
-  // Code's `=>`/`!=`/`->` glyphs are the point. The root turns them off for the
-  // literal text everywhere else (App.tsx).
   return (
-    <div className="py-2 [font-variant-ligatures:normal]">
+    <div className="py-2">
       {preview.lines.map((line, lineIndex) => {
         // Look the tokens up per line rather than trusting `tokenLines` to match
         // `preview.lines` wholesale. When the selection moves to a new file the

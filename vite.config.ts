@@ -1,10 +1,72 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 
+// The one subset the explorer is guaranteed to need on first paint: mono is the
+// app's primary face (theme.css, --font-mono) and the tree is ASCII, so the
+// latin cut is on the critical path while the other six are not.
+const MONO_LATIN_SUBSET_PATTERN = /fira-code-latin-wght-normal-[^/]*\.woff2$/;
+
+// Preload that subset from the document head.
+//
+// Without this the browser cannot discover the font until it has fetched and
+// parsed the render-blocking stylesheet the @font-face lives in, so with
+// `font-display: swap` the whole tree paints in the system fallback and then
+// reflows to Fira Code — a flash across every row, not one panel, because mono
+// is the primary face. The preload starts that fetch in parallel with the CSS
+// instead of after it (AGENTS.md responsiveness principle).
+//
+// Build-only: the hashed filename is knowable only from the bundle, and the dev
+// server serves the unhashed file off the local filesystem where the swap is not
+// felt. `crossorigin` is not optional — fonts are always fetched in CORS mode,
+// and a preload without it is a second, wasted request rather than a warm cache.
+function preloadMonoLatinSubset(): Plugin {
+  // Captured from the resolved config rather than read off `context.server`,
+  // which does not exist during a build.
+  let publicBasePath = "/";
+  return {
+    name: "preload-mono-latin-subset",
+    apply: "build",
+    configResolved(resolvedConfig) {
+      publicBasePath = resolvedConfig.base;
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler(_html, context) {
+        const subsetFileName = Object.keys(context.bundle ?? {}).find((fileName) =>
+          MONO_LATIN_SUBSET_PATTERN.test(fileName),
+        );
+        // Fail loud rather than silently shipping the reflow back: if the font
+        // package is swapped or its subset renamed, this stops the build instead
+        // of quietly dropping the preload.
+        if (subsetFileName === undefined) {
+          throw new Error(
+            "preload-mono-latin-subset: no emitted asset matched " +
+              `${MONO_LATIN_SUBSET_PATTERN}. The mono font's latin subset moved or its ` +
+              "import was dropped — update the pattern or remove this plugin.",
+          );
+        }
+        return [
+          {
+            tag: "link",
+            attrs: {
+              rel: "preload",
+              as: "font",
+              type: "font/woff2",
+              href: `${publicBasePath}${subsetFileName}`,
+              crossorigin: "",
+            },
+            injectTo: "head",
+          },
+        ];
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), preloadMonoLatinSubset()],
   root: "src",
   publicDir: resolve(__dirname, "public"),
   build: {

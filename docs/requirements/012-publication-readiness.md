@@ -350,10 +350,19 @@ monospace face moved off the system font stack onto self-hosted Fira Code
 The counts above are the 2026-09-09 measurement and stay as the record of that
 date; as of 2026-09-16 the build copies **21 `.woff2` files** (14 Inter, 7 Fira
 Code, +124K) and the tree resolves to 309 packages with two OFL-1.1 entries.
-`THIRD-PARTY-NOTICES.md` now names both fonts over one copy of the licence text,
-and both reserved font names under §3. The shape of the discharge did not
-change — which is the point: adding a bundled asset is a notice edit, not a new
-decision.
+`THIRD-PARTY-NOTICES.md` now names both fonts over one copy of the licence text.
+The shape of the discharge did not change — which is the point: adding a bundled
+asset is a notice edit, not a new decision.
+
+That notice — and this paragraph — first claimed §3 additionally reserved the
+names "Inter" and "Fira Code". It does not. §3 binds only names "specified as
+such after the copyright statement(s)", and neither font's `LICENSE` specifies
+any: both open with a bare copyright line and no "with Reserved Font Name …"
+clause. Corrected in both places on 2026-09-16. The error was conservative — it
+claimed more restriction than was owed, so nothing shipped under-attributed —
+but a notice is a statement of what the licence requires, and overstating that is
+as inaccurate as understating it. Read the `LICENSE` a package actually ships
+rather than assuming the OFL's optional clauses were exercised.
 
 ### B8 — Packaging was a fork in the finish line — **answered 2026-09-09**
 

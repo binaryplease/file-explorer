@@ -39,9 +39,18 @@ Both are imported by `src/index.css` and embedded as `.woff2` files.
 OFL-1.1 §2 requires that each copy of the Font Software distributed with other
 software carry **the copyright notice and this licence**, either as a stand-alone
 text file or in a machine-readable metadata field a user can view. This section
-is that text file. Two further conditions apply to anyone redistributing this
-project's build output: neither font may be sold on its own (§1), and a modified
-font may not keep the name "Inter" or "Fira Code" (§3).
+is that text file. One further condition applies to anyone redistributing this
+project's build output: neither font may be sold on its own (§1).
+
+§3's Reserved Font Name restriction does **not** bite here. It only covers names
+"specified as such after the copyright statement(s)", and neither font specifies
+any — `node_modules/@fontsource-variable/inter/LICENSE` and
+`node_modules/@fontsource-variable/fira-code/LICENSE` both open with a bare
+copyright line and no "with Reserved Font Name …" clause. So a modified version
+of either font is free to keep calling itself Inter or Fira Code as far as the
+licence goes. This paragraph exists because an earlier revision of this file
+asserted the opposite; it was wrong in the harmless direction, but a notice that
+overstates what is owed is no more accurate than one that understates it.
 
 > Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
 > Inter-Italic[opsz,wght].ttf: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
