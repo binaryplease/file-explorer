@@ -57,8 +57,8 @@ mise run dev      # Elysia (:3000) + Vite (:5173) — open http://localhost:5173
 ## Install & run as a CLI (`bfe`)
 
 The flake builds a single on-demand executable — `bfe` — that serves a directory
-in your browser, broot-style: run it wherever you are in a terminal and it opens
-the explorer on the current directory.
+in your browser, [broot](https://github.com/Canop/broot)-style: run it wherever
+you are in a terminal and it opens the explorer on the current directory.
 
 ```sh
 nix run github:binaryplease/file-explorer          # serve the current dir, open the browser
@@ -196,6 +196,7 @@ are missing, what share is on screen, and a **load whole file** button that
 re-reads to a far larger ceiling.
 Not yet built: git status, directory sizing, broot's computed screen-fit
 openness (R8 — manual expand/collapse kept for now as a deliberate departure).
+[Credits](#credits--broot) below says what came from broot and what did not.
 
 Preview focus follows broot's two-step model: `ctrl/cmd-→` opens the panel
 (keyboard stays in the tree), a second `ctrl/cmd-→` hands the keyboard to the
@@ -212,6 +213,37 @@ Alt-h / Alt-i by default). We add `alt+a` on top of those — a one-stroke
 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) is the release-note trail, newest
 first, and marks the changes that break something outside this process — the
 `exports` specifiers a host imports, or a path a running daemon already holds.
+
+## Credits — broot
+
+This explorer is a browser-shaped tribute to
+[**broot**](https://github.com/Canop/broot) by
+[Denys Séguret](https://github.com/Canop) (MIT, docs at
+[dystroy.org/broot](https://dystroy.org/broot/)) — the tool I still reach for in
+a terminal. broot is the model for the entire core loop: list, fuzzy-filter,
+move, preview.
+
+| What came from broot | Where it lives here |
+|---|---|
+| Fuzzy scoring constants and the scoring shape | [`shared/fuzzy.ts`](shared/fuzzy.ts) |
+| Best-first tree builder — 10× overscan, 900 ms budget, lowest-score leaf trimming | [`server/services/filesystem.ts`](server/services/filesystem.ts) |
+| Screen-fit auto-open, connectors, interleaved alpha order | [`src/App.tsx`](src/App.tsx), [`src/lib/tree.ts`](src/lib/tree.ts) |
+| Default keys, always-active input, two-step preview focus | [`src/App.tsx`](src/App.tsx), [`src/components/CommandBar.tsx`](src/components/CommandBar.tsx) |
+| Cached, interruptible, hard-link-aware directory sizing — specced, not yet built | [`docs/requirements/007-directory-sizes.md`](docs/requirements/007-directory-sizes.md) |
+
+**No broot code is copied.** Every algorithm is re-engineered in TypeScript with
+broot's Rust read as a written specification. Those specs are
+[`docs/research/2026-07-17-broot-engine.md`](docs/research/2026-07-17-broot-engine.md)
+and
+[`docs/research/2026-07-17-broot-tree-display-and-navigation.md`](docs/research/2026-07-17-broot-tree-display-and-navigation.md);
+the call not to consume the crate is
+[`docs/decisions/2026-07-17-re-engineer-the-broot-engine.md`](docs/decisions/2026-07-17-re-engineer-the-broot-engine.md).
+MIT places no attribution duty on a re-implementation — this section is here
+because the debt is real, not because a licence demands it.
+
+Where we deliberately differ from broot is marked in [Status](#status) above. If
+this project is useful to you, broot is more so:
+[sponsor Denys Séguret](https://github.com/sponsors/Canop).
 
 ## Contributing
 

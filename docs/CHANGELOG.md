@@ -14,6 +14,16 @@ break that check for the sake of a filename convention.
 
 ## Unreleased
 
+- **broot is credited by name, by author and by link.** The tool this explorer
+  is modelled on was named 232 times across the repository, linked 4 times, and
+  its author — Denys Séguret ([Canop](https://github.com/Canop)) — was named
+  nowhere. `README.md` now carries a **Credits — broot** section listing what
+  was borrowed and where it landed, the title bar carries a permanent
+  *inspired by broot* link, `bfe help` closes with the same credit, and
+  `THIRD-PARTY-NOTICES.md` names the author and restates that no broot code is
+  copied. No behaviour change: MIT imposes no attribution duty on a
+  re-implementation, and this credit is voluntary.
+
 - **The monospace face is now Fira Code, self-hosted.** `--font-mono` previously
   named a stack of fonts the *machine* might have (`ui-monospace`, JetBrains
   Mono, SF Mono, …), so the explorer's metrics — and its column alignment —

@@ -269,7 +269,10 @@ Options (serve / daemon start)
       --no-open      Do not open the browser (serve only).
 
 By default the served root is a starting anchor, not a boundary: you can browse
-up and out of it. It binds loopback only. See the security model in README.md.`)
+up and out of it. It binds loopback only. See the security model in README.md.
+
+Inspired by broot (https://github.com/Canop/broot) by Denys Séguret, MIT — its
+search/tree engine re-engineered in TypeScript, no code copied.`)
 }
 
 async function main(): Promise<void> {
