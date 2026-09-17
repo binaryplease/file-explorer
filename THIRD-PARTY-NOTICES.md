@@ -200,9 +200,13 @@ MIT licence.
   [`@tabler/icons-react`](https://www.npmjs.com/package/@tabler/icons-react)
   (MIT), not committed as files.
 - The search, tree-building and directory-sizing algorithms are re-engineered in
-  TypeScript against `broot` (MIT) as a reference specification; no `broot` code
-  is copied. See
-  [`docs/decisions/2026-07-17-re-engineer-the-broot-engine.md`](docs/decisions/2026-07-17-re-engineer-the-broot-engine.md).
+  TypeScript against [`broot`](https://github.com/Canop/broot) by Denys Séguret
+  (MIT), used as a reference specification; **no `broot` code is copied**, so
+  this entry imposes no obligation on a redistributor. The fuzzy scoring
+  constants in `shared/fuzzy.ts` are transcribed values, and that file carries
+  its own attribution comment. The reasoning is in
+  [`docs/decisions/2026-07-17-re-engineer-the-broot-engine.md`](docs/decisions/2026-07-17-re-engineer-the-broot-engine.md),
+  and the credit is in [`README.md`](README.md#credits--broot).
 
 ## How to re-check this
 

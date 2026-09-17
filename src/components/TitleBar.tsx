@@ -25,6 +25,19 @@ export function TitleBar({ rootPath, themeMode, onSelectThemeMode }: TitleBarPro
       </div>
       <div className="flex flex-none items-center gap-2.5 text-[11px] text-faint">
         <span className="hidden font-semibold text-prompt sm:inline">grove</span>
+        {/* Credit where the core loop came from: list / fuzzy-filter / move is
+            broot's design, re-engineered here in TypeScript with no code
+            copied. See the "Credits — broot" section of README.md. Always
+            visible, never collapsed away (`never-hide-a-control`). */}
+        <a
+          href="https://github.com/Canop/broot"
+          target="_blank"
+          rel="noreferrer noopener"
+          title="Inspired by broot, by Denys Séguret (MIT)"
+          className="rounded-[5px] px-1 py-0.5 text-dim transition-colors hover:bg-hover hover:text-fg"
+        >
+          inspired by broot
+        </a>
         {onSelectThemeMode !== undefined && (
           <ThemeToggle themeMode={themeMode} onSelectThemeMode={onSelectThemeMode} />
         )}
