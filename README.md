@@ -1,7 +1,9 @@
 # file-explorer
 
-A **high-speed Bun file explorer** — a web app for browsing a served filesystem
-fast.
+A **[broot](https://github.com/Canop/broot)-inspired, high-speed Bun file
+explorer** — a web app for browsing a served filesystem fast. broot's list /
+fuzzy-search / move loop, re-engineered for the browser
+([credits](#credits--broot)).
 
 <!--
   Hero shots: 1440×900 viewport at devicePixelRatio 2 (so the files are 2×),

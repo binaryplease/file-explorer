@@ -17,7 +17,8 @@ break that check for the sake of a filename convention.
 - **broot is credited by name, by author and by link.** The tool this explorer
   is modelled on was named 232 times across the repository, linked 4 times, and
   its author — Denys Séguret ([Canop](https://github.com/Canop)) — was named
-  nowhere. `README.md` now carries a **Credits — broot** section listing what
+  nowhere. `README.md` now opens on the line "a **broot-inspired, high-speed Bun
+  file explorer**" and carries a **Credits — broot** section listing what
   was borrowed and where it landed, the title bar carries a permanent
   *inspired by broot* link, `bfe help` closes with the same credit, and
   `THIRD-PARTY-NOTICES.md` names the author and restates that no broot code is
