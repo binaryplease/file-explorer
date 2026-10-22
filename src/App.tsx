@@ -20,6 +20,7 @@ import {
   mergeChildCounts,
   planAutoOpen,
   ROOT_LINE_PATH,
+  sortEntriesByName,
   type EntryRow,
 } from './lib/tree'
 import { PreviewPanel } from './components/PreviewPanel'
@@ -228,9 +229,11 @@ export function App({
         const listing = await fetchDirectoryListing(apiBaseUrl, relativePath)
         setRootPath(listing.rootPath)
         setIsConfined(listing.confined)
+        // Stored in display order, once, so no later row build or re-plan sorts it.
+        const orderedEntries = sortEntriesByName(listing.entries)
         setListings((previousListings) => ({
           ...previousListings,
-          [listing.relativePath]: listing.entries,
+          [listing.relativePath]: orderedEntries,
         }))
         // Fresh entries carry no counts: whatever was counted for the previous
         // copy of this listing is gone with it, and must be fetched again.
@@ -645,13 +648,6 @@ export function App({
     if (selectedPath !== null && selectablePaths.includes(selectedPath)) return
     setSelectedPath(ROOT_LINE_PATH)
   }, [entryRows, selectablePaths, selectedPath])
-
-  useEffect(() => {
-    if (selectedPath === null) return
-    document
-      .querySelector(`[data-row-path="${CSS.escape(selectedPath)}"]`)
-      ?.scrollIntoView({ block: 'nearest' })
-  }, [selectedPath])
 
   const selectedRow = entryRows.find((entryRow) => entryRow.path === selectedPath)
 

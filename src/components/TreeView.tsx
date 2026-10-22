@@ -1,4 +1,13 @@
-import { useCallback, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react'
 import { IconClipboardCopy, IconCopy, IconLock } from '@tabler/icons-react'
 import {
   absoluteTreePath,
@@ -19,6 +28,12 @@ import {
 } from '../lib/confinement'
 import { ViewChips } from './ViewChips'
 import { HighlightedSegments } from './FuzzyMatch'
+import {
+  OVERSCAN_ROW_COUNT,
+  scrollTopRevealingRow,
+  UNMEASURED_VIEWPORT_ROW_COUNT,
+  visibleRowWindow,
+} from '../lib/rowWindow'
 
 // Every line inside the tree scroll — entry rows and the annotation lines
 // ("N unlisted", the hidden/gitignored tally) alike — occupies one cell of a
@@ -31,8 +46,38 @@ import { HighlightedSegments } from './FuzzyMatch'
 // screen-fit fill by dividing the viewport height by *one entry row's* height,
 // so a line that renders shorter than an entry row makes the plan come up short
 // and the tree ends in a blank strip. Annotation lines recede by color
-// (`text-faint`), never by size.
+// (`text-faint`), never by size. The row window below leans on the same
+// invariant: it locates every row by multiplying one row's height.
 const TREE_ROW_METRICS_CLASS = 'relative px-4 py-[2.5px] whitespace-pre'
+
+// One entry row's height before any row has rendered to be measured — the same
+// fallback App's viewport measurement uses.
+const FALLBACK_TREE_ROW_HEIGHT = 27
+
+// What the row window is computed from: the scroll container's offset and
+// height, one row's height, and where the rows start inside the container.
+type TreeViewportMetrics = {
+  scrollTop: number
+  viewportHeight: number
+  rowHeight: number
+  rowsOffsetTop: number
+}
+
+const UNMEASURED_VIEWPORT_METRICS: TreeViewportMetrics = {
+  scrollTop: 0,
+  viewportHeight: UNMEASURED_VIEWPORT_ROW_COUNT * FALLBACK_TREE_ROW_HEIGHT,
+  rowHeight: FALLBACK_TREE_ROW_HEIGHT,
+  rowsOffsetTop: 0,
+}
+
+function viewportMetricsEqual(first: TreeViewportMetrics, second: TreeViewportMetrics): boolean {
+  return (
+    first.scrollTop === second.scrollTop &&
+    first.viewportHeight === second.viewportHeight &&
+    first.rowHeight === second.rowHeight &&
+    first.rowsOffsetTop === second.rowsOffsetTop
+  )
+}
 
 // One tree level is three character cells wide — broot's `"│  "` lead and its
 // `"├──"` / `"└──"` corners (`display/displayable_tree.rs`), so the rails sit
@@ -126,7 +171,11 @@ type EntryRowViewProps = {
   onContextMenu: (mouseEvent: ReactMouseEvent, row: EntryRow) => void
 }
 
-function EntryRowView({
+// Memoized: a row's props are its stable row model, a selected/refused flag and
+// App's stable callbacks, so moving the focus re-renders the two rows whose
+// selection changed rather than every row in the window — what keeps a keypress
+// inside one frame.
+const EntryRowView = memo(function EntryRowView({
   row,
   isSelected,
   wasRefused,
@@ -261,7 +310,7 @@ function EntryRowView({
     )}
     </>
   )
-}
+})
 
 type TreeViewProps = {
   rootFullPath: string
@@ -379,6 +428,132 @@ export function TreeView({
     [rootPath, rootFullPath, onSelect, openCopyMenu],
   )
 
+  // Row windowing: only the rows the viewport can show (plus an overscan) are
+  // rendered; the rest are two spacers of the right height. See
+  // `../lib/rowWindow.ts` for why this is arithmetic rather than measurement.
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const rowsContainerRef = useRef<HTMLDivElement | null>(null)
+  const [viewportMetrics, setViewportMetrics] = useState(UNMEASURED_VIEWPORT_METRICS)
+
+  const measureViewport = useCallback(() => {
+    const scrollElement = scrollContainerRef.current
+    const rowsElement = rowsContainerRef.current
+    if (scrollElement === null || rowsElement === null) return
+    const firstRowElement = rowsElement.querySelector<HTMLElement>('[data-row-path]')
+    const measuredRowHeight = firstRowElement?.getBoundingClientRect().height ?? 0
+    setViewportMetrics((previousMetrics) => {
+      const nextMetrics: TreeViewportMetrics = {
+        scrollTop: scrollElement.scrollTop,
+        viewportHeight: scrollElement.clientHeight,
+        rowHeight: measuredRowHeight > 0 ? measuredRowHeight : previousMetrics.rowHeight,
+        rowsOffsetTop: rowsElement.offsetTop,
+      }
+      return viewportMetricsEqual(previousMetrics, nextMetrics) ? previousMetrics : nextMetrics
+    })
+  }, [])
+
+  // Re-read after every commit, before paint: a new row set, an error line
+  // above the rows, or the first real row replacing the fallback height all
+  // move the window, and settling it here means the frame shows the right rows.
+  // A no-op read keeps the previous state object, so this does not loop.
+  useLayoutEffect(() => {
+    measureViewport()
+  })
+
+  useEffect(() => {
+    const scrollElement = scrollContainerRef.current
+    if (scrollElement === null) return
+    const resizeObserver = new ResizeObserver(() => measureViewport())
+    resizeObserver.observe(scrollElement)
+    return () => resizeObserver.disconnect()
+  }, [measureViewport])
+
+  // Keep the selected row in view. The row may sit outside the rendered window,
+  // so it is located by index rather than by querying the DOM, and scrolled to
+  // before paint so a keypress lands in one frame. A selection made before its
+  // row exists (a listing still loading) is revealed once the row arrives; after
+  // that, rows changing underneath it never scroll the tree on their own.
+  const previousSelectedPathRef = useRef<string | null>(null)
+  const pendingRevealPathRef = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    if (selectedPath !== previousSelectedPathRef.current) {
+      previousSelectedPathRef.current = selectedPath
+      pendingRevealPathRef.current = selectedPath === ROOT_LINE_PATH ? null : selectedPath
+    }
+    const revealPath = pendingRevealPathRef.current
+    const scrollElement = scrollContainerRef.current
+    const rowsElement = rowsContainerRef.current
+    if (revealPath === null || scrollElement === null || rowsElement === null) return
+    const rowIndex = rows.findIndex((row) => row.path === revealPath)
+    if (rowIndex === -1) return
+    pendingRevealPathRef.current = null
+    const revealingScrollTop = scrollTopRevealingRow({
+      rowIndex,
+      rowHeight: viewportMetrics.rowHeight,
+      rowsOffsetTop: rowsElement.offsetTop,
+      scrollTop: scrollElement.scrollTop,
+      viewportHeight: scrollElement.clientHeight,
+    })
+    if (revealingScrollTop === null) return
+    scrollElement.scrollTop = revealingScrollTop
+    measureViewport()
+  }, [selectedPath, rows, viewportMetrics.rowHeight, measureViewport])
+
+  const { firstRowIndex, endRowIndex } = visibleRowWindow({
+    rowCount: rows.length,
+    rowsScrollTop: viewportMetrics.scrollTop - viewportMetrics.rowsOffsetTop,
+    viewportHeight: viewportMetrics.viewportHeight,
+    rowHeight: viewportMetrics.rowHeight,
+    overscanRowCount: OVERSCAN_ROW_COUNT,
+  })
+
+  function renderTreeRow(row: TreeRowModel): ReactNode {
+    if (row.type === 'entry')
+      return (
+        <EntryRowView
+          key={row.path}
+          row={row}
+          isSelected={row.path === selectedPath}
+          wasRefused={row.path === refusedPath}
+          showSizes={showSizes}
+          onSelect={onSelect}
+          onFocusDirectory={onFocusDirectory}
+          onPreviewFile={onPreviewFile}
+          onOpenFile={onOpenFile}
+          onContextMenu={handleEntryContextMenu}
+        />
+      )
+    if (row.type === 'pruned')
+      return (
+        // broot's pruning line: children trimmed from this directory's view
+        // (the search's best-scoring cut, or the auto-open screen-fit).
+        <div key={row.path} className={`${TREE_ROW_METRICS_CLASS} text-faint`}>
+          <TreeRails connector={row.connector} />
+          <span style={{ paddingLeft: `${railIndentCh(row.connector)}ch` }}>
+            {row.unlistedCount} unlisted
+          </span>
+        </div>
+      )
+    return (
+      // The filters' tally line. Its label starts in the same column as
+      // every entry name and every pruning line — the rails are the whole
+      // indent, with no extra marker glyph pushing it out of the grid.
+      <div key={row.path} className={`${TREE_ROW_METRICS_CLASS} text-faint`}>
+        <TreeRails connector={row.connector} />
+        <span style={{ paddingLeft: `${railIndentCh(row.connector)}ch` }}>
+          {[
+            row.hiddenCount > 0
+              ? `${row.hiddenCount} hidden ( .dotfile${row.hiddenCount !== 1 ? 's' : ''} )`
+              : null,
+            row.ignoredCount > 0 ? `${row.ignoredCount} gitignored` : null,
+          ]
+            .filter((labelPart) => labelPart !== null)
+            .join(' · ')}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* View-mode chips ride a slim strip on the tree panel's header, above
@@ -423,57 +598,29 @@ export function TreeView({
         {showSizes && <span />}
         <span />
       </div>
-      <div data-tree-scroll className="min-h-0 flex-1 overflow-y-auto pb-2.5">
+      <div
+        ref={scrollContainerRef}
+        onScroll={measureViewport}
+        data-tree-scroll
+        className="min-h-0 flex-1 overflow-y-auto pb-2.5"
+      >
         {listingError !== null && (
           <div className="px-4 py-2 text-xs text-bar-a">{listingError}</div>
         )}
         {listingError === null && focusEntryCount === 0 && (
           <div className="px-4 py-2 text-xs text-faint">empty directory</div>
         )}
-        {rows.map((row) =>
-          row.type === 'entry' ? (
-            <EntryRowView
-              key={row.path}
-              row={row}
-              isSelected={row.path === selectedPath}
-              wasRefused={row.path === refusedPath}
-              showSizes={showSizes}
-              onSelect={onSelect}
-              onFocusDirectory={onFocusDirectory}
-              onPreviewFile={onPreviewFile}
-              onOpenFile={onOpenFile}
-              onContextMenu={handleEntryContextMenu}
-            />
-          ) : row.type === 'pruned' ? (
-            // broot's pruning line: children trimmed from this directory's view
-            // (the search's best-scoring cut, or the auto-open screen-fit).
-            <div key={row.path} className={`${TREE_ROW_METRICS_CLASS} text-faint`}>
-              <TreeRails connector={row.connector} />
-              <span style={{ paddingLeft: `${railIndentCh(row.connector)}ch` }}>
-                {row.unlistedCount} unlisted
-              </span>
-            </div>
-          ) : (
-            // The filters' tally line. Its label starts in the same column as
-            // every entry name and every pruning line — the rails are the whole
-            // indent, with no extra marker glyph pushing it out of the grid.
-            <div key={row.path} className={`${TREE_ROW_METRICS_CLASS} text-faint`}>
-              <TreeRails connector={row.connector} />
-              <span style={{ paddingLeft: `${railIndentCh(row.connector)}ch` }}>
-              {[
-                row.hiddenCount > 0
-                  ? `${row.hiddenCount} hidden ( .dotfile${row.hiddenCount !== 1 ? 's' : ''} )`
-                  : null,
-                row.ignoredCount > 0
-                  ? `${row.ignoredCount} gitignored`
-                  : null,
-              ]
-                .filter((labelPart) => labelPart !== null)
-                .join(' · ')}
-              </span>
-            </div>
-          ),
-        )}
+        {/* The spacers stand in for the rows outside the window, so the
+            scrollbar spans the whole listing. They carry no `data-row-path`:
+            App measures a row's height from the first element that does. */}
+        <div ref={rowsContainerRef}>
+          <div aria-hidden style={{ height: firstRowIndex * viewportMetrics.rowHeight }} />
+          {rows.slice(firstRowIndex, endRowIndex).map(renderTreeRow)}
+          <div
+            aria-hidden
+            style={{ height: (rows.length - endRowIndex) * viewportMetrics.rowHeight }}
+          />
+        </div>
       </div>
       {contextMenu !== null && (
         <ContextMenu anchor={contextMenu} onClose={() => setContextMenu(null)} />

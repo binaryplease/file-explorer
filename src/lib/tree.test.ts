@@ -4,12 +4,14 @@ import {
   absoluteTreePath,
   buildTreeRows,
   canonicalizeFocusPath,
+  compareEntryNames,
   joinTreePath,
   mergeChildCounts,
   parentTreePath,
   planAutoOpen,
   posixRelativePath,
   relativeTreePath,
+  sortEntriesByName,
   type EntryRow,
 } from './tree'
 
@@ -209,6 +211,35 @@ describe('browse ordering — broot Sort::None', () => {
       ...allViewOptions,
     })
     expect(entryNames(rows)).toEqual(['big.txt', 'small.txt'])
+  })
+
+  test('the shared collator orders exactly as localeCompare with the same options', () => {
+    const names = [
+      'file10.txt', 'file2.txt', 'File1.txt', '_private', '-dash', '.hidden', 'Ärger',
+      'zebra', 'Zebra', 'a b', 'a-b', 'a_b', 'a.b', '10', '9', 'résumé', 'resume', '日本',
+    ]
+    const byLocaleCompare = [...names].sort((first, second) =>
+      first.localeCompare(second, undefined, { sensitivity: 'base', numeric: true }),
+    )
+    expect([...names].sort(compareEntryNames)).toEqual(byLocaleCompare)
+  })
+
+  test('a listing sorted once on arrival renders in the same order as an unsorted one', () => {
+    const entries = ['delta', 'Alpha', 'charlie', 'bravo10', 'bravo9'].map((name) =>
+      makeEntry({ name }),
+    )
+    const sorted = sortEntriesByName(entries)
+    expect(sorted.map((entry) => entry.name)).toEqual([
+      'Alpha', 'bravo9', 'bravo10', 'charlie', 'delta',
+    ])
+    // The arriving listing is left untouched.
+    expect(entries[0]!.name).toBe('delta')
+    const rowsFrom = (listing: DirectoryEntry[]) =>
+      entryNames(
+        buildTreeRows({ focusPath: '', listings: { '': listing }, openPaths: new Set(), ...allViewOptions })
+          .rows,
+      )
+    expect(rowsFrom(sorted)).toEqual(rowsFrom(entries))
   })
 })
 
@@ -506,6 +537,27 @@ describe('planAutoOpen — child counts arrive after the listing', () => {
       rowCapacity: 10,
     })
     expect(plan.pendingChildCountPaths).toEqual(['a'])
+  })
+
+  test('a focus listing that already fills the viewport waits for no counts', () => {
+    // Nothing can open whatever the counts say, so there is nothing to wait for:
+    // the plan is final, and empty, while the counts are still in flight.
+    const plan = planAutoOpen({
+      focusPath: '',
+      listings: {
+        '': Array.from({ length: 40 }, (unused, entryIndex) =>
+          makeEntry({ name: `d${entryIndex}`, kind: 'directory', childCount: null }),
+        ),
+      },
+      countedDirectoryPaths: new Set(),
+      manuallyOpenPaths: new Set(),
+      closedPaths: new Set(),
+      ...filters,
+      rowCapacity: 20,
+    })
+    expect(plan.pendingChildCountPaths).toEqual([])
+    expect([...plan.autoOpenPaths]).toEqual([])
+    expect(plan.pendingListingPaths).toEqual([])
   })
 })
 

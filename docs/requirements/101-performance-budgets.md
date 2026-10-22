@@ -8,7 +8,7 @@ tags: [perf, server, client]
 blocks: []
 blocked_by: []
 research: [../research/2026-07-17-broot-engine.md]
-decisions: [2026-07-17-re-engineer-the-broot-engine]
+decisions: [2026-07-17-re-engineer-the-broot-engine, 2026-10-22-the-tree-renders-a-window]
 conventions: []
 shipped: null
 updated: 2026-10-22
@@ -28,11 +28,17 @@ when a real interaction misses a budget on a real tree, not before.** Decided
 | focus / expand a directory | listing served + rendered < ~100ms perceived |
 | server `GET /api/fs/list` | < ~50ms for a few-thousand-entry directory |
 
-Real-tree sanity check: Downloads with 1397 entries renders fine today. Against
-the stress fixture below (2026-10-22): 4 000 entries serve in ~5ms and the
-40 000-entry mixed directory in ~33–47ms, both inside the row above — see
-[013](013-large-directory-listing-performance.md). A 40 000-entry directory of
-plain files still serves in ~83–89ms; see the suspects below.
+Real-tree sanity check: Downloads with 1397 entries renders fine today. A real
+`/tmp` of ~74 500 entries (2026-10-22, Chromium, production build) paints
+~0.4–0.5s after it is entered. It took 36–43s before the tree rendered a window
+of rows. Moving the focus through it costs ~2ms of handler and render and
+lands on the next frame, so the keypress row is met there. The "focus / expand"
+row is missed at ~4×, and most of that is moving and parsing a 13 MB listing —
+see [013](013-large-directory-listing-performance.md). Against the stress
+fixture below: 4 000 entries serve in ~5ms and the 40 000-entry mixed directory
+in ~33–47ms, both inside the server row, and that directory paints ~0.3–0.4s
+after it is entered cold. A 40 000-entry directory of plain files still serves
+in ~83–89ms; see the suspects below.
 
 ## The responsiveness principle (AGENTS.md, binding)
 
@@ -81,9 +87,11 @@ optimization happens — as part of the feature, not as a separate pass:
 1. **[007-directory-sizes](007-directory-sizes.md)** — aggregated du is the known
    rabbit hole. Needs caching / progressive computation by design.
 2. **[013-large-directory-listing-performance](013-large-directory-listing-performance.md)**
-   — a directory of tens of thousands of entries. Shipped 2026-10-22: it built
-   the gate below, cut the per-entry syscalls, and moved `childCount` off the
-   listing.
+   — a directory of tens of thousands of entries. In progress: it built the
+   gate below, cut the per-entry syscalls, moved `childCount` off the listing
+   (the server half, met), and made the tree render a window of rows (the
+   client no longer hangs). Navigating into such a directory still misses the
+   "focus / expand" budget.
 
 (Server-side recursive search shipped 2026-07-17 with its bounds built in — 10×
 overscan cap, 900ms budget, gitignore-aware pruning, abort-on-keystroke.)
@@ -116,8 +124,20 @@ Touch these only when measurements name them:
   thing to design against this budget — the size bars read `sizeBytes` at
   render time, so moving it off the listing is the same shape of question
   `childCount` was, and wants its own record.
-- No row virtualization: the tree renders every visible row. Expect jank
-  somewhere ≳5–10k rows; virtualize then, not before.
+- ~~No row virtualization: the tree renders every visible row~~ — gone
+  (2026-10-22, [013](013-large-directory-listing-performance.md),
+  [decision](../decisions/2026-10-22-the-tree-renders-a-window.md)). Measured
+  first: ~73 500 DOM rows and seconds per keypress on a real `/tmp`. The tree
+  now renders the viewport's rows plus an overscan, located by arithmetic on
+  the one shared row height. The same measurement found a larger cost nobody
+  had suspected: `localeCompare` with an options object, ~4.7s per sort of that
+  directory, re-run on every row build. Now it is one shared `Intl.Collator`
+  and one sort per listing.
+- The client parses, validates and orders a whole listing before it can paint
+  any of it: ~0.2s of main thread for a 13 MB, ~74 500-entry listing, on top of
+  transferring it. Measured, and the reason the "focus / expand" row is missed
+  on directories that large — see
+  [013](013-large-directory-listing-performance.md).
 - ~~`subtreeHasMatch` re-walks the loaded tree per render while filtering~~ —
   gone; filtering is server-side (2026-07-17).
 - `/api/fs/list` also loads the `.gitignore` chain per listing (one readFile
