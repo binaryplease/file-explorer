@@ -14,15 +14,25 @@ break that check for the sake of a filename convention.
 
 ## Unreleased
 
-- **A 40 000-entry directory lists inside the ~50ms budget.** `GET /api/fs/list`
-  no longer counts each subdirectory's entries — that was one `readdir` per
+- **Breaking — `childCount` leaves the listing, and directories of tens of
+  thousands of entries no longer hang the explorer.** `GET /api/fs/list` no
+  longer counts each subdirectory's entries — that was one `readdir` per
   subdirectory, most of a large listing's cost — so every `childCount` on a
   listing is now `null`. The counts are served by the new
   `GET /api/fs/child-counts?path=…`, confined exactly like the listing. The
   explorer fetches them after the tree paints and cancels them on navigate-away;
   screen-fit auto-open waits for them and fills exactly as before. On the
   stress fixture the listing went from ~104–117ms to ~33–47ms. **Anything else
-  reading `childCount` from a listing** must now request the counts too. See
+  reading `childCount` from a listing** must now request the counts too.
+  The tree now renders only the rows the viewport can show, plus a margin,
+  with spacers keeping the scrollbar the length of the whole listing, so every
+  entry still stays reachable by scrolling and by keyboard. Names are sorted
+  once per listing with one shared collator. Building a collator on every
+  comparison was what made the old sort take seconds. Entering a ~74 000-entry
+  `/tmp` went from ~37–43s to ~0.4–0.56s to paint, and an arrow-key move from
+  5–10s to a single frame. Moving the focus up past the top edge keeps the
+  focused row in view. Entering a huge directory is still ~4× over its
+  ~100ms budget. See
   [013](requirements/013-large-directory-listing-performance.md).
 
 - **broot is credited by name, by author and by link.** The tool this explorer
