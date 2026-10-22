@@ -56,8 +56,24 @@ server answered in ~0.1s. Two causes, in order of cost:
   fills the viewport. The plan is the one it reached before.
 
 **Behaviour kept.** Screen-fit auto-open, the closed-directory child count, the
-filter tally rows, search and keyboard focus are unchanged, and their tests are
-unchanged. Rendered side by side with the previous `HEAD`, the fixture root,
+filter tally rows and search are unchanged, and their tests are unchanged.
+
+**Keyboard focus regressed, and the regression is fixed.** As first shipped,
+the reveal measured where the rows start with `offsetTop`. The scroll container
+is not a positioned element, so that reading included the 67px of chrome above
+it (the view chips and the root line), and every reveal came out 67px off. In
+any directory taller than the viewport, moving the focus up past the top edge
+left the focused row at `top = -67px`, out of view, and every row after it
+stayed there. Moving down stopped 67px short of the bottom edge. Review caught
+this. The offset is now read from bounding rects in the scroll container's own
+content frame (`rowsOffsetWithinScroll` in
+[`../../src/lib/rowWindow.ts`](../../src/lib/rowWindow.ts), with the review's
+scenario as a test). Re-measured in Chromium on `/etc` and `/tmp` (40 ×
+ArrowDown, then 30 × ArrowUp): before the fix the focused row sat at −67px; now
+it lands at 0px moving up and within 0.2px of the bottom edge moving down, as
+the old `scrollIntoView({ block: 'nearest' })` placed it.
+
+Rendered side by side with the previous `HEAD`, the fixture root,
 this repository and three of its subdirectories, `/` and `/etc` show the same
 tree text (`/` differed only in `/proc`'s live count). On the fixture root, the
 previous `HEAD` had not finished its fill 25s after loading, because of the

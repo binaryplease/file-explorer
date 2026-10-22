@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { scrollTopRevealingRow, visibleRowWindow } from './rowWindow'
+import { rowsOffsetWithinScroll, scrollTopRevealingRow, visibleRowWindow } from './rowWindow'
 
 const rowHeight = 27
 const viewportHeight = 270 // ten rows
@@ -95,5 +95,59 @@ describe('scrollTopRevealingRow — block: nearest, for a row that may not be re
     expect(
       scrollTopRevealingRow({ ...placement, rowsOffsetTop: 30, rowIndex: 0, scrollTop: 31 }),
     ).toBe(30)
+  })
+})
+
+// The scroll container sits below 67px of panel chrome (the view chips and the
+// root line), as it does in the app. A rows offset measured against anything
+// but the scroll container's own content frame shifts every row by that much:
+// moving the focus up past the top edge then scrolled the focused row to
+// `top=-67`, out of view, for every row after it.
+describe('rowsOffsetWithinScroll — the frame scrollTop is measured in', () => {
+  const chromeAboveScroll = 67
+
+  test('rows directly at the top of the content start at 0, however far scrolled', () => {
+    for (const scrollTop of [0, 500, 27_000]) {
+      expect(
+        rowsOffsetWithinScroll({
+          rowsTop: chromeAboveScroll - scrollTop,
+          scrollContainerTop: chromeAboveScroll,
+          scrollContainerBorderTop: 0,
+          scrollTop,
+        }),
+      ).toBe(0)
+    }
+  })
+
+  test('a line above the rows inside the scroll (an error) counts; chrome outside it does not', () => {
+    expect(
+      rowsOffsetWithinScroll({
+        rowsTop: chromeAboveScroll + 30 - 500,
+        scrollContainerTop: chromeAboveScroll,
+        scrollContainerBorderTop: 0,
+        scrollTop: 500,
+      }),
+    ).toBe(30)
+  })
+
+  test('moving up past the top edge brings the focused row to the top, not above it', () => {
+    // Scrolled so row 40 is the first visible row; the focus moves up to row 39.
+    const scrollTop = 40 * rowHeight
+    const rowsOffsetTop = rowsOffsetWithinScroll({
+      rowsTop: chromeAboveScroll - scrollTop,
+      scrollContainerTop: chromeAboveScroll,
+      scrollContainerBorderTop: 0,
+      scrollTop,
+    })
+    const revealingScrollTop = scrollTopRevealingRow({
+      rowIndex: 39,
+      rowHeight,
+      rowsOffsetTop,
+      scrollTop,
+      viewportHeight,
+    })
+    expect(revealingScrollTop).toBe(39 * rowHeight)
+    // The row's top in the viewport after the scroll: exactly the top edge.
+    expect(rowsOffsetTop + 39 * rowHeight - revealingScrollTop!).toBe(0)
   })
 })

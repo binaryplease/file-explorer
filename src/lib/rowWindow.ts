@@ -46,6 +46,26 @@ export function visibleRowWindow(options: RowWindowOptions): RowWindow {
   return { firstRowIndex, endRowIndex }
 }
 
+export type RowsOffsetOptions = {
+  // `getBoundingClientRect().top` of the element holding the rows.
+  rowsTop: number
+  // `getBoundingClientRect().top` of the scroll container, its `clientTop`
+  // (top border) and its `scrollTop`.
+  scrollContainerTop: number
+  scrollContainerBorderTop: number
+  scrollTop: number
+}
+
+// Where the rows start inside the scroll container's content — the frame
+// `scrollTop` is measured in. Read from bounding rects rather than `offsetTop`,
+// which is relative to the nearest *positioned* ancestor: the scroll container
+// is not one, so `offsetTop` silently included the chrome above it (the view
+// chips and the root line), and every reveal and window came out that far off.
+export function rowsOffsetWithinScroll(options: RowsOffsetOptions): number {
+  const { rowsTop, scrollContainerTop, scrollContainerBorderTop, scrollTop } = options
+  return rowsTop - (scrollContainerTop + scrollContainerBorderTop) + scrollTop
+}
+
 export type RevealRowOptions = {
   rowIndex: number
   rowHeight: number

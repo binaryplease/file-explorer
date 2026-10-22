@@ -61,7 +61,14 @@ screen-fit budget could divide by it. Locating row *n* is `n × rowHeight`
   `scrollIntoView` on `[data-row-path=…]` cannot reach a row that is not
   rendered. `scrollTopRevealingRow` computes the `block: 'nearest'` offset for
   any index. TreeView applies it in a layout effect, before paint, so a keypress
-  that moves the selection out of the window still lands in one frame.
+  that moves the selection out of the window still lands in one frame. The
+  arithmetic is only as good as the frame it runs in. Row positions and
+  `scrollTop` must both be measured from the scroll container's own content
+  frame, so the rows' offset is read from bounding rects
+  (`rowsOffsetWithinScroll`), not from `offsetTop`. `offsetTop` is relative to
+  the nearest *positioned* ancestor. As first shipped, that put every reveal
+  67px off, the height of the chrome above the scroll container, and left the
+  focused row out of view when moving up. Review caught it.
   Keyboard movement walks the full row list in App, so every entry stays
   reachable by keyboard and by scrolling. Nothing is cut from the listing.
 - **Rows are memoized.** Each row's props are its stable row model, a selected

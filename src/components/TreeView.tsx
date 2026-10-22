@@ -30,6 +30,7 @@ import { ViewChips } from './ViewChips'
 import { HighlightedSegments } from './FuzzyMatch'
 import {
   OVERSCAN_ROW_COUNT,
+  rowsOffsetWithinScroll,
   scrollTopRevealingRow,
   UNMEASURED_VIEWPORT_ROW_COUNT,
   visibleRowWindow,
@@ -68,6 +69,18 @@ const UNMEASURED_VIEWPORT_METRICS: TreeViewportMetrics = {
   viewportHeight: UNMEASURED_VIEWPORT_ROW_COUNT * FALLBACK_TREE_ROW_HEIGHT,
   rowHeight: FALLBACK_TREE_ROW_HEIGHT,
   rowsOffsetTop: 0,
+}
+
+// Where the rows start in the scroll container's own content frame — the frame
+// `scrollTop` and every row position are measured in (see
+// `rowsOffsetWithinScroll`).
+function measureRowsOffsetTop(scrollElement: HTMLElement, rowsElement: HTMLElement): number {
+  return rowsOffsetWithinScroll({
+    rowsTop: rowsElement.getBoundingClientRect().top,
+    scrollContainerTop: scrollElement.getBoundingClientRect().top,
+    scrollContainerBorderTop: scrollElement.clientTop,
+    scrollTop: scrollElement.scrollTop,
+  })
 }
 
 function viewportMetricsEqual(first: TreeViewportMetrics, second: TreeViewportMetrics): boolean {
@@ -446,7 +459,7 @@ export function TreeView({
         scrollTop: scrollElement.scrollTop,
         viewportHeight: scrollElement.clientHeight,
         rowHeight: measuredRowHeight > 0 ? measuredRowHeight : previousMetrics.rowHeight,
-        rowsOffsetTop: rowsElement.offsetTop,
+        rowsOffsetTop: measureRowsOffsetTop(scrollElement, rowsElement),
       }
       return viewportMetricsEqual(previousMetrics, nextMetrics) ? previousMetrics : nextMetrics
     })
@@ -490,7 +503,7 @@ export function TreeView({
     const revealingScrollTop = scrollTopRevealingRow({
       rowIndex,
       rowHeight: viewportMetrics.rowHeight,
-      rowsOffsetTop: rowsElement.offsetTop,
+      rowsOffsetTop: measureRowsOffsetTop(scrollElement, rowsElement),
       scrollTop: scrollElement.scrollTop,
       viewportHeight: scrollElement.clientHeight,
     })
