@@ -25,7 +25,12 @@ export const DirectoryEntrySchema = z.object({
     .nonnegative()
     .nullable()
     .default(null)
-    .describe('Number of entries inside a directory. Null for files and unreadable directories.'),
+    .describe(
+      'Number of entries inside a directory. Always null on the wire: counting costs one ' +
+        '`readdir` per subdirectory, so it is enrichment served by `GET /api/fs/child-counts` ' +
+        'after the listing, which a client merges in by name. Null for files, unreadable ' +
+        'directories and not-yet-counted directories alike.',
+    ),
   isExecutable: z.boolean().default(false).describe('True when any execute bit is set on a file.'),
   isHidden: z.boolean().default(false).describe('True for dot-files.'),
   isSymlink: z.boolean().default(false).describe('True when the entry itself is a symlink.'),
@@ -65,6 +70,35 @@ export const DirectoryListingSchema = z.object({
     ),
 })
 export type DirectoryListing = z.infer<typeof DirectoryListingSchema>
+
+export const ChildCountSchema = z.object({
+  name: z.string().describe('Basename of a subdirectory within the counted directory.'),
+  childCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullable()
+    .default(null)
+    .describe('Number of entries inside it. Null when it could not be read.'),
+})
+export type ChildCount = z.infer<typeof ChildCountSchema>
+
+// An array of named counts rather than a name-keyed record: a directory entry
+// may legally be called `__proto__`, and no client should have to parse that
+// as an object key.
+export const DirectoryChildCountsSchema = z.object({
+  relativePath: z
+    .string()
+    .describe('Counted directory, addressed exactly as `GET /api/fs/list` addresses it.'),
+  childCounts: z
+    .array(ChildCountSchema)
+    .default([])
+    .describe(
+      'One count per subdirectory (a symlink to a directory included). Files, other entries ' +
+        'and symlinks escaping the served root are absent.',
+    ),
+})
+export type DirectoryChildCounts = z.infer<typeof DirectoryChildCountsSchema>
 
 export const ListDirectoryQuerySchema = z.object({
   path: z

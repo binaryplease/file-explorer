@@ -9,6 +9,7 @@ import {
 } from '../services/listing-timing'
 import { failureStatusAndMessage } from './failures'
 import {
+  DirectoryChildCountsSchema,
   DirectoryListingSchema,
   FilesystemErrorSchema,
   ListDirectoryQuerySchema,
@@ -152,9 +153,11 @@ export function createFilesystemRoutes(options: {
     relativePath: string,
     timing: ListingTiming,
     responseHeaders: Record<string, string | number | undefined>,
+    operation = 'list',
   ): void => {
-    responseHeaders['Server-Timing'] = toServerTimingHeader(timing)
-    if (listingTimingLog !== null) listingTimingLog(formatListingTimingLine(relativePath, timing))
+    responseHeaders['Server-Timing'] = toServerTimingHeader(timing, operation)
+    if (listingTimingLog !== null)
+      listingTimingLog(formatListingTimingLine(relativePath, timing, operation))
   }
 
   return new Elysia()
@@ -186,7 +189,47 @@ export function createFilesystemRoutes(options: {
             'server). Every listing carries a `Server-Timing` header reporting what it cost — ' +
             'the `readdir`, `.gitignore` and per-entry phases, plus the number of entries, ' +
             'stats, child readdirs and realpaths behind them — so a listing that misses its ' +
-            `budget says why. ${CONFINEMENT_NOTE}`,
+            'budget says why. Every `childCount` is null: counts are served by ' +
+            `\`GET /api/fs/child-counts\` after the listing. ${CONFINEMENT_NOTE}`,
+        },
+      },
+    )
+    .get(
+      '/api/fs/child-counts',
+      async ({ query, request, status, set }) => {
+        // Enrichment: the client fires this after the tree has painted and
+        // aborts it on navigate-away, which stops the counting server-side.
+        const result = await filesystemService.countChildEntries(query.path, request.signal)
+        if (!result.ok) {
+          const { statusCode, message } = failureStatusAndMessage(result.reason, query.path)
+          return status(statusCode, { error: message })
+        }
+        reportListingTiming(
+          result.childCounts.relativePath,
+          result.timing,
+          set.headers,
+          'childcounts',
+        )
+        return result.childCounts
+      },
+      {
+        query: ListDirectoryQuerySchema,
+        response: {
+          200: DirectoryChildCountsSchema,
+          400: FilesystemErrorSchema,
+          403: FilesystemErrorSchema,
+          404: FilesystemErrorSchema,
+        },
+        detail: {
+          tags: ['filesystem'],
+          summary: 'Count the entries of each subdirectory',
+          description:
+            'The `childCount` of every subdirectory of one directory — what `GET /api/fs/list` ' +
+            'leaves null, because counting costs one `readdir` per subdirectory. Addressed and ' +
+            'confined exactly like the listing: a path the listing refuses is refused here with ' +
+            'the same status, and a symlink escaping the root is never followed or counted (it ' +
+            'is absent from the result). Aborting the request stops the counting. Carries a ' +
+            `\`Server-Timing\` header like the listing. ${CONFINEMENT_NOTE}`,
         },
       },
     )

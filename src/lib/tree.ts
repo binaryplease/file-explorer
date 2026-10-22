@@ -1,4 +1,4 @@
-import type { DirectoryEntry } from '../../shared/filesystem.schema'
+import type { ChildCount, DirectoryEntry } from '../../shared/filesystem.schema'
 import type { SearchNode, SearchSubtreeResult } from '../../shared/search.schema'
 import { fuzzyMatch, type FuzzySegment } from '../../shared/fuzzy'
 
@@ -299,9 +299,33 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
   return { rows, entryRowCount, matchCount: 0, bestMatchPath: null }
 }
 
+// Folds a directory's child counts (`GET /api/fs/child-counts`) into its
+// listing, which arrives with every `childCount` null. Matched by name; an entry
+// the counts do not name — a file, an escaping link, a directory that vanished
+// or appeared in between — keeps the listing's null.
+export function mergeChildCounts(
+  entries: DirectoryEntry[],
+  childCounts: ChildCount[],
+): DirectoryEntry[] {
+  const countsByName = new Map(
+    childCounts.map((counted) => [counted.name, counted.childCount] as const),
+  )
+  return entries.map((entry) =>
+    entry.kind === 'directory' && countsByName.has(entry.name)
+      ? { ...entry, childCount: countsByName.get(entry.name)! }
+      : entry,
+  )
+}
+
 export type AutoOpenPlanOptions = {
   focusPath: string
   listings: Record<string, DirectoryEntry[] | undefined>
+  // Directories whose listing has had its child counts merged in
+  // (`mergeChildCounts`). A listing lands with every `childCount` null, and a
+  // null read before the counts arrive would look exactly like an empty
+  // directory — so the planner never reads a count from a listing outside this
+  // set; it waits for it instead (`pendingChildCountPaths`).
+  countedDirectoryPaths: ReadonlySet<string>
   // Directories the user opened by hand. Their children always show and always
   // count against the viewport budget, whether or not the fill would have opened
   // them; the planner never closes them.
@@ -326,6 +350,12 @@ export type AutoOpenPlan = {
   // Directories whose listings must be fetched before the fill can descend into
   // them. Row counts here fall back to `childCount` until the listing arrives.
   pendingListingPaths: string[]
+  // Directories whose child counts the plan needed and does not have yet. While
+  // this is non-empty the plan is provisional — it read some directory as
+  // uncounted — so the caller applies none of it: it fetches these counts and
+  // re-plans, and the fill then descends exactly as it would have had the
+  // counts come with the listing.
+  pendingChildCountPaths: string[]
 }
 
 // One directory the fill is feeding child rows to, round-robin.
@@ -360,6 +390,7 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
   const {
     focusPath,
     listings,
+    countedDirectoryPaths,
     manuallyOpenPaths,
     closedPaths,
     showHidden,
@@ -369,9 +400,11 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
   const autoOpenPaths = new Set<string>()
   const childRowLimits = new Map<string, number>()
   const pendingListingPaths: string[] = []
+  const pendingChildCountPaths = new Set<string>()
 
   const focusChildren = listings[focusPath]
-  if (focusChildren === undefined) return { autoOpenPaths, childRowLimits, pendingListingPaths }
+  if (focusChildren === undefined)
+    return { autoOpenPaths, childRowLimits, pendingListingPaths, pendingChildCountPaths: [] }
 
   function sortedVisibleChildren(listing: DirectoryEntry[]): DirectoryEntry[] {
     return listing
@@ -390,6 +423,13 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
     if (closedPaths.has(directoryPath)) return null
     const listing = listings[directoryPath]
     if (listing === undefined) {
+      // The estimate below is the parent's count of this directory, and a parent
+      // whose counts have not arrived reports null for every child — which is
+      // "not counted yet", not "empty". Wait for it rather than skip.
+      if (!countedDirectoryPaths.has(parentPath)) {
+        pendingChildCountPaths.add(parentPath)
+        return null
+      }
       const estimatedTotal = childDirectory.childCount ?? 0
       if (estimatedTotal <= 0 && !manuallyOpenPaths.has(directoryPath)) return null
       return {
@@ -499,7 +539,12 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
       childRowLimits.set(openedCandidate.directoryPath, openedCandidate.grantedChildRowCount)
   }
 
-  return { autoOpenPaths, childRowLimits, pendingListingPaths }
+  return {
+    autoOpenPaths,
+    childRowLimits,
+    pendingListingPaths,
+    pendingChildCountPaths: [...pendingChildCountPaths],
+  }
 }
 
 export type SearchViewOptions = {

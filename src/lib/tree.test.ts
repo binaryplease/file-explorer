@@ -5,6 +5,7 @@ import {
   buildTreeRows,
   canonicalizeFocusPath,
   joinTreePath,
+  mergeChildCounts,
   parentTreePath,
   planAutoOpen,
   posixRelativePath,
@@ -211,6 +212,16 @@ describe('browse ordering — broot Sort::None', () => {
   })
 })
 
+// Child counts arrive after their listing (013): a listing lands with every
+// `childCount` null and the counts are merged in later. The screen-fit cases
+// below are about pacing, not arrival, so they plan with every loaded listing's
+// counts already in — the data the fill had when counts came with the listing.
+function countsArrivedFor(
+  listings: Record<string, DirectoryEntry[] | undefined>,
+): ReadonlySet<string> {
+  return new Set(Object.keys(listings))
+}
+
 describe('planAutoOpen — screen-fit fill', () => {
   const filters = { showHidden: false, showGitignored: false }
 
@@ -223,6 +234,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(),
       ...filters,
@@ -243,6 +255,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(),
       ...filters,
@@ -260,6 +273,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(),
       ...filters,
@@ -278,6 +292,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(['a']),
       ...filters,
@@ -294,6 +309,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(),
       ...filters,
@@ -310,6 +326,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(),
       ...filters,
@@ -329,6 +346,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(),
       ...filters,
@@ -352,6 +370,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(),
       ...filters,
@@ -372,6 +391,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(),
       ...filters,
@@ -397,6 +417,7 @@ describe('planAutoOpen — screen-fit fill', () => {
     const plan = planAutoOpen({
       focusPath: '',
       listings,
+      countedDirectoryPaths: countsArrivedFor(listings),
       manuallyOpenPaths: new Set(),
       closedPaths: new Set(),
       ...filters,
@@ -411,6 +432,105 @@ describe('planAutoOpen — screen-fit fill', () => {
     })
     expect(rows.length).toBeLessThanOrEqual(rowCapacity)
     expect(rows.length).toBe(12)
+  })
+})
+
+describe('planAutoOpen — child counts arrive after the listing', () => {
+  const filters = { showHidden: false, showGitignored: false }
+
+  // What the wire delivers now: the directory, uncounted.
+  const uncountedListings: Record<string, DirectoryEntry[] | undefined> = {
+    '': [makeEntry({ name: 'a', kind: 'directory', childCount: null })],
+  }
+
+  test('waits for an uncounted listing instead of reading its directories as empty', () => {
+    const plan = planAutoOpen({
+      focusPath: '',
+      listings: uncountedListings,
+      countedDirectoryPaths: new Set(),
+      manuallyOpenPaths: new Set(),
+      closedPaths: new Set(),
+      ...filters,
+      rowCapacity: 20,
+    })
+    expect(plan.pendingChildCountPaths).toEqual([''])
+    // Nothing is fetched on a provisional plan's say-so.
+    expect(plan.pendingListingPaths).toEqual([])
+  })
+
+  test('once the counts are merged, descends exactly as when they came with the listing', () => {
+    const countedListings = {
+      '': mergeChildCounts(uncountedListings['']!, [{ name: 'a', childCount: 4 }]),
+    }
+    const plan = planAutoOpen({
+      focusPath: '',
+      listings: countedListings,
+      countedDirectoryPaths: new Set(['']),
+      manuallyOpenPaths: new Set(),
+      closedPaths: new Set(),
+      ...filters,
+      rowCapacity: 20,
+    })
+    // The same plan as 'requests listings it must fetch before descending deeper'.
+    expect(plan.pendingChildCountPaths).toEqual([])
+    expect([...plan.autoOpenPaths]).toEqual(['a'])
+    expect(plan.pendingListingPaths).toEqual(['a'])
+  })
+
+  test('a directory whose own listing is loaded needs no count from its parent', () => {
+    const plan = planAutoOpen({
+      focusPath: '',
+      listings: { ...uncountedListings, a: [makeEntry({ name: 'a1' }), makeEntry({ name: 'a2' })] },
+      // `a` has no subdirectories, so nothing below it needs counting either.
+      countedDirectoryPaths: new Set(),
+      manuallyOpenPaths: new Set(),
+      closedPaths: new Set(),
+      ...filters,
+      rowCapacity: 10,
+    })
+    expect(plan.pendingChildCountPaths).toEqual([])
+    expect([...plan.autoOpenPaths]).toEqual(['a'])
+  })
+
+  test('waits one level down too, for an opened directory whose counts are pending', () => {
+    const plan = planAutoOpen({
+      focusPath: '',
+      listings: {
+        '': [directory('a', 1)],
+        a: [makeEntry({ name: 'deeper', kind: 'directory', childCount: null })],
+      },
+      countedDirectoryPaths: new Set(['']),
+      manuallyOpenPaths: new Set(),
+      closedPaths: new Set(),
+      ...filters,
+      rowCapacity: 10,
+    })
+    expect(plan.pendingChildCountPaths).toEqual(['a'])
+  })
+})
+
+describe('mergeChildCounts', () => {
+  test('fills in counts by name, and leaves everything the counts do not name alone', () => {
+    const entries = [
+      makeEntry({ name: 'counted', kind: 'directory' }),
+      makeEntry({ name: 'unreadable', kind: 'directory' }),
+      makeEntry({ name: 'not-in-counts', kind: 'directory' }),
+      makeEntry({ name: 'file.txt' }),
+    ]
+    const merged = mergeChildCounts(entries, [
+      { name: 'counted', childCount: 3 },
+      { name: 'unreadable', childCount: null },
+      // A name the listing does not carry (created since it was read) is ignored.
+      { name: 'appeared-later', childCount: 9 },
+      // Only directories take a count, whatever the counts claim.
+      { name: 'file.txt', childCount: 1 },
+    ])
+    expect(merged.map((entry) => [entry.name, entry.childCount])).toEqual([
+      ['counted', 3],
+      ['unreadable', null],
+      ['not-in-counts', null],
+      ['file.txt', null],
+    ])
   })
 })
 

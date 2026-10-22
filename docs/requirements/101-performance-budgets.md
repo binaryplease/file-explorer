@@ -11,7 +11,7 @@ research: [../research/2026-07-17-broot-engine.md]
 decisions: [2026-07-17-re-engineer-the-broot-engine]
 conventions: []
 shipped: null
-updated: 2026-09-16
+updated: 2026-10-22
 ---
 
 # Speed budgets, and when optimization starts
@@ -29,9 +29,10 @@ when a real interaction misses a budget on a real tree, not before.** Decided
 | server `GET /api/fs/list` | < ~50ms for a few-thousand-entry directory |
 
 Real-tree sanity check: Downloads with 1397 entries renders fine today. Against
-the stress fixture below (2026-08-21): 4 000 entries serve in ~21ms, meeting the
-row above as written; 40 000 entries serve in ~98ms, which does not — the
-remainder is named in [013](013-large-directory-listing-performance.md).
+the stress fixture below (2026-10-22): 4 000 entries serve in ~5ms and the
+40 000-entry mixed directory in ~33–47ms, both inside the row above — see
+[013](013-large-directory-listing-performance.md). A 40 000-entry directory of
+plain files still serves in ~83–89ms; see the suspects below.
 
 ## The responsiveness principle (AGENTS.md, binding)
 
@@ -80,8 +81,9 @@ optimization happens — as part of the feature, not as a separate pass:
 1. **[007-directory-sizes](007-directory-sizes.md)** — aggregated du is the known
    rabbit hole. Needs caching / progressive computation by design.
 2. **[013-large-directory-listing-performance](013-large-directory-listing-performance.md)**
-   — a directory of tens of thousands of entries. In progress: it built the gate
-   below, and cut the per-entry syscalls that were the first half of its miss.
+   — a directory of tens of thousands of entries. Shipped 2026-10-22: it built
+   the gate below, cut the per-entry syscalls, and moved `childCount` off the
+   listing.
 
 (Server-side recursive search shipped 2026-07-17 with its bounds built in — 10×
 overscan cap, 900ms budget, gitignore-aware pruning, abort-on-keystroke.)
@@ -96,13 +98,24 @@ Touch these only when measurements name them:
   costs no stat at all and a plain file costs one instead of two. A
   40 000-entry listing went from 80 000 stats to 2 802, and from ~243ms to
   ~98ms.
-- `/api/fs/list` still does **one readdir per child directory** (childCount) →
-  O(subdirs) syscalls. This is now the measured remainder rather than a
-  suspicion: ~61ms of the ~98ms a 40 000-entry, 37 200-directory listing costs,
-  and the only thing between that listing and this budget. Still the first thing
-  to drop or batch — but note it is read at *listing* time by the screen-fit
-  auto-open in [010](010-broot-tree-display-and-navigation.md), so deferring it
-  changes that shipped behaviour and needs its own record.
+- ~~`/api/fs/list` does one readdir per child directory (childCount)~~ — gone
+  from the listing (2026-10-22,
+  [013](013-large-directory-listing-performance.md),
+  [decision](../decisions/2026-10-22-child-counts-are-enrichment.md)): the count
+  is enrichment, served after paint by `GET /api/fs/child-counts` and aborted on
+  navigate-away, and the screen-fit auto-open in
+  [010](010-broot-tree-display-and-navigation.md) waits for it rather than
+  reading an uncounted directory as empty. A 40 000-entry, 37 200-directory
+  listing went from 37 200 child readdirs to none, and from ~104–117ms to
+  ~33–47ms. The work did not vanish: the counts request costs ~74–110ms on that
+  directory, off the budget, and `bench:list` prints it on its own line.
+- `/api/fs/list` does **one `stat` per plain file**, for size and execute bit →
+  O(files) syscalls. Measured, not suspected: a 40 000-plain-file directory
+  (`--path wide-files`) serves in ~83–89ms and misses this budget at ~1.7×,
+  unchanged by the `childCount` move because it holds no directories. The next
+  thing to design against this budget — the size bars read `sizeBytes` at
+  render time, so moving it off the listing is the same shape of question
+  `childCount` was, and wants its own record.
 - No row virtualization: the tree renders every visible row. Expect jank
   somewhere ≳5–10k rows; virtualize then, not before.
 - ~~`subtreeHasMatch` re-walks the loaded tree per render while filtering~~ —
@@ -132,7 +145,7 @@ command rather than an intention — and the bar it sets went up with it, becaus
 | | |
 |---|---|
 | `mise run stress:fixture` | Generates the tree, idempotently, outside the repo. Four cases: `wide-mixed` (40 000 entries, 93% directories), `few-thousand` (4 000, same mix — the scale the `GET /api/fs/list` budget above is *written* for), `wide-files` (40 000 plain files), `deep` (256 nested levels, for the `.gitignore` chain). Each mixed case carries a contained and an escaping symlink, so confinement is measured under load too. |
-| `mise run bench:list` | Drives the real route against the fixture and reports the split that says *why* — service phases, syscall counts, `JSON.stringify`, framework remainder, payload bytes — with a verdict against the budget. `--path`, `--runs`, `--confine`. |
+| `mise run bench:list` | Drives the real route against the fixture and reports the split that says *why* — service phases, syscall counts, `JSON.stringify`, framework remainder, payload bytes — with a verdict against the budget, and **exits non-zero on MISSES**, so the gate is decided by exit code. Also reports the deferred `GET /api/fs/child-counts` on its own line, outside the budget. `--path`, `--runs`, `--confine`. |
 | `Server-Timing` header | Every listing reports its own phases and syscall counts, always, so a miss in ordinary use is legible in a browser's network panel with nothing restarted or rebuilt. `EXPLORER_TIMING=true` also logs one line per listing. |
 
 A performance claim about the listing path is expected to quote a before and an

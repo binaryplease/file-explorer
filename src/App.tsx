@@ -3,6 +3,7 @@ import type { DirectoryEntry, DirectoryListing } from '../shared/filesystem.sche
 import type { Preview } from '../shared/preview.schema'
 import type { SearchSubtreeResult } from '../shared/search.schema'
 import {
+  fetchChildCounts,
   fetchDirectoryListing,
   fetchPreview,
   fetchSearchResult,
@@ -16,6 +17,7 @@ import {
   canonicalizeFocusPath,
   joinTreePath,
   parentTreePath,
+  mergeChildCounts,
   planAutoOpen,
   ROOT_LINE_PATH,
   type EntryRow,
@@ -86,6 +88,20 @@ function pathSetsEqual(first: ReadonlySet<string>, second: ReadonlySet<string>):
   return true
 }
 
+// Copy-on-write membership changes that keep the same reference when nothing
+// changes, so a no-op update does not re-run every effect keyed on the set.
+function withPath(paths: ReadonlySet<string>, addedPath: string): ReadonlySet<string> {
+  if (paths.has(addedPath)) return paths
+  return new Set(paths).add(addedPath)
+}
+
+function withoutPath(paths: ReadonlySet<string>, removedPath: string): ReadonlySet<string> {
+  if (!paths.has(removedPath)) return paths
+  const remaining = new Set(paths)
+  remaining.delete(removedPath)
+  return remaining
+}
+
 // Map equality by entries — same purpose as `pathSetsEqual`, for the fill's
 // per-directory child limits.
 function childLimitMapsEqual(
@@ -149,6 +165,14 @@ export function App({
   const [isConfined, setIsConfined] = useState(true)
   const [focusPath, setFocusPath] = useState<string>(() => focusNavigation.initialFocusPath())
   const [listings, setListings] = useState<Record<string, DirectoryEntry[] | undefined>>({})
+  // Directories whose listing has had its child counts merged in. A listing
+  // lands with every `childCount` null — counting costs a readdir per
+  // subdirectory, so it is enrichment (013) — and this is what tells the
+  // auto-open fill "not counted yet" apart from "empty".
+  const [countedPaths, setCountedPaths] = useState<ReadonlySet<string>>(new Set())
+  // In-flight child-count requests, by directory, so each is fired once and can
+  // be aborted when its listing is replaced or the focus moves away.
+  const childCountRequestsRef = useRef<Map<string, AbortController>>(new Map())
   // Three layers compose the effective open set. `openPaths` and `closedPaths`
   // are the user's manual overrides; `autoOpenFill` is broot's screen-fit fill,
   // computed to use the empty space below a short listing — its `paths` are the
@@ -208,12 +232,49 @@ export function App({
           ...previousListings,
           [listing.relativePath]: listing.entries,
         }))
+        // Fresh entries carry no counts: whatever was counted for the previous
+        // copy of this listing is gone with it, and must be fetched again.
+        childCountRequestsRef.current.get(listing.relativePath)?.abort()
+        childCountRequestsRef.current.delete(listing.relativePath)
+        setCountedPaths((previousCounted) => withoutPath(previousCounted, listing.relativePath))
         setListingError(null)
         return listing
       } catch (loadError) {
         setListingError(loadError instanceof Error ? loadError.message : String(loadError))
         return null
       }
+    },
+    [apiBaseUrl],
+  )
+
+  // Fetches one listed directory's child counts and merges them in. Enrichment:
+  // the caller fires it from an effect, after the listing has painted, and it
+  // is aborted when the focus moves away. A failure degrades to absent — the
+  // directory is marked counted with its nulls kept, so the counts simply do
+  // not show and the fill reads those directories as uncounted-empty rather
+  // than waiting on them forever.
+  const loadChildCounts = useCallback(
+    (relativePath: string) => {
+      if (childCountRequestsRef.current.has(relativePath)) return
+      const abortController = new AbortController()
+      childCountRequestsRef.current.set(relativePath, abortController)
+      fetchChildCounts({ baseUrl: apiBaseUrl, relativePath, abortSignal: abortController.signal })
+        .then((counted) => {
+          if (abortController.signal.aborted) return
+          setListings((previousListings) => {
+            const entries = previousListings[relativePath]
+            if (entries === undefined) return previousListings
+            return {
+              ...previousListings,
+              [relativePath]: mergeChildCounts(entries, counted.childCounts),
+            }
+          })
+          setCountedPaths((previousCounted) => withPath(previousCounted, relativePath))
+        })
+        .catch(() => {
+          if (abortController.signal.aborted) return
+          setCountedPaths((previousCounted) => withPath(previousCounted, relativePath))
+        })
     },
     [apiBaseUrl],
   )
@@ -457,6 +518,12 @@ export function App({
     setClosedPaths(new Set())
     setAutoOpenFill({ paths: new Set(), childRowLimits: new Map() })
     autoOpenRequestedRef.current = new Set()
+    // Navigating away cancels the counting still in flight for the old view.
+    const childCountRequests = childCountRequestsRef.current
+    return () => {
+      for (const abortController of childCountRequests.values()) abortController.abort()
+      childCountRequests.clear()
+    }
   }, [focusPath])
 
   // broot's screen-fit fill: open the next depth of directories until the
@@ -473,12 +540,19 @@ export function App({
     const plan = planAutoOpen({
       focusPath,
       listings,
+      countedDirectoryPaths: countedPaths,
       manuallyOpenPaths: openPaths,
       closedPaths,
       showHidden,
       showGitignored,
       rowCapacity,
     })
+    // A plan that read an uncounted directory is provisional: apply none of it,
+    // fetch the counts it waited on, and re-plan when they land.
+    if (plan.pendingChildCountPaths.length > 0) {
+      for (const uncountedPath of plan.pendingChildCountPaths) loadChildCounts(uncountedPath)
+      return
+    }
     setAutoOpenFill((previous) =>
       pathSetsEqual(previous.paths, plan.autoOpenPaths) &&
       childLimitMapsEqual(previous.childRowLimits, plan.childRowLimits)
@@ -495,13 +569,28 @@ export function App({
     userHasAdjustedTree,
     focusPath,
     listings,
+    countedPaths,
     openPaths,
     closedPaths,
     showHidden,
     showGitignored,
     viewportResizeTick,
     loadListing,
+    loadChildCounts,
   ])
+
+  // The counts shown beside closed directories: every directory whose rows are
+  // on screen — the focus and whatever is open under it — gets its child counts
+  // once its listing has painted. The fill above asks for the ones it needs
+  // itself; this covers the rest, and the search view, which shows no counts,
+  // asks for none.
+  useEffect(() => {
+    if (isSearching) return
+    for (const displayedPath of [focusPath, ...effectiveOpenPaths]) {
+      if (listings[displayedPath] === undefined || countedPaths.has(displayedPath)) continue
+      loadChildCounts(displayedPath)
+    }
+  }, [isSearching, focusPath, effectiveOpenPaths, listings, countedPaths, loadChildCounts])
 
   // A taller viewport has more space to fill; re-plan the fill on resize.
   useEffect(() => {

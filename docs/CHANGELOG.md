@@ -14,6 +14,17 @@ break that check for the sake of a filename convention.
 
 ## Unreleased
 
+- **A 40 000-entry directory lists inside the ~50ms budget.** `GET /api/fs/list`
+  no longer counts each subdirectory's entries — that was one `readdir` per
+  subdirectory, most of a large listing's cost — so every `childCount` on a
+  listing is now `null`. The counts are served by the new
+  `GET /api/fs/child-counts?path=…`, confined exactly like the listing. The
+  explorer fetches them after the tree paints and cancels them on navigate-away;
+  screen-fit auto-open waits for them and fills exactly as before. On the
+  stress fixture the listing went from ~104–117ms to ~33–47ms. **Anything else
+  reading `childCount` from a listing** must now request the counts too. See
+  [013](requirements/013-large-directory-listing-performance.md).
+
 - **broot is credited by name, by author and by link.** The tool this explorer
   is modelled on was named 232 times across the repository, linked 4 times, and
   its author — Denys Séguret ([Canop](https://github.com/Canop)) — was named
