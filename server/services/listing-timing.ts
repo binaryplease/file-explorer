@@ -23,7 +23,10 @@ export type ListingTiming = {
   readdirMilliseconds: number
   /** Loading the `.gitignore` chain from the served root down. */
   ignoreMilliseconds: number
-  /** Describing every entry: the per-entry stats, child counts and realpaths. */
+  /**
+   * Describing every entry: the per-entry stats and realpaths. For child counts,
+   * the counting phase — its child readdirs included.
+   */
   describeMilliseconds: number
   /** Entries in the listing. */
   entryCount: number
@@ -31,7 +34,10 @@ export type ListingTiming = {
   directoryCount: number
   /** `stat`/`lstat` calls issued while describing entries. */
   statCount: number
-  /** Child-directory `readdir` calls issued for the `childCount` column. */
+  /**
+   * Child-directory `readdir` calls issued for the `childCount` column. Always 0
+   * for a listing, which no longer counts; the child counts request issues them.
+   */
   childReaddirCount: number
   /** `realpath` calls issued by confinement. Always 0 unconfined. */
   realpathCount: number
@@ -56,11 +62,14 @@ export function createListingCounters(): ListingCounters {
  * Renders one measurement as a `Server-Timing` header value. Durations are the
  * phases; the counts ride along as `desc` on zero-duration metrics, which is
  * what the header allows and what devtools displays beside the name.
+ *
+ * `operation` names the total: `list` for a listing, `childcounts` for the
+ * child counts served after it, which report the same shape.
  */
-export function toServerTimingHeader(timing: ListingTiming): string {
+export function toServerTimingHeader(timing: ListingTiming, operation = 'list'): string {
   const round = (milliseconds: number) => milliseconds.toFixed(1)
   return [
-    `list;dur=${round(timing.totalMilliseconds)}`,
+    `${operation};dur=${round(timing.totalMilliseconds)}`,
     `readdir;dur=${round(timing.readdirMilliseconds)}`,
     `ignore;dur=${round(timing.ignoreMilliseconds)}`,
     `describe;dur=${round(timing.describeMilliseconds)}`,
@@ -91,10 +100,14 @@ function escapeControlCharacters(pathText: string): string {
  * One-line log form, for the `EXPLORER_TIMING` opt-in. Names the listed path so
  * a log of many listings is readable without correlating request ids.
  */
-export function formatListingTimingLine(relativePath: string, timing: ListingTiming): string {
+export function formatListingTimingLine(
+  relativePath: string,
+  timing: ListingTiming,
+  operation = 'list',
+): string {
   const displayPath = relativePath === '' ? '.' : escapeControlCharacters(relativePath)
   return (
-    `list ${displayPath} ${timing.totalMilliseconds.toFixed(1)}ms ` +
+    `${operation} ${displayPath} ${timing.totalMilliseconds.toFixed(1)}ms ` +
     `(readdir ${timing.readdirMilliseconds.toFixed(1)}ms, ` +
     `ignore ${timing.ignoreMilliseconds.toFixed(1)}ms, ` +
     `describe ${timing.describeMilliseconds.toFixed(1)}ms) ` +

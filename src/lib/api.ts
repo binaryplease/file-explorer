@@ -1,7 +1,9 @@
 import {
+  DirectoryChildCountsSchema,
   DirectoryListingSchema,
   FilesystemErrorSchema,
   OpenFileResultSchema,
+  type DirectoryChildCounts,
   type DirectoryListing,
   type OpenFileResult,
 } from '../../shared/filesystem.schema'
@@ -53,6 +55,27 @@ export async function fetchDirectoryListing(
   )
   if (!response.ok) return parseErrorResponse(response, 'listing')
   return DirectoryListingSchema.parse(await response.json())
+}
+
+export type ChildCountsRequestOptions = {
+  baseUrl: string
+  relativePath: string
+  abortSignal: AbortSignal
+}
+
+// Child counts are enrichment, not navigation: the listing lands without them,
+// and the caller fires this after the tree has painted and aborts it when the
+// user navigates away — which stops the counting server-side too.
+export async function fetchChildCounts(
+  options: ChildCountsRequestOptions,
+): Promise<DirectoryChildCounts> {
+  const { baseUrl, relativePath, abortSignal } = options
+  const response = await fetch(
+    withApiBase(baseUrl, `/api/fs/child-counts?path=${encodeURIComponent(relativePath)}`),
+    { signal: abortSignal },
+  )
+  if (!response.ok) return parseErrorResponse(response, 'child counts')
+  return DirectoryChildCountsSchema.parse(await response.json())
 }
 
 export type PreviewRequestOptions = {

@@ -41,6 +41,16 @@ afterAll(async () => {
   await rm(join(servedRoot, '..'), { recursive: true, force: true })
 })
 
+function unabortedSignal(): AbortSignal {
+  return new AbortController().signal
+}
+
+async function rootChildCounts(service: ReturnType<typeof createFilesystemService>) {
+  const result = await service.countChildEntries('', unabortedSignal())
+  if (!result.ok) throw new Error(`counting the root failed: ${result.reason}`)
+  return result.childCounts.childCounts
+}
+
 describe('symlink-escape confinement', () => {
   test('refuses to serve a file through a symlink leaving the root', async () => {
     const result = await filesystemService.resolveFile('escaping-file')
@@ -148,8 +158,29 @@ describe('escaping symlinks are listed loudly, without leaking their target', ()
     const containedLink = await rootEntryNamed('contained-link')
     expect(containedLink.escapesRoot).toBe(false)
     expect(containedLink.kind).toBe('directory')
-    expect(containedLink.childCount).toBe(1)
     expect(containedLink.isSymlink).toBe(true)
+    // Counts are enrichment, served beside the listing rather than in it.
+    expect(containedLink.childCount).toBeNull()
+    expect(await rootChildCounts(filesystemService)).toContainEqual({
+      name: 'contained-link',
+      childCount: 1,
+    })
+  })
+
+  test('child counts omit an escaping symlink, as the listing withholds its count', async () => {
+    const countedNames = (await rootChildCounts(filesystemService)).map((counted) => counted.name)
+    expect(countedNames).not.toContain('escaping-directory')
+    expect(countedNames).not.toContain('escaping-file')
+    expect(countedNames.sort()).toEqual(['contained-link', 'inside'])
+  })
+
+  test('child counts refuse an escaping directory exactly as the listing does', async () => {
+    expect(
+      await filesystemService.countChildEntries('escaping-directory', unabortedSignal()),
+    ).toEqual({ ok: false, reason: 'symlink-escapes-root' })
+    expect(
+      await filesystemService.countChildEntries('../outside', unabortedSignal()),
+    ).toEqual({ ok: false, reason: 'outside-root' })
   })
 
   test('ordinary entries are marked as not escaping', async () => {
@@ -276,7 +307,10 @@ describe('unconfined mode — the root is a display anchor, not a boundary', () 
       (entry) => entry.name === 'escaping-directory',
     )!
     expect(escapingDirectory.kind).toBe('directory')
-    expect(escapingDirectory.childCount).toBe(1)
+    expect(await rootChildCounts(unconfinedService)).toContainEqual({
+      name: 'escaping-directory',
+      childCount: 1,
+    })
 
     const escapingFile = result.listing.entries.find((entry) => entry.name === 'escaping-file')!
     expect(escapingFile.kind).toBe('file')
@@ -307,7 +341,7 @@ describe('listing syscall budget', () => {
     await rm(countedRoot, { recursive: true, force: true })
   })
 
-  test('stats plain files only, and reads only the directories it counts', async () => {
+  test('stats plain files only, and reads no child directory at all', async () => {
     const result = await countedService.listDirectory('')
     if (!result.ok) throw new Error(`listing failed: ${result.reason}`)
     expect(result.timing.entryCount).toBe(3)
@@ -315,10 +349,31 @@ describe('listing syscall budget', () => {
     // One for the plain file, one for the symlink that has to be followed to
     // learn what it points at. The directory needs none: its dirent said so.
     expect(result.timing.statCount).toBe(2)
-    // Exactly one: the `childCount` of `a-directory`.
-    expect(result.timing.childReaddirCount).toBe(1)
+    // None: `childCount` is enrichment, counted by `countChildEntries`.
+    expect(result.timing.childReaddirCount).toBe(0)
     // Unconfined, containment is not checked, so no path is ever resolved.
     expect(result.timing.realpathCount).toBe(0)
+  })
+
+  test('child counts read only the directories they count, and stat no file', async () => {
+    const result = await countedService.countChildEntries('', unabortedSignal())
+    if (!result.ok) throw new Error(`counting failed: ${result.reason}`)
+    expect(result.childCounts.childCounts).toEqual([{ name: 'a-directory', childCount: 1 }])
+    // Exactly one: the `childCount` of `a-directory`.
+    expect(result.timing.childReaddirCount).toBe(1)
+    // The broken link is followed to learn it is not a directory; the plain
+    // file is skipped on its dirent alone.
+    expect(result.timing.statCount).toBe(1)
+    expect(result.timing.realpathCount).toBe(0)
+  })
+
+  test('an aborted count stops before reading any child directory', async () => {
+    const abortController = new AbortController()
+    abortController.abort()
+    const result = await countedService.countChildEntries('', abortController.signal)
+    if (!result.ok) throw new Error(`counting failed: ${result.reason}`)
+    expect(result.timing.childReaddirCount).toBe(0)
+    expect(result.childCounts.childCounts).toEqual([])
   })
 
   test('a broken symlink is reported as `other` without a kind of its own', async () => {
@@ -382,6 +437,15 @@ describe('an escaping symlink is never followed', () => {
     expect(result.timing.statCount).toBe(0)
     expect(result.timing.childReaddirCount).toBe(0)
     // One containment check for the listed root, one per symlink.
+    expect(result.timing.realpathCount).toBe(3)
+  })
+
+  test('issues no stat and no child readdir when counting nothing but escaping links', async () => {
+    const result = await linkOnlyService.countChildEntries('', unabortedSignal())
+    if (!result.ok) throw new Error(`counting failed: ${result.reason}`)
+    expect(result.childCounts.childCounts).toEqual([])
+    expect(result.timing.statCount).toBe(0)
+    expect(result.timing.childReaddirCount).toBe(0)
     expect(result.timing.realpathCount).toBe(3)
   })
 

@@ -8,10 +8,10 @@ tags: [tree, client]
 blocks: []
 blocked_by: []
 research: [../research/2026-07-17-broot-tree-display-and-navigation.md, ../research/2026-07-17-broot-engine.md]
-decisions: [2026-07-17-re-engineer-the-broot-engine]
+decisions: [2026-07-17-re-engineer-the-broot-engine, 2026-10-22-child-counts-are-enrichment]
 conventions: [highlight-what-matched, share-the-invariant, interaction-token, affordances-adjacent]
 shipped: null
-updated: 2026-07-28
+updated: 2026-10-22
 ---
 
 # broot tree display and navigation parity
@@ -72,6 +72,25 @@ as R1–R8. That research file is the spec; this file tracks what is delivered.
    `measureTreeRowCapacity` now floors (padding excluded) instead of ceiling, so a
    partial last row is no longer counted as fillable space. Verified:
    `[data-tree-scroll]` scrollHeight == clientHeight after fill.
+
+   **Counts now arrive after the listing (2026-10-22).** The fill paces a
+   not-yet-loaded directory by its `childCount`, and that count no longer rides
+   on the listing: `GET /api/fs/list` emits it null, and
+   `GET /api/fs/child-counts` serves it after paint
+   ([013](013-large-directory-listing-performance.md),
+   [decision](../decisions/2026-10-22-child-counts-are-enrichment.md)). App
+   merges the counts into the stored listing by name (`mergeChildCounts`) and
+   passes `planAutoOpen` the set of directories whose counts have arrived
+   (`countedDirectoryPaths`). A plan that would read the count of a directory
+   whose parent is not in that set is *provisional*: it names the parent in
+   `pendingChildCountPaths`, and App applies none of it — it fetches those
+   counts and re-plans. So the fill never mistakes "not counted yet" for
+   "empty", and every plan it applies is the one it computed when counts came
+   with the listing; the only cost is one small extra request per level it
+   descends. The count beside a closed directory appears once its counts land;
+   if that request fails it stays absent, and the fill treats the directory as
+   uncounted-empty rather than waiting on it. Rendered against the previous
+   build on the same tree, the filled rows were identical.
 
    **Row grid unified 2026-07-28.** The plan was exact in *rows* but not in
    *pixels*: the "N unlisted" and hidden-tally lines rendered at 11.5px/`py-px`

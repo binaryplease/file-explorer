@@ -311,3 +311,57 @@ describe('GET /api/fs/list reports its own timing', () => {
     expect(loggedLines[0]).toContain('entries')
   })
 })
+
+// The listing's enrichment twin: the counts the listing no longer computes,
+// served on their own request so the listing never waits on them.
+describe('GET /api/fs/child-counts', () => {
+  let countedRoot: string
+  let countingApplication: ReturnType<typeof createHardenedApplication>
+
+  beforeAll(async () => {
+    countedRoot = await realpath(await mkdtemp(join(tmpdir(), 'bfe-child-counts-')))
+    await mkdir(join(countedRoot, 'two-children', 'nested'), { recursive: true })
+    await writeFile(join(countedRoot, 'two-children', 'file.txt'), 'file')
+    await writeFile(join(countedRoot, 'not-a-directory.txt'), 'file')
+    countingApplication = createHardenedApplication(countedRoot)
+  })
+
+  afterAll(async () => {
+    await rm(countedRoot, { recursive: true, force: true })
+  })
+
+  function requestChildCounts(relativePath: string): Promise<Response> {
+    return countingApplication.handle(
+      new Request(`http://localhost/api/fs/child-counts?path=${encodeURIComponent(relativePath)}`),
+    )
+  }
+
+  test('counts every subdirectory, and only subdirectories', async () => {
+    const response = await requestChildCounts('')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      relativePath: '',
+      childCounts: [{ name: 'two-children', childCount: 2 }],
+    })
+  })
+
+  test('leaves every childCount on the listing itself null', async () => {
+    const response = await countingApplication.handle(
+      new Request('http://localhost/api/fs/list?path='),
+    )
+    const listing = await response.json()
+    for (const entry of listing.entries) expect(entry.childCount).toBeNull()
+  })
+
+  test('reports its own timing under its own name', async () => {
+    const serverTiming = (await requestChildCounts('')).headers.get('Server-Timing') ?? ''
+    expect(serverTiming).toMatch(/\bchildcounts;dur=\d/)
+    expect(serverTiming).toContain('childreaddirs;desc="1"')
+  })
+
+  test('refuses what the listing refuses, with the same status', async () => {
+    expect((await requestChildCounts('../escape')).status).toBe(400)
+    expect((await requestChildCounts('missing')).status).toBe(404)
+    expect((await requestChildCounts('not-a-directory.txt')).status).toBe(400)
+  })
+})

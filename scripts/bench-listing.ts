@@ -21,6 +21,14 @@
  * of a benchmark's way, and `bench:listing` is safe to run beside a live dev
  * server.
  *
+ * The child counts the listing no longer computes are served after it by
+ * `GET /api/fs/child-counts`. That request is enrichment — fired after the tree
+ * has painted, so not inside this budget — and is reported on a line of its own
+ * so that the work moved off the listing stays visible rather than vanishing.
+ *
+ * The verdict is the exit code: 0 when the listing MEETS the budget, 1 when it
+ * MISSES, so the gate can be scripted rather than read.
+ *
  * Usage:
  *   bun scripts/stress-fixture.ts            # once — build the fixture
  *   bun scripts/bench-listing.ts [--root DIR] [--path REL] [--runs N] [--confine]
@@ -175,6 +183,17 @@ for (let run = 0; run < benchmarkArguments.runCount; run++) {
   serializationSamples.push(performance.now() - serializationStartedAt)
 }
 
+// The deferred counts, sampled last for the same reason: outside the loop the
+// budget is decided on.
+const childCountsUrl = `http://127.0.0.1/api/fs/child-counts?path=${encodeURIComponent(benchmarkArguments.relativePath)}`
+const childCountSamples: number[] = []
+for (let run = 0; run < benchmarkArguments.runCount; run++) {
+  const startedAt = performance.now()
+  const response = await app.handle(new Request(childCountsUrl))
+  await response.arrayBuffer()
+  childCountSamples.push(performance.now() - startedAt)
+}
+
 const endToEndMedian = median(endToEndSamples)
 const serviceMedian = median(serviceSamples)
 const serializationMedian = median(serializationSamples)
@@ -209,8 +228,14 @@ console.log(
   `      validate   ${milliseconds(endToEndMedian - serviceMedian - serializationMedian)} (remainder: response schema + framework)`,
 )
 console.log('')
-const verdict = endToEndMedian <= LIST_BUDGET_MILLISECONDS ? 'MEETS' : 'MISSES'
 console.log(
-  `  ${verdict} the ${LIST_BUDGET_MILLISECONDS}ms GET /api/fs/list budget ` +
+  `  deferred       ${milliseconds(median(childCountSamples))} median for ` +
+    `GET /api/fs/child-counts — after paint, outside this budget`,
+)
+console.log('')
+const meetsBudget = endToEndMedian <= LIST_BUDGET_MILLISECONDS
+console.log(
+  `  ${meetsBudget ? 'MEETS' : 'MISSES'} the ${LIST_BUDGET_MILLISECONDS}ms GET /api/fs/list budget ` +
     `(${(endToEndMedian / LIST_BUDGET_MILLISECONDS).toFixed(1)}× budget)`,
 )
+process.exit(meetsBudget ? 0 : 1)

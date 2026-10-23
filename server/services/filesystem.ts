@@ -3,7 +3,12 @@ import type { Dirent, Stats } from 'node:fs'
 import { lstat, open, readdir, realpath, stat } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
-import type { DirectoryEntry, DirectoryListing } from '../../shared/filesystem.schema'
+import type {
+  ChildCount,
+  DirectoryChildCounts,
+  DirectoryEntry,
+  DirectoryListing,
+} from '../../shared/filesystem.schema'
 import type { SearchNode, SearchSubtreeResult } from '../../shared/search.schema'
 import { fuzzyScore } from '../../shared/fuzzy'
 import { isPathIgnored, loadIgnoreFile, type IgnoreFile } from './ignore'
@@ -33,6 +38,17 @@ export type ListDirectoryFailureReason =
 export type ListDirectoryResult =
   | { ok: true; listing: DirectoryListing; timing: ListingTiming }
   | { ok: false; reason: ListDirectoryFailureReason }
+
+// The listing's enrichment twin: the same failures, and the same timing shape,
+// with `describeMilliseconds` covering the counting phase.
+export type CountChildEntriesResult =
+  | { ok: true; childCounts: DirectoryChildCounts; timing: ListingTiming }
+  | { ok: false; reason: ListDirectoryFailureReason }
+
+// Subdirectories counted concurrently before `abortSignal` is checked again.
+// Large enough that batching costs nothing measurable against one unbounded
+// `Promise.all`, small enough that an abort stops the work within a few ms.
+const CHILD_COUNT_BATCH_SIZE = 2048
 
 export type ReadFileFailureReason =
   | 'outside-root'
@@ -117,6 +133,34 @@ function direntLinkKind(dirent: Dirent): EntryLinkKind {
     return 'other'
   }
   return 'unknown'
+}
+
+// What following an entry found. An escaping symlink carries nothing else on
+// purpose: there is no target kind to read, so no caller can act on one.
+type DirentTarget =
+  | { escapesRoot: true }
+  | {
+      escapesRoot: false
+      isSymlink: boolean
+      targetKind: EntryLinkKind
+      // The followed `stat`, for a symlink that resolved; null otherwise.
+      targetInfo: Stats | null
+    }
+
+// A listing's `.gitignore` verdict for one entry, closed over its ignore chain.
+type GitignoreVerdict = (
+  entryAbsolutePath: string,
+  entryName: string,
+  isDirectory: boolean,
+) => boolean
+
+// The target of an entry whose dirent already says what it is — everything but
+// a symlink (which must be followed) and an unknown kind (which must be
+// `lstat`-ed). Null means "ask `resolveDirentTarget`".
+function direntTargetWithoutFollowing(dirent: Dirent): DirentTarget | null {
+  const linkKind = direntLinkKind(dirent)
+  if (linkKind === 'symlink' || linkKind === 'unknown') return null
+  return { escapesRoot: false, isSymlink: false, targetKind: linkKind, targetInfo: null }
 }
 
 function statsLinkKind(entryInfo: Stats): EntryLinkKind {
@@ -255,59 +299,43 @@ export function createFilesystemService(options: {
     return { ignoreChain, isWithinIgnoredDirectory }
   }
 
-  // Describes one entry of a listing from the dirent its parent's `readdir`
-  // produced. Every syscall past that `readdir` is issued only where the
-  // dirent cannot answer the question:
+  // What an entry *points at*, resolved from the dirent its parent's `readdir`
+  // produced — shared by the listing and by the child counts, so both apply the
+  // same confinement in the same order. Every syscall past that `readdir` is
+  // issued only where the dirent cannot answer the question:
   //
-  //   - a plain directory needs no `stat` at all — the dirent already says
-  //     `directory`, and a listing reports neither size nor mode for one;
-  //   - a plain file needs one `stat`, for its size and execute bit;
-  //   - `other` (socket, FIFO, device) needs none: the listing reports nothing
-  //     about it beyond its kind;
+  //   - a plain directory, file or `other` (socket, FIFO, device) needs none:
+  //     the dirent already says what it is;
   //   - only a *symlink* needs following, because what a listing shows for one
-  //     is what it points at.
+  //     is what it points at — and, confined, only once a `realpath` has shown
+  //     that its target stays inside the root.
   //
   // Before this took its kinds from the dirent, every entry paid an `lstat`
   // *and* a `stat` — see `docs/requirements/013-large-directory-listing-performance.md`.
   //
-  // One race narrowed: an entry deleted between its parent's `readdir` and this
-  // call used to fall through to `other`, and a directory now reports as the
-  // directory the `readdir` saw, with a null `childCount`. That is the more
-  // faithful of the two answers — it existed when the directory was read — and
-  // `childCount: null` already means "could not be counted".
-  //
   // One race WIDENED, and it is the one to know about. The kind below is a
   // *snapshot*, taken by the parent's `readdir`, and the escaping-symlink guard
   // fires on the snapshot: an entry that was a real directory when the directory
-  // was read and is a symlink out of the root by the time it is described is
-  // followed with no containment check, reporting the new target's `childCount`
-  // (or, on the file branch, its size and execute bit) with `escapesRoot: false`.
-  // The check itself is not new — the non-symlink path never had one — but it
-  // used to sit an `lstat` away from the syscall that followed the path, and now
-  // sits a whole describe phase away (~76ms on a 40 000-entry directory), which
-  // is a window a hostile writer inside a confined root can hit by looping.
-  // Metadata only; no bytes cross. Closing it means resolving each entry through
-  // a descriptor rather than a path, as `openReadableFile` does — a syscall per
+  // was read and is a symlink out of the root by the time it is followed is
+  // followed with no containment check — its new target's size and execute bit
+  // on the file branch, or its child count in `countChildEntries`, reported as
+  // not escaping. The check itself is not new — the non-symlink path never had
+  // one — but it used to sit an `lstat` away from the syscall that followed the
+  // path, and now sits a whole describe (or counting) phase away, which is a
+  // window a hostile writer inside a confined root can hit by looping. Metadata
+  // only; no bytes cross. Closing it means resolving each entry through a
+  // descriptor rather than a path, as `openReadableFile` does — a syscall per
   // entry, so it is a design against this budget, not a patch. Recorded in
   // `docs/requirements/013-large-directory-listing-performance.md`.
-  async function describeDirent(
+  //
+  // Callers try `direntTargetWithoutFollowing` first: the dirent alone answers
+  // for every entry that is neither a symlink nor of unknown kind, and answering
+  // it synchronously spares each such entry an async frame.
+  async function resolveDirentTarget(
     dirent: Dirent,
     absolutePath: string,
     counters: ListingCounters,
-    // The listing's `.gitignore` verdict, applied here rather than patched onto
-    // the finished entry by the caller: a directory and a file are ignored by
-    // different rules, so the verdict cannot be reached until the kind is
-    // known, and reaching it here saves an async frame per entry — 40 000 of
-    // them on the directory this exists to make fast.
-    isGitignoredEntry: (
-      entryAbsolutePath: string,
-      entryName: string,
-      isDirectory: boolean,
-    ) => boolean,
-  ): Promise<DirectoryEntry> {
-    const entryName = dirent.name
-    const isHidden = entryName.startsWith('.')
-
+  ): Promise<DirentTarget> {
     let linkKind = direntLinkKind(dirent)
     if (linkKind === 'unknown') {
       try {
@@ -320,16 +348,82 @@ export function createFilesystemService(options: {
     }
     const isSymlink = linkKind === 'symlink'
 
+    // Stat-ing an escaping link would follow it and leak exactly the metadata
+    // the confinement exists to withhold, so the verdict comes first, before any
+    // call that follows the link. Costs one `realpath` per symlink, and nothing
+    // at all for ordinary entries: `isSymlink` came free with the `readdir`.
+    if (confine && isSymlink && !(await isRealPathWithinRoot(absolutePath, counters))) {
+      return { escapesRoot: true }
+    }
+
+    if (!isSymlink) return { escapesRoot: false, isSymlink, targetKind: linkKind, targetInfo: null }
+    try {
+      counters.statCount++
+      const targetInfo = await stat(absolutePath)
+      return { escapesRoot: false, isSymlink, targetKind: statsLinkKind(targetInfo), targetInfo }
+    } catch {
+      // Broken link: reported as `other`.
+      return { escapesRoot: false, isSymlink, targetKind: 'other', targetInfo: null }
+    }
+  }
+
+  // A directory's row, which the dirent (or the followed `stat`) fully answers:
+  // no size, no mode, and no `childCount` — see `describeDirent`. Synchronous on
+  // purpose, so a plain directory costs a listing neither a syscall nor an async
+  // frame.
+  function describeDirectory(
+    entryName: string,
+    absolutePath: string,
+    isSymlink: boolean,
+    isGitignoredEntry: GitignoreVerdict,
+  ): DirectoryEntry {
+    return {
+      name: entryName,
+      kind: 'directory',
+      sizeBytes: null,
+      childCount: null,
+      isExecutable: false,
+      isHidden: entryName.startsWith('.'),
+      isSymlink,
+      isGitignored: isGitignoredEntry(absolutePath, entryName, true),
+      escapesRoot: false,
+    }
+  }
+
+  // Describes one entry of a listing. Past `resolveDirentTarget`, a plain file
+  // needs one `stat`, for its size and execute bit, and nothing else does.
+  //
+  // A directory's `childCount` is always null here: counting it costs a
+  // `readdir` of the child, one per subdirectory, which was ~61ms of a
+  // 40 000-entry listing. It is enrichment, served after the listing by
+  // `countChildEntries` — see
+  // `docs/decisions/2026-10-22-child-counts-are-enrichment.md`.
+  //
+  // An entry deleted between its parent's `readdir` and this call reports as
+  // the directory the `readdir` saw — the more faithful answer: it existed when
+  // the directory was read.
+  async function describeDirent(
+    dirent: Dirent,
+    absolutePath: string,
+    counters: ListingCounters,
+    // The listing's `.gitignore` verdict, applied here rather than patched onto
+    // the finished entry by the caller: a directory and a file are ignored by
+    // different rules, so the verdict cannot be reached until the kind is
+    // known, and reaching it here saves an async frame per entry — 40 000 of
+    // them on the directory this exists to make fast.
+    isGitignoredEntry: GitignoreVerdict,
+  ): Promise<DirectoryEntry> {
+    const entryName = dirent.name
+    const isHidden = entryName.startsWith('.')
+    const target =
+      direntTargetWithoutFollowing(dirent) ??
+      (await resolveDirentTarget(dirent, absolutePath, counters))
+
     // An escaping symlink is described loudly but blankly: the row stays in the
     // listing (`never-hide-a-control` — never hide a thing to say it is
     // unavailable) while every fact about its target is withheld, including
-    // whether it is a file or a directory. Stat-ing it would follow the link and
-    // leak exactly the metadata the confinement exists to withhold, so this
-    // returns first, before any call that follows the link.
-    //
-    // Costs one `realpath` per symlink, and nothing at all for ordinary entries:
-    // the `isSymlink` above came free with the parent's `readdir`.
-    if (confine && isSymlink && !(await isRealPathWithinRoot(absolutePath, counters))) {
+    // whether it is a file or a directory.
+    if (target.escapesRoot) {
       return {
         name: entryName,
         kind: 'other',
@@ -343,41 +437,11 @@ export function createFilesystemService(options: {
       }
     }
 
-    // A symlink is the only kind whose dirent does not answer the question:
-    // what a listing shows for one is what it points at. Everything else is
-    // already known, so the `stat` is skipped.
-    let targetKind = linkKind
-    let targetInfo: Stats | null = null
-    if (isSymlink) {
-      try {
-        counters.statCount++
-        targetInfo = await stat(absolutePath)
-        targetKind = statsLinkKind(targetInfo)
-      } catch {
-        // Broken link: reported as `other`, exactly as before.
-        targetKind = 'other'
-      }
-    }
+    const { isSymlink, targetKind } = target
+    let targetInfo = target.targetInfo
 
     if (targetKind === 'directory') {
-      let childCount: number | null = null
-      try {
-        counters.childReaddirCount++
-        childCount = (await readdir(absolutePath)).length
-      } catch {
-        // Unreadable directory (permissions): childCount stays null.
-      }
-      return {
-        name: entryName,
-        kind: 'directory',
-        sizeBytes: null,
-        childCount,
-        isExecutable: false,
-        isHidden,
-        isSymlink,
-        isGitignored: isGitignoredEntry(absolutePath, entryName, true),
-        escapesRoot: false,
-      }
+      return describeDirectory(entryName, absolutePath, isSymlink, isGitignoredEntry)
     }
 
     if (targetKind === 'file') {
@@ -418,17 +482,23 @@ export function createFilesystemService(options: {
     }
   }
 
-  async function listDirectory(requestedRelativePath: string): Promise<ListDirectoryResult> {
-    const startedAt = performance.now()
-    const counters = createListingCounters()
-
+  // Resolves and reads one directory, confined exactly as a listing is: the
+  // lexical check, the `readdir`, then the real-path check. Shared by
+  // `listDirectory` and `countChildEntries`, so a path one of them refuses the
+  // other refuses identically.
+  //
+  // With dirent kinds, so the per-entry work can skip the `lstat` that used to
+  // precede every single entry. This is the shape the recursive search walk has
+  // always used; the listing path predated it.
+  async function readConfinedDirectory(
+    requestedRelativePath: string,
+    counters: ListingCounters,
+  ): Promise<
+    | { ok: true; absolutePath: string; dirents: Dirent[] }
+    | { ok: false; reason: ListDirectoryFailureReason }
+  > {
     const absolutePath = resolveWithinRoot(requestedRelativePath)
     if (absolutePath === null) return { ok: false, reason: 'outside-root' }
-
-    // With dirent kinds, so the per-entry work below can skip the `lstat` that
-    // used to precede every single entry, and the `stat` that used to follow
-    // it for everything but a plain file. This is the shape the recursive
-    // search walk has always used; the listing path predated it.
     let dirents: Dirent[]
     try {
       dirents = await readdir(absolutePath, { withFileTypes: true })
@@ -440,6 +510,16 @@ export function createFilesystemService(options: {
     }
     if (confine && !(await isRealPathWithinRoot(absolutePath, counters)))
       return { ok: false, reason: 'symlink-escapes-root' }
+    return { ok: true, absolutePath, dirents }
+  }
+
+  async function listDirectory(requestedRelativePath: string): Promise<ListDirectoryResult> {
+    const startedAt = performance.now()
+    const counters = createListingCounters()
+
+    const directoryRead = await readConfinedDirectory(requestedRelativePath, counters)
+    if (!directoryRead.ok) return directoryRead
+    const { absolutePath, dirents } = directoryRead
     const readdirFinishedAt = performance.now()
 
     const { ignoreChain, isWithinIgnoredDirectory } = await buildIgnoreContext(absolutePath)
@@ -447,21 +527,41 @@ export function createFilesystemService(options: {
 
     // The chain is the same for every entry of this listing, so the verdict is
     // closed over once here and handed down, rather than rebuilt per entry.
-    const isGitignoredEntry = (
-      entryAbsolutePath: string,
-      entryName: string,
-      isDirectory: boolean,
-    ): boolean =>
+    const isGitignoredEntry: GitignoreVerdict = (entryAbsolutePath, entryName, isDirectory) =>
       isWithinIgnoredDirectory ||
       (entryName === '.git' && isDirectory) ||
       isPathIgnored(ignoreChain, entryAbsolutePath, isDirectory)
 
     const entryPathPrefix = entryPathPrefixOf(absolutePath)
-    const entries = await Promise.all(
-      dirents.map((dirent) =>
-        describeDirent(dirent, entryPathPrefix + dirent.name, counters, isGitignoredEntry),
-      ),
-    )
+    // A plain directory — 93% of the entries on the fixture this was measured
+    // against — is described synchronously, in place; only an entry that needs
+    // a syscall pays for a promise. One unconditional `Promise.all` over 40 000
+    // async frames was ~10ms of the describe phase on its own.
+    // Positions are kept beside the promises rather than written back from a
+    // `.then` each, which would cost the asynchronous entries a second promise.
+    const entries: DirectoryEntry[] = new Array(dirents.length)
+    const pendingEntryIndexes: number[] = []
+    const pendingDescriptions: Promise<DirectoryEntry>[] = []
+    dirents.forEach((dirent, entryIndex) => {
+      const entryAbsolutePath = entryPathPrefix + dirent.name
+      if (dirent.isDirectory()) {
+        entries[entryIndex] = describeDirectory(
+          dirent.name,
+          entryAbsolutePath,
+          false,
+          isGitignoredEntry,
+        )
+        return
+      }
+      pendingEntryIndexes.push(entryIndex)
+      pendingDescriptions.push(
+        describeDirent(dirent, entryAbsolutePath, counters, isGitignoredEntry),
+      )
+    })
+    const describedEntries = await Promise.all(pendingDescriptions)
+    describedEntries.forEach((entry, pendingPosition) => {
+      entries[pendingEntryIndexes[pendingPosition]!] = entry
+    })
     const finishedAt = performance.now()
 
     return {
@@ -482,6 +582,80 @@ export function createFilesystemService(options: {
           (runningCount, entry) => runningCount + (entry.kind === 'directory' ? 1 : 0),
           0,
         ),
+        statCount: counters.statCount,
+        childReaddirCount: counters.childReaddirCount,
+        realpathCount: counters.realpathCount,
+      },
+    }
+  }
+
+  // How many entries each subdirectory of a directory holds — the `childCount`
+  // the listing no longer computes. One `readdir` per subdirectory is the whole
+  // cost the listing shed (~61ms of a 40 000-entry listing), so it is served as
+  // enrichment: the client asks for it after the tree has painted, and aborts it
+  // when the user navigates away.
+  //
+  // Confinement is the listing's, by construction: the directory is read through
+  // `readConfinedDirectory` and every entry resolved through
+  // `resolveDirentTarget`, so an escaping symlink is never stat-ed or counted —
+  // it is absent from the result, exactly as its count is absent from the
+  // listing. So is every entry that is not a directory.
+  //
+  // Counted in batches, checking `abortSignal` between them, so an abandoned
+  // request stops issuing syscalls instead of reading every child of a 37 000-
+  // directory folder for a client that has left. An aborted call returns the
+  // counts gathered so far; nobody is left to read them.
+  async function countChildEntries(
+    requestedRelativePath: string,
+    abortSignal: AbortSignal,
+  ): Promise<CountChildEntriesResult> {
+    const startedAt = performance.now()
+    const counters = createListingCounters()
+
+    const directoryRead = await readConfinedDirectory(requestedRelativePath, counters)
+    if (!directoryRead.ok) return directoryRead
+    const { absolutePath, dirents } = directoryRead
+    const readdirFinishedAt = performance.now()
+
+    const entryPathPrefix = entryPathPrefixOf(absolutePath)
+    async function countDirent(dirent: Dirent): Promise<ChildCount | null> {
+      const entryAbsolutePath = entryPathPrefix + dirent.name
+      const target =
+        direntTargetWithoutFollowing(dirent) ??
+        (await resolveDirentTarget(dirent, entryAbsolutePath, counters))
+      if (target.escapesRoot || target.targetKind !== 'directory') return null
+      counters.childReaddirCount++
+      try {
+        return { name: dirent.name, childCount: (await readdir(entryAbsolutePath)).length }
+      } catch {
+        // Unreadable (permissions) or vanished since the parent was read.
+        return { name: dirent.name, childCount: null }
+      }
+    }
+
+    const childCounts: ChildCount[] = []
+    for (
+      let batchStart = 0;
+      batchStart < dirents.length && !abortSignal.aborted;
+      batchStart += CHILD_COUNT_BATCH_SIZE
+    ) {
+      const batch = dirents.slice(batchStart, batchStart + CHILD_COUNT_BATCH_SIZE)
+      for (const counted of await Promise.all(batch.map(countDirent))) {
+        if (counted !== null) childCounts.push(counted)
+      }
+    }
+    const finishedAt = performance.now()
+
+    return {
+      ok: true,
+      childCounts: { relativePath: pathFromRoot(absolutePath), childCounts },
+      timing: {
+        totalMilliseconds: finishedAt - startedAt,
+        readdirMilliseconds: readdirFinishedAt - startedAt,
+        ignoreMilliseconds: 0,
+        describeMilliseconds: finishedAt - readdirFinishedAt,
+        entryCount: dirents.length,
+        directoryCount: childCounts.length,
         statCount: counters.statCount,
         childReaddirCount: counters.childReaddirCount,
         realpathCount: counters.realpathCount,
@@ -1038,6 +1212,7 @@ export function createFilesystemService(options: {
     rootAbsolutePath,
     confine,
     listDirectory,
+    countChildEntries,
     resolveFile,
     openReadableFile,
     openFile,

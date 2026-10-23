@@ -1,4 +1,4 @@
-import type { DirectoryEntry } from '../../shared/filesystem.schema'
+import type { ChildCount, DirectoryEntry } from '../../shared/filesystem.schema'
 import type { SearchNode, SearchSubtreeResult } from '../../shared/search.schema'
 import { fuzzyMatch, type FuzzySegment } from '../../shared/fuzzy'
 
@@ -169,12 +169,38 @@ export function parentTreePath(path: string): string {
 // case-insensitively by name — no dirs-first grouping, no size ordering. One
 // comparator drives both the browse tree and the search tree so their row order
 // is a single invariant.
+//
+// One collator, built once. `localeCompare` with an options object resolves a
+// fresh collator on every call, which made sorting a 74 000-entry directory take
+// ~4.7s in V8 — longer than every other cost of opening it combined. The shared
+// collator orders identically and sorts the same names in under 0.1s.
+const entryNameCollator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true })
+
 export function compareEntryNames(firstName: string, secondName: string): number {
-  return firstName.localeCompare(secondName, undefined, { sensitivity: 'base', numeric: true })
+  return entryNameCollator.compare(firstName, secondName)
 }
 
 function compareEntries(firstEntry: DirectoryEntry, secondEntry: DirectoryEntry): number {
   return compareEntryNames(firstEntry.name, secondEntry.name)
+}
+
+// A listing in display order. The server sends entries in readdir order; the
+// client sorts each listing once, as it is stored, so the row builder and the
+// auto-open planner — which re-run on every listing, count and open-set change
+// — find it already ordered and pay one linear pass instead of a full sort.
+export function sortEntriesByName(entries: DirectoryEntry[]): DirectoryEntry[] {
+  return [...entries].sort(compareEntries)
+}
+
+// Orders a freshly filtered copy of a listing in place, unless it already is —
+// the stored listings are (`sortEntriesByName`), so this is normally one pass of
+// comparisons and no sort, in every engine rather than only where the built-in
+// sort happens to detect a sorted run.
+function orderByName(entries: DirectoryEntry[]): DirectoryEntry[] {
+  for (let entryIndex = 1; entryIndex < entries.length; entryIndex++)
+    if (compareEntries(entries[entryIndex - 1]!, entries[entryIndex]!) > 0)
+      return entries.sort(compareEntries)
+  return entries
 }
 
 // A child survives the current view filters (dotfiles / gitignored). Shared by
@@ -224,8 +250,8 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
 
     let hiddenCount = 0
     let ignoredCount = 0
-    const visibleChildren = children
-      .filter((child) => {
+    const visibleChildren = orderByName(
+      children.filter((child) => {
         if (!showHidden && child.isHidden) {
           hiddenCount++
           return false
@@ -235,8 +261,8 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
           return false
         }
         return true
-      })
-      .sort(compareEntries)
+      }),
+    )
 
     // broot's screen-fit truncation: a directory the fill opened only partway
     // shows its first N children, then a "N unlisted" pruning row for the rest.
@@ -299,9 +325,33 @@ export function buildTreeRows(options: TreeViewOptions): TreeRowsResult {
   return { rows, entryRowCount, matchCount: 0, bestMatchPath: null }
 }
 
+// Folds a directory's child counts (`GET /api/fs/child-counts`) into its
+// listing, which arrives with every `childCount` null. Matched by name; an entry
+// the counts do not name — a file, an escaping link, a directory that vanished
+// or appeared in between — keeps the listing's null.
+export function mergeChildCounts(
+  entries: DirectoryEntry[],
+  childCounts: ChildCount[],
+): DirectoryEntry[] {
+  const countsByName = new Map(
+    childCounts.map((counted) => [counted.name, counted.childCount] as const),
+  )
+  return entries.map((entry) =>
+    entry.kind === 'directory' && countsByName.has(entry.name)
+      ? { ...entry, childCount: countsByName.get(entry.name)! }
+      : entry,
+  )
+}
+
 export type AutoOpenPlanOptions = {
   focusPath: string
   listings: Record<string, DirectoryEntry[] | undefined>
+  // Directories whose listing has had its child counts merged in
+  // (`mergeChildCounts`). A listing lands with every `childCount` null, and a
+  // null read before the counts arrive would look exactly like an empty
+  // directory — so the planner never reads a count from a listing outside this
+  // set; it waits for it instead (`pendingChildCountPaths`).
+  countedDirectoryPaths: ReadonlySet<string>
   // Directories the user opened by hand. Their children always show and always
   // count against the viewport budget, whether or not the fill would have opened
   // them; the planner never closes them.
@@ -326,6 +376,12 @@ export type AutoOpenPlan = {
   // Directories whose listings must be fetched before the fill can descend into
   // them. Row counts here fall back to `childCount` until the listing arrives.
   pendingListingPaths: string[]
+  // Directories whose child counts the plan needed and does not have yet. While
+  // this is non-empty the plan is provisional — it read some directory as
+  // uncounted — so the caller applies none of it: it fetches these counts and
+  // re-plans, and the fill then descends exactly as it would have had the
+  // counts come with the listing.
+  pendingChildCountPaths: string[]
 }
 
 // One directory the fill is feeding child rows to, round-robin.
@@ -360,6 +416,7 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
   const {
     focusPath,
     listings,
+    countedDirectoryPaths,
     manuallyOpenPaths,
     closedPaths,
     showHidden,
@@ -369,14 +426,16 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
   const autoOpenPaths = new Set<string>()
   const childRowLimits = new Map<string, number>()
   const pendingListingPaths: string[] = []
+  const pendingChildCountPaths = new Set<string>()
 
   const focusChildren = listings[focusPath]
-  if (focusChildren === undefined) return { autoOpenPaths, childRowLimits, pendingListingPaths }
+  if (focusChildren === undefined)
+    return { autoOpenPaths, childRowLimits, pendingListingPaths, pendingChildCountPaths: [] }
 
   function sortedVisibleChildren(listing: DirectoryEntry[]): DirectoryEntry[] {
-    return listing
-      .filter((child) => isVisibleChild(child, showHidden, showGitignored))
-      .sort(compareEntries)
+    return orderByName(
+      listing.filter((child) => isVisibleChild(child, showHidden, showGitignored)),
+    )
   }
 
   // The "… N hidden · M gitignored" tally row a directory renders when the
@@ -390,6 +449,13 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
     if (closedPaths.has(directoryPath)) return null
     const listing = listings[directoryPath]
     if (listing === undefined) {
+      // The estimate below is the parent's count of this directory, and a parent
+      // whose counts have not arrived reports null for every child — which is
+      // "not counted yet", not "empty". Wait for it rather than skip.
+      if (!countedDirectoryPaths.has(parentPath)) {
+        pendingChildCountPaths.add(parentPath)
+        return null
+      }
       const estimatedTotal = childDirectory.childCount ?? 0
       if (estimatedTotal <= 0 && !manuallyOpenPaths.has(directoryPath)) return null
       return {
@@ -412,9 +478,18 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
   // The focus directory is always fully open; its children and its filter
   // tally row are the baseline the fill adds onto — never truncated, since the
   // full focus listing is the core content (overflow there simply scrolls).
-  const focusVisibleChildren = sortedVisibleChildren(focusChildren)
+  let focusVisibleChildCount = 0
+  for (const focusChild of focusChildren)
+    if (isVisibleChild(focusChild, showHidden, showGitignored)) focusVisibleChildCount++
   let remainingRowBudget =
-    rowCapacity - focusVisibleChildren.length - filterTallyRowCount(focusChildren)
+    rowCapacity - focusVisibleChildCount - filterTallyRowCount(focusChildren)
+  // A focus listing that already fills the viewport leaves the fill nothing to
+  // do, whatever its subdirectories hold — so it neither orders the listing,
+  // nor builds a candidate per subdirectory (tens of thousands, in a very large
+  // directory), nor waits for counts it would never read.
+  if (remainingRowBudget <= 0)
+    return { autoOpenPaths, childRowLimits, pendingListingPaths, pendingChildCountPaths: [] }
+  const focusVisibleChildren = sortedVisibleChildren(focusChildren)
 
   const candidateQueue: FillCandidate[] = []
   const openedCandidates: FillCandidate[] = []
@@ -499,7 +574,12 @@ export function planAutoOpen(options: AutoOpenPlanOptions): AutoOpenPlan {
       childRowLimits.set(openedCandidate.directoryPath, openedCandidate.grantedChildRowCount)
   }
 
-  return { autoOpenPaths, childRowLimits, pendingListingPaths }
+  return {
+    autoOpenPaths,
+    childRowLimits,
+    pendingListingPaths,
+    pendingChildCountPaths: [...pendingChildCountPaths],
+  }
 }
 
 export type SearchViewOptions = {
