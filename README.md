@@ -56,6 +56,12 @@ mise run dev      # Elysia (:3000) + Vite (:5173) — open http://localhost:5173
 `mise run typecheck` type-checks; `mise run build` produces `dist/client` +
 `dist/server`; `mise run start` runs the production server.
 
+The standalone explorer fills the whole browser window. For product
+screenshots, add `?mockup=1` to the URL (for example
+http://localhost:5173/?mockup=1). The explorer then renders as a centred window
+card with a backdrop and window dots. This works in dev and in the production
+build without a rebuild.
+
 ## Install & run as a CLI (`bfe`)
 
 The flake builds a single on-demand executable — `bfe` — that serves a directory

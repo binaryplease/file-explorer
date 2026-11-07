@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { createInternalFocusNavigation } from './focusNavigation'
+import { createInternalFocusNavigation, focusUrlFor } from './focusNavigation'
 
 // The in-memory navigation is the embedded seam; its back-stack is the only
 // piece with logic worth pinning (the URL one is a thin wrapper over the
@@ -56,5 +56,22 @@ describe('createInternalFocusNavigation', () => {
     navigation.back()
 
     expect(focusChanges).toEqual([])
+  })
+})
+
+// The URL seam rewrites only `path`; other parameters (the `?mockup=1`
+// screenshot flag) survive a focus move so a reload renders the same shell.
+describe('focusUrlFor', () => {
+  it('writes the focus path exactly as before when nothing else is in the query', () => {
+    expect(focusUrlFor('/', '', 'home/a b')).toBe('/?path=home%2Fa%20b')
+    expect(focusUrlFor('/', '?path=home', '')).toBe('/')
+  })
+
+  it('keeps other query parameters across a focus move', () => {
+    expect(focusUrlFor('/', '?mockup=1', 'home')).toBe('/?path=home&mockup=1')
+    expect(focusUrlFor('/', '?path=home&mockup=1', 'home/sub')).toBe(
+      '/?path=home%2Fsub&mockup=1',
+    )
+    expect(focusUrlFor('/', '?path=home&mockup=1', '')).toBe('/?mockup=1')
   })
 })

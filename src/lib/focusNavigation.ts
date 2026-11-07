@@ -36,14 +36,24 @@ function readFocusPathFromUrl(): string {
   return new URLSearchParams(window.location.search).get('path') ?? ''
 }
 
+// The URL for a focus move: `path` is replaced (or dropped for the root) and
+// every other query parameter — e.g. the `?mockup=1` screenshot flag — is kept,
+// so a reload after navigating renders the same shell.
+export function focusUrlFor(pathname: string, search: string, focusPath: string): string {
+  const otherParams = new URLSearchParams(search)
+  otherParams.delete('path')
+  const queryParts: string[] = []
+  if (focusPath !== '') queryParts.push(`path=${encodeURIComponent(focusPath)}`)
+  const otherQuery = otherParams.toString()
+  if (otherQuery !== '') queryParts.push(otherQuery)
+  return queryParts.length === 0 ? pathname : `${pathname}?${queryParts.join('&')}`
+}
+
 export function createUrlFocusNavigation(): FocusNavigation {
   return {
     initialFocusPath: readFocusPathFromUrl,
     push(focusPath) {
-      const nextUrl =
-        focusPath === ''
-          ? window.location.pathname
-          : `${window.location.pathname}?path=${encodeURIComponent(focusPath)}`
+      const nextUrl = focusUrlFor(window.location.pathname, window.location.search, focusPath)
       const currentUrl = `${window.location.pathname}${window.location.search}`
       if (nextUrl !== currentUrl) window.history.pushState({}, '', nextUrl)
     },
