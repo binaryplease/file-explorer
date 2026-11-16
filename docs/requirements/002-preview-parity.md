@@ -28,6 +28,8 @@ through land on `binary` / `unsupported` (`shared/preview.schema.ts:8-16`).
 
 ## Open
 
+Rendering an HTML page as a page is required by [017-rendered-html-preview](017-rendered-html-preview.md).
+
 ### Windowed reads on scroll for long text
 
 The read is now a *window with a way out* (see "Lines are never clipped" below):
