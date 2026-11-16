@@ -42,19 +42,29 @@ network, and cannot reach the explorer's DOM, storage or `/api/*`.
 ## Done when
 
 With an `.html` file selected, the panel shows the rendered page by default and
-its highlighted source one toggle away, and a test page carrying an inline
-`<script>`, a remote `<img>`/`<link>` and a `fetch('/api/fs/list')` shows its
-markup while the browser records no script execution and no network request
-initiated by the page, to `/api` or to any other host. The repo's gates (typecheck and tests, see
-`AGENTS.md`) stay green.
+its highlighted source one toggle away; a test page carrying an inline
+`<script>`, a remote `<img>`/`<link>`, a `fetch('/api/fs/list')`, an external
+`<a href>` and a `<form action>` shows its markup while the browser records no
+script execution and no network request initiated by the page, to `/api` or to
+any other host, also after its link and its submit button are clicked; and after
+a click inside the page the seam shows that the preview holds focus, and one
+click on a tree row makes the arrow keys move the tree selection again.
+`mise run typecheck` and `mise run test` stay green.
 
 ## Behaviour this record binds
 
 - **The origin is the boundary.** Per
   [the origin decision](../decisions/2026-07-20-the-origin-is-the-security-boundary.md)
   and [100-loopback-only-service](100-loopback-only-service.md), the rendered
-  page never runs as a document in the explorer's origin. A click on a link or a
-  form submit inside the page never navigates the explorer's own page.
+  page never runs as a document in the explorer's origin.
+- **Links and forms in the page are inert.** A link click or a form submit
+  inside the rendered page navigates neither the explorer's page, nor the
+  preview, nor a new tab, and sends no request.
+- **Focus while the page holds the keyboard.** A click inside the rendered page
+  gives the page the keyboard, so the tree's keys stop reaching the explorer.
+  The seam then shows that the preview holds focus, as
+  [006](006-preview-panel.md) requires, and one click on the tree returns the
+  keyboard to the tree.
 - **Direct navigation stays a download.** Opening an `.html` file's raw URL in
   the address bar still downloads it under the existing attachment hardening.
   Rendering in the panel adds no route by which a browser navigation receives
@@ -66,8 +76,9 @@ initiated by the page, to `/api` or to any other host. The repo's gates (typeche
 - **Responsiveness principle** (`AGENTS.md`,
   [101-performance-budgets](101-performance-budgets.md)). The listing and search
   never wait on the page. The page renders after the tree has painted, a page
-  still loading when the selection moves is discarded, and a page that fails to
-  render falls back to its source with a one-line reason.
+  still loading when the selection moves is discarded, and a page whose bytes
+  cannot be read (a read error, or a file removed after it was selected) shows a
+  one-line reason in the panel instead of an empty frame.
 
 ## Relation to other records
 
@@ -75,8 +86,9 @@ initiated by the page, to `/api` or to any other host. The repo's gates (typeche
   what a file is; this record is the HTML kind of that work. Its markdown path
   escapes inline HTML on purpose. This record leaves that rule alone: HTML
   embedded in a markdown file stays escaped.
-- [006-preview-panel](006-preview-panel.md) is the panel this renders in; its
-  click and focus behaviour is unchanged.
+- [006-preview-panel](006-preview-panel.md) is the panel this renders in. Its
+  click behaviour is unchanged; its focus-at-the-seam rule extends to a rendered
+  page that holds the keyboard, as bound above.
 - [008-publish-to-a-share-service](008-publish-to-a-share-service.md) also acts
   on HTML files, as a verb that uploads them. This record is local viewing only
   and sends nothing off the machine; neither record depends on the other.

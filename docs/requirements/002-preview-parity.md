@@ -26,9 +26,9 @@ Everything below is a renderer addition on top of the existing kind dispatch:
 `PreviewKind` grows, the bounding design does not change. Kinds that fall
 through land on `binary` / `unsupported` (`shared/preview.schema.ts:8-16`).
 
-## Open
+Related: rendering an HTML page as a page is required by [017-rendered-html-preview](017-rendered-html-preview.md).
 
-Rendering an HTML page as a page is required by [017-rendered-html-preview](017-rendered-html-preview.md).
+## Open
 
 ### Windowed reads on scroll for long text
 
