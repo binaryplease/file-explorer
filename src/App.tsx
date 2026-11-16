@@ -33,6 +33,7 @@ import { useApiBase } from './lib/apiBase'
 import { createUrlFocusNavigation, type FocusNavigation } from './lib/focusNavigation'
 import { useResizableSplit } from './lib/resizableSplit'
 import { warmHighlighter } from './lib/highlighter'
+import { isMockupFrameRequested } from './lib/mockupFrame'
 
 function baseName(path: string): string {
   const lastSlashIndex = path.lastIndexOf('/')
@@ -222,6 +223,12 @@ export function App({
   // Embedded, the host owns `<html data-theme>`; the hook goes read-only so it
   // doesn't fight the host (the grove tokens inherit the host's scheme).
   const { themeMode, setThemeMode } = useTheme({ manageDocument: !embedded })
+  // The standalone shell fills the viewport unless `?mockup=1` asks for the
+  // window-card frame used for product screenshots. Read once at mount; the
+  // embedded mount never reads the host's URL for it.
+  const [showMockupFrame] = useState(
+    () => !embedded && isMockupFrameRequested(window.location.search),
+  )
 
   const loadListing = useCallback(
     async (relativePath: string): Promise<DirectoryListing | null> => {
@@ -998,14 +1005,20 @@ export function App({
     selectedPath === ROOT_LINE_PATH &&
     !focusNavigation.canGoBack()
 
-  // The tree/preview/command-bar body is identical in both mounts; only the
-  // outer chrome differs — a centred, full-screen card standalone, or a plain
-  // fill of the host's container when embedded (the host owns the frame, header
-  // and close, so the explorer drops its own TitleBar to avoid a second one).
+  // The tree/preview/command-bar body is identical in every mount; only the
+  // outer chrome differs — a full-viewport page standalone (a centred window
+  // card with `?mockup=1`), or a plain fill of the host's container when
+  // embedded (the host owns the frame, header and close, so the explorer drops
+  // its own TitleBar to avoid a second one).
   const explorerBody = (
     <>
       {!embedded && (
-        <TitleBar rootPath={rootPath} themeMode={themeMode} onSelectThemeMode={setThemeMode} />
+        <TitleBar
+          rootPath={rootPath}
+          themeMode={themeMode}
+          onSelectThemeMode={setThemeMode}
+          showWindowDots={showMockupFrame}
+        />
       )}
       {/* Tree and preview share one row; the preview is a column beside the
           rows it describes (`affordances-adjacent`), never a modal over them. A
@@ -1094,9 +1107,18 @@ export function App({
     )
   }
 
-  // Neither mount sets a ligature rule, here or anywhere below it: every face
+  // No mount sets a ligature rule, here or anywhere below it: every face
   // renders with the defaults its designer shipped. The absence is deliberate —
   // do not add one back on any surface.
+  if (!showMockupFrame) {
+    return (
+      <div className="flex h-dvh w-full flex-col overflow-hidden bg-term font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
+        {explorerBody}
+      </div>
+    )
+  }
+
+  // `?mockup=1`: the window-preview card for product screenshots.
   return (
     <div className="grid min-h-screen place-items-center bg-void bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(111,183,255,0.08),transparent_55%),radial-gradient(90%_70%_at_80%_120%,rgba(255,110,199,0.06),transparent_60%)] p-[clamp(14px,3vw,40px)] font-mono text-[13.5px] leading-[1.62] text-fg antialiased selection:bg-accent selection:text-void">
       <div className="flex h-[min(720px,92vh)] w-full max-w-[1080px] flex-col overflow-hidden rounded-[14px] border border-line bg-term shadow-[0_40px_120px_-30px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.05)_inset]">

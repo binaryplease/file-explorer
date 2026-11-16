@@ -14,6 +14,16 @@ break that check for the sake of a filename convention.
 
 ## Unreleased
 
+- **The standalone explorer fills the whole browser viewport.** It used to
+  render as a centred window card capped at 1080×720, with rounded corners, a
+  drop shadow, a gradient backdrop and three window dots in the title bar. That
+  card is now behind a URL flag: open the page with `?mockup=1` to get it back
+  for product screenshots. The flag works in `mise run dev` and in the
+  production build without a rebuild, and is not stored anywhere. Navigating
+  keeps it in the URL, because moving the focus now rewrites only the `path`
+  parameter. The title bar keeps the root path, the broot credit and the theme
+  toggle in both layouts. The embedded mount is unchanged.
+
 - **Breaking — `childCount` leaves the listing, and directories of tens of
   thousands of entries no longer hang the explorer.** `GET /api/fs/list` no
   longer counts each subdirectory's entries — that was one `readdir` per
